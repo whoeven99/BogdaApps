@@ -1,9 +1,22 @@
 import { Checkbox, DatePicker, Select } from "antd";
-import dayjs from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
+import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import { normalizeTargetMarkets } from "../../../utils/offerParsing";
 
+dayjs.extend(utc);
 dayjs.extend(timezone);
+
+/** Ant Design DatePicker expects local wall-clock dayjs, not tz()-shifted instances. */
+function isoToSchedulePickerValue(iso: string, tz: string): Dayjs | null {
+  if (!iso || !dayjs(iso).isValid()) return null;
+  const wallClock = dayjs.utc(iso).tz(tz).format("YYYY-MM-DD HH:mm:ss");
+  return dayjs(wallClock);
+}
+
+function schedulePickerValueToIso(date: Dayjs, tz: string): string {
+  return dayjs.tz(date.format("YYYY-MM-DD HH:mm:ss"), tz).toISOString();
+}
 
 type MarketItem = {
   id: string;
@@ -144,16 +157,11 @@ export default function ScheduleTargetingEditor({
                 showTime={{ format: "HH:mm" }}
                 format="YYYY-MM-DD HH:mm"
                 className="mt-1 w-full text-[14px]"
-                value={
-                  startTime && dayjs(startTime).isValid()
-                    ? dayjs(startTime).tz(scheduleTimezone)
-                    : null
-                }
+                getPopupContainer={() => document.body}
+                value={isoToSchedulePickerValue(startTime, scheduleTimezone)}
                 onChange={(date) => {
                   const value = date
-                    ? dayjs
-                        .tz(date.format("YYYY-MM-DD HH:mm:ss"), scheduleTimezone)
-                        .toISOString()
+                    ? schedulePickerValueToIso(date, scheduleTimezone)
                     : "";
                   setStartTime(value);
                   if (value && endTime && !dayjs(endTime).isAfter(dayjs(value))) {
@@ -181,16 +189,11 @@ export default function ScheduleTargetingEditor({
                 showTime={{ format: "HH:mm" }}
                 format="YYYY-MM-DD HH:mm"
                 className="mt-1 w-full"
-                value={
-                  endTime && dayjs(endTime).isValid()
-                    ? dayjs(endTime).tz(scheduleTimezone)
-                    : null
-                }
+                getPopupContainer={() => document.body}
+                value={isoToSchedulePickerValue(endTime, scheduleTimezone)}
                 onChange={(date) => {
                   const value = date
-                    ? dayjs
-                        .tz(date.format("YYYY-MM-DD HH:mm:ss"), scheduleTimezone)
-                        .toISOString()
+                    ? schedulePickerValueToIso(date, scheduleTimezone)
                     : "";
                   setEndTime(value);
                   if (!value) {

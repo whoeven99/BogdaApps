@@ -1,4 +1,4 @@
-import {
+﻿import {
   CartInput,
   CartLinesDiscountsGenerateRunResult,
   DiscountClass,
@@ -63,20 +63,23 @@ function summarizeMetafield(
   };
 }
 
+/** 压缩格式(v2)的单 offer：短键 + 内联对象（见后台 offerPayload COMPACT_OFFERS_FORMAT_VERSION）。 */
+type CompactOfferWire = {
+  i?: string;
+  c?: string;
+  t?: string;
+  x?: boolean;
+  b?: string;
+  e?: string;
+  s?: unknown;
+  d?: unknown;
+  o?: unknown;
+};
+
 type OfferMetafieldPayload = {
+  v?: number;
   updatedAt?: string;
-  offers?: Array<{
-    id?: string;
-    name?: string;
-    cartTitle?: string;
-    status?: boolean;
-    startTime?: string;
-    endTime?: string;
-    selectedProductsJson?: string | null;
-    discountRulesJson?: string | null;
-    offerSettingsJson?: string | null;
-    offerType?: string;
-  }>;
+  offers?: Array<Offer | CompactOfferWire>;
 };
 
 type MetafieldSnapshot = {
@@ -105,7 +108,10 @@ function logCiwiBundleOffersDiagnostics(
     parsedUpdatedAt: effectiveParsedPayload?.updatedAt ?? null,
     parsedOfferIds: Array.isArray(effectiveParsedPayload?.offers)
       ? effectiveParsedPayload!.offers!
-          .map((offer) => String(offer?.id || "").trim())
+          .map((offer) => {
+            const wire = offer as { id?: string; i?: string };
+            return String(wire?.id || wire?.i || "").trim();
+          })
           .filter(Boolean)
           .slice(0, 10)
       : [],
@@ -123,7 +129,88 @@ type BxgyDiscountRule = {
   tierType?: "single" | "bxgy" | "simple";
 };
 
-type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
+/** 运行期使用的 offer 形状（旧格式直接命中；压缩格式经 expandCompactOffer 还原为此形状）。 */
+type Offer = {
+  id?: string;
+  name?: string;
+  cartTitle?: string;
+  status?: boolean;
+  startTime?: string;
+  endTime?: string;
+  selectedProductsJson?: string | null;
+  discountRulesJson?: string | null;
+  offerSettingsJson?: string | null;
+  offerType?: string;
+};
+
+const LEGACY_DEFAULT_DISCOUNT_MESSAGES = new Set([
+  "",
+  "Bundle Discount",
+  "Bundle order discount",
+  "Buy X Get Y",
+  "Free gift",
+]);
+
+function getDefaultDiscountMessageForOfferType(offerType?: string): string {
+  switch (offerType) {
+    case "quantity-breaks-different":
+      return "多件优惠";
+    case "free-gift":
+      return "赠品优惠";
+    case "shipping-discount":
+      return "运费优惠";
+    case "order-discount":
+    case "coupon":
+      return "订单优惠";
+    case "complete-bundle":
+    case "quantity-breaks-same":
+    case "bxgy":
+    case "subscription":
+    default:
+      return "组合优惠";
+  }
+}
+
+function resolveDiscountMessage(offer: Pick<Offer, "cartTitle" | "offerType">): string {
+  const configuredTitle = String(offer.cartTitle || "").trim();
+  if (configuredTitle && !LEGACY_DEFAULT_DISCOUNT_MESSAGES.has(configuredTitle)) {
+    return configuredTitle;
+  }
+  return getDefaultDiscountMessageForOfferType(offer.offerType);
+}
+
+/** 内联 JSON 字段还原成字符串：已是字符串则原样返回，对象则 stringify，供下游既有解析逻辑消费。 */
+function jsonFieldToString(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+/** 把压缩(v2)或旧格式的单 offer 统一还原为运行期 Offer 形状。 */
+export function expandCompactOffer(raw: Offer | CompactOfferWire | null | undefined): Offer {
+  if (!raw || typeof raw !== "object") return {} as Offer;
+  const isCompact =
+    !("offerType" in raw) &&
+    !("selectedProductsJson" in raw) &&
+    ("t" in raw || "i" in raw || "s" in raw || "d" in raw || "o" in raw);
+  if (!isCompact) return raw as Offer;
+  const compact = raw as CompactOfferWire;
+  return {
+    id: compact.i,
+    cartTitle: compact.c ?? "",
+    offerType: compact.t,
+    status: compact.x,
+    startTime: compact.b ?? undefined,
+    endTime: compact.e ?? undefined,
+    selectedProductsJson: jsonFieldToString(compact.s),
+    discountRulesJson: jsonFieldToString(compact.d),
+    offerSettingsJson: jsonFieldToString(compact.o),
+  };
+}
 
 type IndexedCartLine = {
   line: CartInput["cart"]["lines"][number];
@@ -557,7 +644,7 @@ function offerPassesScheduleAndMarket(
 
 /**
  * complete-bundle 整包计价：
- * - 语义仍然是“整包总价”，但执行层改为 product discount；
+ * - 语义仍然是"整包总价"，但执行层改为 product discount；
  * - 每个匹配 bar 产出一条多 target 的 product candidate，value 是整包总优惠；
  * - target 精确到命中的 cart line + quantity，避免 orderSubtotal 只能按整条 line 计价的问题。
  */
@@ -686,7 +773,7 @@ function calculateCompleteBundleProductDiscounts(
       if (totalDiscount <= 0) continue;
 
       candidates.push({
-        message: offer.cartTitle || "Bundle order discount",
+        message: resolveDiscountMessage(offer),
         targets: [
           {
             cartLine: {
@@ -729,8 +816,41 @@ function offersJsonHasList(v: unknown): v is OfferMetafieldPayload {
 }
 
 /**
- * 读取活动配置：仅使用 automatic discount owner 上的 `$app:ciwi_bundle` / `offers`。
- * shop 级全量 offers 仅供后台/主题使用，不再注入 cart discount function，避免不同 class 重复解析整份 payload。
+ * 合并多个分片 payload 的 offers（按 id 去重，保留首次出现）。
+ * 分片来自同一 discount owner 的 offers / offers-1（见 OFFER_SHARD_KEYS）。
+ */
+function mergeShardedOfferPayloads(
+  payloads: Array<OfferMetafieldPayload | null | undefined>,
+): OfferMetafieldPayload | null {
+  const offers: Array<Offer | CompactOfferWire> = [];
+  const seenIds = new Set<string>();
+  let updatedAt: string | undefined;
+  let version: number | undefined;
+  let anyPresent = false;
+
+  for (const payload of payloads) {
+    if (!payload || typeof payload !== "object") continue;
+    anyPresent = true;
+    if (updatedAt == null && typeof payload.updatedAt === "string") updatedAt = payload.updatedAt;
+    if (version == null && typeof payload.v === "number") version = payload.v;
+    for (const offer of payload.offers ?? []) {
+      const wire = offer as { id?: string; i?: string };
+      const id = String(wire?.id || wire?.i || "").trim();
+      if (id) {
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+      }
+      offers.push(offer);
+    }
+  }
+
+  if (!anyPresent) return null;
+  return { v: version, updatedAt, offers };
+}
+
+/**
+ * 读取活动配置：合并 automatic discount owner 上 `$app:ciwi_bundle` 的所有分片
+ * （offers + offers-1）。shop 级全量 offers 仅供后台/主题使用，不注入 function。
  */
 function resolveCartOffersPayload(input: CartInput): {
   payload: OfferMetafieldPayload | null | undefined;
@@ -739,40 +859,33 @@ function resolveCartOffersPayload(input: CartInput): {
 } {
   const discountOwnerMf =
     input.discount.offersFromDiscountOwner as MetafieldSnapshot | null | undefined;
-  const jDisc = discountOwnerMf?.jsonValue as OfferMetafieldPayload | null | undefined;
-  const raw = jDisc as unknown;
+  const shard1Mf = (input.discount as unknown as { offersShard1?: MetafieldSnapshot })
+    .offersShard1;
+  const p0 = discountOwnerMf?.jsonValue as OfferMetafieldPayload | null | undefined;
+  const p1 = shard1Mf?.jsonValue as OfferMetafieldPayload | null | undefined;
+  const merged = mergeShardedOfferPayloads([p0, p1]);
+
   log("read_ciwi_offers_metafield", {
     namespace: "$app:ciwi_bundle",
-    key: "offers",
-    metafieldNodePresent: discountOwnerMf != null,
-    jsonValueKind:
-      raw === undefined
-        ? "undefined"
-        : raw === null
-          ? "null"
-          : Array.isArray(raw)
-            ? "array"
-            : typeof raw,
-    topLevelKeys:
-      raw && typeof raw === "object" && !Array.isArray(raw)
-        ? Object.keys(raw as Record<string, unknown>).slice(0, 30)
-        : null,
-    offersArrayLength: Array.isArray((jDisc as OfferMetafieldPayload | null)?.offers)
-      ? ((jDisc as OfferMetafieldPayload).offers?.length ?? 0)
-      : null,
+    keys: ["offers", "offers-1"],
+    shard0Present: discountOwnerMf != null,
+    shard1Present: shard1Mf != null,
+    shard0OffersLength: Array.isArray(p0?.offers) ? p0!.offers!.length : null,
+    shard1OffersLength: Array.isArray(p1?.offers) ? p1!.offers!.length : null,
+    mergedOffersLength: Array.isArray(merged?.offers) ? merged!.offers!.length : null,
   });
 
-  if (offersJsonHasList(jDisc)) {
+  if (offersJsonHasList(merged)) {
     return {
-      payload: jDisc,
+      payload: merged,
       offersSource: "discount_owner_app_ciwi_bundle_offers",
       discountOwnerOffersMetafield: discountOwnerMf,
     };
   }
 
   return {
-    payload: jDisc ?? null,
-    offersSource: jDisc != null ? "discount_owner_empty_lists" : "no_offers_metafield",
+    payload: merged ?? null,
+    offersSource: merged != null ? "discount_owner_empty_lists" : "no_offers_metafield",
     discountOwnerOffersMetafield: discountOwnerMf,
   };
 }
@@ -814,7 +927,7 @@ export function bundleCartDiscountGenerateRun(
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
-  const compiledOffers = offers.map((offer) => compileOfferRuntime(offer));
+  const compiledOffers = offers.map((offer) => compileOfferRuntime(expandCompactOffer(offer)));
   const enteredCodes = new Set(
     [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
   );
@@ -901,6 +1014,10 @@ export function bundleCartDiscountGenerateRun(
   });
 
   const productCandidates: ProductDiscountCandidate[] = [];
+  // 记录"可按单位裁剪"的候选（仅数量阶梯）。BXGY（100% off 指定单位）与
+  // complete-bundle（整包 fixedAmount）都是原子候选，裁剪会破坏其语义，不入此集合。
+  // 仲裁层用它判断冲突时能否把候选缩到剩余容量，而不是整条丢弃。
+  const divisibleProductCandidates = new Set<ProductDiscountCandidate>();
   const orderCandidates: OrderDiscountCandidate[] = [];
   const cartIndex = buildIndexedCartLines(input.cart.lines);
 
@@ -965,7 +1082,35 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ② 按行匹配普通 bundle 的 discountRulesJson 数量阶梯，与 BXGY 一起参与商品折扣最大减免竞争。
+  // ③ complete-bundle 保持"整包总价"语义，但执行层改为多 target 的 product discount。
+  if (hasProductDiscountClass) {
+    log("complete_bundle_evaluation_start", {
+      marketId,
+      cartLineCount: input.cart.lines.length,
+    });
+    const completeBundleCandidates = calculateCompleteBundleProductDiscounts(
+      cartIndex,
+      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
+      marketId,
+      nowMs,
+    );
+    if (completeBundleCandidates.length > 0) {
+      productCandidates.push(...completeBundleCandidates);
+      log("complete_bundle_evaluation_success", {
+        candidateCount: completeBundleCandidates.length,
+      });
+    } else {
+      log("complete_bundle_evaluation_no_match", {
+        reason: "no_complete_bundle_candidates",
+      });
+    }
+  }
+
+  // ② 按行匹配普通 bundle 的 discountRulesJson 数量阶梯。
+  // 数量阶梯按购物车实际购买的**全量**生成候选（不再扣除 BXGY/complete-bundle 预占）。
+  // 阶梯档位也按全量数量评估——客户买够了就有资格。最终在哪些单位上落地、是否要
+  // 让位给（或挤掉）其他产品折扣，全部交由 resolveExclusiveProductCandidates 按
+  // 最大实际减免仲裁，避免硬编码"BXGY/bundle 优先于数量阶梯"的模块顺序。
   if (hasProductDiscountClass) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
@@ -978,20 +1123,20 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const lineId = line.id;
-      const quantity = line.quantity;
+      const totalQuantity = line.quantity;
       const productId = line.merchandise.product?.id;
       const variantId = line.merchandise.id;
       const marketId = input.localization?.market?.id;
 
       log("line_evaluate", {
         cartLineId: lineId,
-        quantity,
+        totalQuantity,
         productId,
         variantId,
         marketId,
       });
 
-      if (!lineId || !quantity) {
+      if (!lineId || !totalQuantity) {
         log("line_skip", { cartLineId: lineId, reason: "missing_line_id_or_qty" });
         continue;
       }
@@ -1014,7 +1159,7 @@ export function bundleCartDiscountGenerateRun(
       } | null>((best, compiledOffer) => {
         const discountPercentValue = getBestProductDiscountPercentValueFromTiers(
           compiledOffer.standardRules,
-          quantity,
+          totalQuantity,
         );
         const discountPercentNumber = Number(discountPercentValue || 0);
         if (!discountPercentValue || discountPercentNumber <= 0) {
@@ -1050,7 +1195,7 @@ export function bundleCartDiscountGenerateRun(
       log("line_discount_percent", {
         cartLineId: lineId,
         discountPercentValue,
-        quantity,
+        totalQuantity,
       });
 
       if (!discountPercentValue) {
@@ -1062,12 +1207,12 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const candidate: ProductDiscountCandidate = {
-        message: bestMatch.compiledOffer.offer.cartTitle || "Bundle Discount",
+        message: resolveDiscountMessage(bestMatch.compiledOffer.offer),
         targets: [
           {
             cartLine: {
               id: lineId,
-              quantity,
+              quantity: totalQuantity,
             },
           },
         ],
@@ -1088,40 +1233,23 @@ export function bundleCartDiscountGenerateRun(
       };
 
       productCandidates.push(candidate);
+      // 数量阶梯是 percentage 候选，可按单位裁剪：标记为可拆，供仲裁层在冲突时
+      // 缩到剩余容量而非整条丢弃。
+      divisibleProductCandidates.add(candidate);
       log("line_candidate_added", {
         cartLineId: lineId,
         percent: discountPercentValue,
-      });
-    }
-  }
-
-  // ③ complete-bundle 保持“整包总价”语义，但执行层改为多 target 的 product discount，
-  // 与其它商品折扣一起走同一套重叠 cart line 冲突决议。
-  if (hasProductDiscountClass) {
-    log("complete_bundle_evaluation_start", {
-      marketId,
-      cartLineCount: input.cart.lines.length,
-    });
-    const completeBundleCandidates = calculateCompleteBundleProductDiscounts(
-      cartIndex,
-      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
-      marketId,
-      nowMs,
-    );
-    if (completeBundleCandidates.length > 0) {
-      productCandidates.push(...completeBundleCandidates);
-      log("complete_bundle_evaluation_success", {
-        candidateCount: completeBundleCandidates.length,
-      });
-    } else {
-      log("complete_bundle_evaluation_no_match", {
-        reason: "no_complete_bundle_candidates",
+        quantity: totalQuantity,
       });
     }
   }
 
   const resolvedProductCandidates = productCandidates.length
-    ? resolveExclusiveProductCandidates(productCandidates, input.cart.lines)
+    ? resolveExclusiveProductCandidates(
+        productCandidates,
+        input.cart.lines,
+        divisibleProductCandidates,
+      )
     : [];
 
   // ④ free gift 作为 order reward 生成订单级 fixed-amount 候选。
@@ -1964,7 +2092,7 @@ function calculateBxgyDiscount(
           const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
           if (discountQuantity <= 0) continue;
           candidates.push({
-            message: offer.cartTitle || "Buy X Get Y",
+            message: resolveDiscountMessage(offer),
             targets: [
               {
                 cartLine: {
@@ -2039,7 +2167,7 @@ function calculateBxgyDiscount(
           const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
           if (discountQuantity <= 0) continue;
           candidates.push({
-            message: offer.cartTitle || "Buy X Get Y",
+            message: resolveDiscountMessage(offer),
             targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
             value: {
               percentage: {
@@ -2139,7 +2267,7 @@ function calculateBxgyDiscount(
         const discountQuantity = Math.min(entry.quantity, remaining);
         if (discountQuantity > 0) {
           candidates.push({
-            message: offer.cartTitle || "Bundle Discount",
+            message: resolveDiscountMessage(offer),
             targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
             value: {
               percentage: {
@@ -2174,7 +2302,7 @@ function calculateBxgyDiscount(
 
       if (discountQuantity > 0) {
         const candidate: ProductDiscountCandidate = {
-          message: offer.cartTitle || "Buy X Get Y",
+          message: resolveDiscountMessage(offer),
           targets: [
             {
               cartLine: {
@@ -2348,7 +2476,7 @@ function calculateFreeGiftDiscount(
       (id) => !discountedGiftLineIds.has(id),
     );
     allCandidates.push({
-      message: offer.cartTitle || "Free gift",
+      message: resolveDiscountMessage(offer),
       targets: [
         {
           orderSubtotal: {
@@ -2514,7 +2642,7 @@ function buildOrderDiscountCandidates(
     const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
 
     candidates.push({
-      message: offer.cartTitle || "Bundle order discount",
+      message: resolveDiscountMessage(offer),
       targets: [
         {
           orderSubtotal: {
@@ -2580,7 +2708,7 @@ function buildOrderDiscountCandidatesFromCompiledOffers(
     const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
 
     candidates.push({
-      message: offer.cartTitle || "Bundle order discount",
+      message: resolveDiscountMessage(offer),
       targets: [
         {
           orderSubtotal: {
@@ -2995,9 +3123,32 @@ function chooseProductWinnerIndicesToReplace(
   );
 }
 
-function resolveExclusiveProductCandidates(
+/**
+ * 把一个可拆候选缩到给定的每行数量（丢弃数量为 0 的 target），
+ * 其余字段（message / value / associatedDiscountCode）保持不变。
+ */
+function trimCandidateToQuantities(
+  candidate: ProductDiscountCandidate,
+  quantitiesByLineId: Map<string, number>,
+): ProductDiscountCandidate {
+  const trimmedTargets = (candidate.targets ?? [])
+    .map((target) => {
+      const lineId = String(target.cartLine?.id || "").trim();
+      const quantity = quantitiesByLineId.get(lineId) ?? 0;
+      return quantity > 0 ? { cartLine: { id: lineId, quantity } } : null;
+    })
+    .filter((target): target is { cartLine: { id: string; quantity: number } } => target !== null);
+
+  return {
+    ...candidate,
+    targets: trimmedTargets,
+  };
+}
+
+export function resolveExclusiveProductCandidates(
   candidates: ProductDiscountCandidate[],
   cartLines: CartInput["cart"]["lines"],
+  divisibleCandidates: Set<ProductDiscountCandidate> = new Set(),
 ): ProductDiscountCandidate[] {
   const unitPriceByLineId = new Map(
     cartLines.map((line) => [
@@ -3056,7 +3207,58 @@ function resolveExclusiveProductCandidates(
       0,
     );
 
-    if (savings <= conflictingSavings) {
+    // 可拆候选（数量阶梯）冲突时，比较两个方案取较优：
+    //   方案 A「裁剪」：保留现有 winner，本候选只吃每行的剩余空闲单位。
+    //   方案 B「驱逐」：挤掉节省最少的冲突 winner 子集，本候选按全量落地。
+    // 净收益 = 全量节省 − 被挤掉的节省；仅当它严格大于裁剪方案才驱逐，
+    // 否则共存（裁剪）。这样既保留"多优惠分吃同一商品不同单位"的能力，
+    // 又让数量阶梯在确实更省时能挤掉 BXGY/bundle，去除硬编码模块优先级。
+    if (divisibleCandidates.has(candidate)) {
+      const occupiedByLineId = new Map<string, number>();
+      for (const winner of winners) {
+        for (const [winnerLineId, winnerQty] of winner.targetQuantitiesByLineId.entries()) {
+          occupiedByLineId.set(
+            winnerLineId,
+            (occupiedByLineId.get(winnerLineId) || 0) + winnerQty,
+          );
+        }
+      }
+
+      const trimmedQuantitiesByLineId = new Map<string, number>();
+      for (const [lineId, requestedQty] of targetQuantitiesByLineId.entries()) {
+        const lineCapacity = Math.max(0, lineCapacityByLineId.get(lineId) || 0);
+        const freeQty = Math.max(0, lineCapacity - (occupiedByLineId.get(lineId) || 0));
+        const grantedQty = Math.min(requestedQty, freeQty);
+        if (grantedQty > 0) {
+          trimmedQuantitiesByLineId.set(lineId, grantedQty);
+        }
+      }
+
+      const trimmedCandidate = trimCandidateToQuantities(candidate, trimmedQuantitiesByLineId);
+      const trimmedSavings = estimateCandidateSavings(trimmedCandidate, unitPriceByLineId);
+      const evictNetGain = savings - conflictingSavings;
+
+      if (!(evictNetGain > trimmedSavings && evictNetGain > 0)) {
+        if (trimmedSavings > 0) {
+          const trimmedTargetLineIds = Array.from(trimmedQuantitiesByLineId.keys());
+          log("product_candidate_trimmed", {
+            targetLineIds: trimmedTargetLineIds,
+            requestedQuantities: Array.from(targetQuantitiesByLineId.entries()),
+            grantedQuantities: Array.from(trimmedQuantitiesByLineId.entries()),
+            trimmedSavings: trimmedSavings.toFixed(4),
+          });
+          winners.push({
+            candidate: trimmedCandidate,
+            targetLineIds: trimmedTargetLineIds,
+            targetQuantitiesByLineId: trimmedQuantitiesByLineId,
+            savings: trimmedSavings,
+            index,
+          });
+        }
+        continue;
+      }
+      // evictNetGain 更优：落入下方驱逐逻辑，按全量挤掉冲突 winner。
+    } else if (savings <= conflictingSavings) {
       continue;
     }
 

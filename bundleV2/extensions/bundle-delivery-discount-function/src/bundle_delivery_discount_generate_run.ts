@@ -59,6 +59,51 @@ type OfferRow = {
   offerSettingsJson?: string | null;
 };
 
+/** 压缩格式(v2)的单 offer：短键 + 内联对象（见后台 offerPayload COMPACT_OFFERS_FORMAT_VERSION）。 */
+type CompactOfferWire = {
+  i?: string;
+  c?: string;
+  t?: string;
+  x?: boolean;
+  b?: string;
+  e?: string;
+  s?: unknown;
+  d?: unknown;
+  o?: unknown;
+};
+
+/** 内联 JSON 字段还原成字符串，供下游既有解析逻辑消费。 */
+function jsonFieldToString(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+}
+
+/** 把压缩(v2)或旧格式的单 offer 统一还原为 OfferRow 形状。 */
+function expandCompactOffer(raw: unknown): OfferRow {
+  if (!raw || typeof raw !== "object") return {};
+  const isCompact =
+    !("offerType" in raw) &&
+    !("selectedProductsJson" in raw) &&
+    ("t" in raw || "i" in raw || "s" in raw || "d" in raw || "o" in raw);
+  if (!isCompact) return raw as OfferRow;
+  const compact = raw as CompactOfferWire;
+  return {
+    id: compact.i,
+    status: compact.x,
+    startTime: compact.b ?? undefined,
+    endTime: compact.e ?? undefined,
+    offerType: compact.t,
+    selectedProductsJson: jsonFieldToString(compact.s),
+    discountRulesJson: jsonFieldToString(compact.d),
+    offerSettingsJson: jsonFieldToString(compact.o),
+  };
+}
+
 type ProgressiveGiftRow = {
   type?: string;
   unlockMode?: string;
@@ -747,7 +792,23 @@ function hasEligibleShippingRule(
 function extractOffersListFromJson(v: unknown): OfferRow[] {
   if (!v || typeof v !== "object") return [];
   const o = v as { offers?: unknown };
-  return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
+  if (!Array.isArray(o.offers)) return [];
+  return o.offers.map(expandCompactOffer);
+}
+
+/** 合并多个分片的 OfferRow（按 id 去重，保留首次出现）。 */
+function dedupeOfferRowsById(rows: OfferRow[]): OfferRow[] {
+  const seen = new Set<string>();
+  const out: OfferRow[] = [];
+  for (const row of rows) {
+    const id = String(row?.id || "").trim();
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
@@ -755,40 +816,31 @@ function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
   source: string;
 } {
   const discountOwnerMf = input.discount.offersFromDiscountOwner;
+  const shard1Mf = (input.discount as unknown as { offersShard1?: { jsonValue?: unknown } })
+    .offersShard1;
   const jDisc = discountOwnerMf?.jsonValue;
+  const jShard1 = shard1Mf?.jsonValue;
+
+  const fromShard0 = extractOffersListFromJson(jDisc);
+  const fromShard1 = extractOffersListFromJson(jShard1);
+  const merged = dedupeOfferRowsById([...fromShard0, ...fromShard1]);
 
   log("read_ciwi_offers_metafield", {
     namespace: "$app:ciwi_bundle",
-    key: "offers",
-    metafieldNodePresent: discountOwnerMf != null,
-    jsonValueKind:
-      jDisc === undefined
-        ? "undefined"
-        : jDisc === null
-          ? "null"
-          : Array.isArray(jDisc)
-            ? "array"
-            : typeof jDisc,
-    topLevelKeys:
-      jDisc && typeof jDisc === "object" && !Array.isArray(jDisc)
-        ? Object.keys(jDisc as Record<string, unknown>).slice(0, 30)
-        : null,
-    offersArrayLength:
-      jDisc &&
-      typeof jDisc === "object" &&
-      !Array.isArray(jDisc) &&
-      Array.isArray((jDisc as { offers?: unknown }).offers)
-        ? (jDisc as { offers: unknown[] }).offers.length
-        : null,
+    keys: ["offers", "offers-1"],
+    shard0Present: discountOwnerMf != null,
+    shard1Present: shard1Mf != null,
+    shard0OffersLength: fromShard0.length,
+    shard1OffersLength: fromShard1.length,
+    mergedOffersLength: merged.length,
   });
 
-  const fromDiscount = extractOffersListFromJson(jDisc);
-  if (fromDiscount.length) {
-    return { offers: fromDiscount, source: "discount_owner_app_ciwi_bundle_offers" };
+  if (merged.length) {
+    return { offers: merged, source: "discount_owner_app_ciwi_bundle_offers" };
   }
   return {
     offers: [],
-    source: jDisc != null ? "discount_owner_empty_lists" : "none",
+    source: jDisc != null || jShard1 != null ? "discount_owner_empty_lists" : "none",
   };
 }
 

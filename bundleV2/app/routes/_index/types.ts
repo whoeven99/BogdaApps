@@ -1,12 +1,13 @@
 import type { ThemeEditorTarget, ThemeExtensionDetectionDebug } from "../../server/shopify/theme.server";
+import type { StoreProductItem } from "../../server/shopify/products.server";
 
 export type OfferListItem = {
   id: string;
   name: string;
   cartTitle: string;
   offerType: string;
-  startTime: string;
-  endTime: string;
+  startTime: string | Date;
+  endTime: string | Date;
   status: boolean;
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
@@ -33,6 +34,7 @@ export type MarketItem = {
 
 export type IndexLoaderData = {
   offers?: OfferListItem[];
+  storeProducts?: StoreProductItem[];
   markets: MarketItem[];
   themeTargets: ThemeEditorTarget[];
   shop: string;

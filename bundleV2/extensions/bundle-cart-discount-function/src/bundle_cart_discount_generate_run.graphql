@@ -49,7 +49,12 @@ query CartInput {
   discount {
     discountClasses
     # automatic discount owner: syncCartLinesAutomaticDiscountMetafield + shipping discount sync
+    # 分片：每个 class 的 offers 切成 offers + offers-1（各 <10KB），运行时合并。
+    # ⚠️ key 列表必须与 offerPayload.server.ts 的 OFFER_SHARD_KEYS 一致。
     offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
+    offersShard1: metafield(namespace: "$app:ciwi_bundle", key: "offers-1") {
       jsonValue
     }
   }

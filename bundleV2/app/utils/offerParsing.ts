@@ -4068,6 +4068,41 @@ export function trimOfferSettingsJsonForFunction(
   }
 }
 
+const DISCOUNT_RULES_DISPLAY_ONLY_KEYS = new Set([
+  "title",
+  "subtitle",
+  "titleSource",
+  "subtitleSource",
+  "badge",
+  "isDefault",
+  "offerKind",
+  "id",
+]);
+
+export function trimDiscountRulesJsonForFunction(
+  discountRulesJson?: string | null,
+): string | null {
+  if (discountRulesJson == null || !String(discountRulesJson).trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(String(discountRulesJson)) as unknown;
+    if (!Array.isArray(parsed)) return String(discountRulesJson).trim() || null;
+    const trimmed = parsed.map((item: unknown) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const r = item as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(r)) {
+        if (!DISCOUNT_RULES_DISPLAY_ONLY_KEYS.has(k)) out[k] = v;
+      }
+      return out;
+    });
+    return JSON.stringify(trimmed);
+  } catch {
+    return String(discountRulesJson).trim() || null;
+  }
+}
+
 export function resolveFunctionDiscountClassesForOffer(params: {
   offerType?: string | null;
   discountRulesJson?: string | null;

@@ -2,10 +2,13 @@ import prisma from "../../../db.server";
 import { invalidateShopOffersCache } from "../../../shopOffersCache.server";
 import { runOfferPostWriteSync } from "../../../server/offers/offerSync.server";
 import { validateOwnedOfferAccess } from "../offerActionHelpers";
-import { offerActionErrorResponse, resolveSessionShopName } from "../actionUtils";
+import { offerActionErrorResponse, resolveSessionShopName, writeOfferWithRetry } from "../actionUtils";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 export async function handleDeleteOffer(
@@ -40,7 +43,14 @@ export async function handleDeleteOffer(
     }
 
     shopNameToSync = offerToDelete?.shopName as string | undefined;
-    await prismaAny.offer.delete({ where: { id: idRaw }, select: { id: true } });
+    const deleteResult = await writeOfferWithRetry<{ count: number }>(() =>
+      prismaAny.offer.deleteMany({
+        where: { id: idRaw, shopName },
+      }),
+    );
+    if (!deleteResult || Number(deleteResult.count) !== 1) {
+      return offerActionErrorResponse("Offer not found or was already deleted.", 404);
+    }
   } catch (error) {
     console.error("delete-offer failed", error);
     return offerActionErrorResponse("Delete offer failed.", 500);
@@ -48,7 +58,10 @@ export async function handleDeleteOffer(
 
   if (shopNameToSync) {
     invalidateShopOffersCache(String(shopNameToSync));
-    void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+    void runOfferPostWriteSync(admin, shopNameToSync, {
+      trigger: "delete-offer",
+      offerId: idRaw,
+    }).catch((error) => {
       console.error("Offer post-write sync crashed unexpectedly", { shopName: shopNameToSync, error });
     });
   }

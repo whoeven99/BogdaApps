@@ -1,6 +1,13 @@
 import prisma from "../../../db.server";
 import { invalidateShopOffersCache } from "../../../shopOffersCache.server";
-import { runOfferPostWriteSync } from "../../../server/offers/offerSync.server";
+import { runOfferPostWriteSync, loadShopOffersForSync } from "../../../server/offers/offerSync.server";
+import {
+  buildCompactOffersPayload,
+  offersFitWithinShardLimits,
+  FUNCTION_OFFERS_MAX_BYTES,
+  OFFER_SHARD_COUNT,
+} from "../../../server/offers/offerPayload.server";
+import type { OfferListItem } from "../types";
 import {
   OFFER_TEXT_LIMITS,
   clampNumber,
@@ -32,13 +39,20 @@ import {
 } from "../actionUtils";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 const LONG_RUNNING_OFFER_END_TIME = new Date(LONG_RUNNING_OFFER_END_TIME_ISO);
 
 function sanitizeHexColorParam(raw: string | null | undefined, fallback: string): string {
   return sanitizeHexColor(raw, fallback);
+}
+
+function getDefaultCartTitleForOfferType(offerType: string): string {
+  return offerType === "quantity-breaks-different" ? "多件优惠" : "组合优惠";
 }
 
 function parseFormColors(formData: FormData) {
@@ -64,7 +78,7 @@ export async function handleCreateOrUpdateOffer(
   const idRaw = String(formData.get("offerId") || "").trim();
   const nameRaw = String(formData.get("offerName") || "");
   const name = sanitizeSingleLineText(nameRaw, OFFER_TEXT_LIMITS.offerName);
-  const cartTitle = sanitizeSingleLineText(formData.get("cartTitle"), OFFER_TEXT_LIMITS.cartTitle, "Bundle Discount");
+  let cartTitle = sanitizeSingleLineText(formData.get("cartTitle"), OFFER_TEXT_LIMITS.cartTitle, "组合优惠");
 
   let offerType = String(formData.get("offerType") || "").trim();
   const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
@@ -226,6 +240,9 @@ export async function handleCreateOrUpdateOffer(
 
   let campaignConfigJson: string | null = persistenceResolution.value.campaignConfigJson;
   offerType = persistenceResolution.value.offerType;
+  if (cartTitle === "Bundle Discount") {
+    cartTitle = getDefaultCartTitleForOfferType(offerType);
+  }
   selectedProductsJson = persistenceResolution.value.selectedProductsJson;
   discountRulesJson = persistenceResolution.value.discountRulesJson;
   offerSettingsJson = persistenceResolution.value.offerSettingsJson;
@@ -316,6 +333,49 @@ export async function handleCreateOrUpdateOffer(
   const updateData = baseData;
   const legacyUpdateData = { ...updateData, campaignConfigJson: undefined };
 
+  // 字节守卫：Shopify Function 单 metafield 值 >10KB 将不会被返回，导致全店折扣静默失效。
+  // 在写库前构造"假如保存后"的全量 Function payload，超限则拒绝保存并把错误返回前端。
+  // 仅在新 payload 既超限、又不小于当前值时拦截，避免已超限的老店连"缩小编辑"都被锁死。
+  {
+    const existingOffers = await loadShopOffersForSync(shopName);
+    const prospectiveOffer = {
+      id: idRaw ?? "pending-new-offer-id-placeholder",
+      name,
+      cartTitle,
+      offerType,
+      startTime,
+      endTime,
+      status,
+      campaignConfigJson,
+      offerSettingsJson,
+      selectedProductsJson: selectedProductsJson || null,
+      discountRulesJson: discountRulesJson || null,
+    } as unknown as OfferListItem;
+    const prospectiveOffers: OfferListItem[] =
+      intent === "create-offer"
+        ? [...existingOffers, prospectiveOffer]
+        : existingOffers.map((o) => (o.id === idRaw ? prospectiveOffer : o));
+
+    // 按 discount class 校验分片是否放得下（每类最多 OFFER_SHARD_COUNT 片、各 <10KB）。
+    const prospectiveFit = offersFitWithinShardLimits(
+      await buildCompactOffersPayload(prospectiveOffers),
+    );
+    if (!prospectiveFit.ok) {
+      const currentFit = offersFitWithinShardLimits(
+        await buildCompactOffersPayload(existingOffers),
+      );
+      // 只在"当前未溢出、这次改动导致溢出"时拦截，避免已溢出的老店连缩小编辑都被锁死。
+      if (currentFit.ok) {
+        return offerActionErrorResponse(
+          `Offer configuration is too large for the checkout discount engine (overflow in discount ${
+            prospectiveFit.overflowClasses.length > 1 ? "classes" : "class"
+          }: ${prospectiveFit.overflowClasses.join(", ")}). Each class allows ${OFFER_SHARD_COUNT} shards of ${FUNCTION_OFFERS_MAX_BYTES} bytes. Reduce selected products or split into separate offers.`,
+          422,
+        );
+      }
+    }
+  }
+
   if (intent === "create-offer") {
     try {
       await writeOfferWithRetry(() => prismaAny.offer.create({ data: createData }));
@@ -379,7 +439,10 @@ export async function handleCreateOrUpdateOffer(
   }
 
   invalidateShopOffersCache(shopName);
-  void runOfferPostWriteSync(admin, shopName).catch((error) => {
+  void runOfferPostWriteSync(admin, shopName, {
+    trigger: intent === "create-offer" ? "create-offer" : "update-offer",
+    offerId: idRaw || undefined,
+  }).catch((error) => {
     console.error("Offer post-write sync crashed unexpectedly", { shopName, error });
   });
 

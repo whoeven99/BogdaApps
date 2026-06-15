@@ -44,7 +44,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let ianaTimezone = "UTC";
   try {
     const tzResponse = await admin.graphql(
-      `#graphql query ShopTimezone { shop { ianaTimezone } }`,
+      `#graphql
+        query ShopTimezone {
+          shop { ianaTimezone }
+        }
+      `,
     );
     const tzJson = (await tzResponse.json()) as { data?: { shop?: { ianaTimezone?: string } } };
     if (tzJson?.data?.shop?.ianaTimezone) ianaTimezone = tzJson.data.shop.ianaTimezone;
@@ -69,11 +73,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .pop() ?? "";
   const themeTargets = await fetchThemeEditorTargets(admin);
 
-  const syncResult = await syncShopOffersMetafield(admin, session.shop);
+  const syncResult = await syncShopOffersMetafield(admin, session.shop, { trigger: "loader" });
   if (!syncResult.ok) {
     console.error("Failed to sync shop offers metafield in loader", {
       shopName: session.shop,
       message: syncResult.message,
+      step: syncResult.step,
     });
   }
 
@@ -217,11 +222,6 @@ export default function Index() {
   const storeProducts = storeProductsFetcher.data?.storeProducts ?? [];
   const isOffersLoading = !offersFetcher.data?.offers && offersFetcher.state !== "idle";
   const shouldShowOfferBuilder = Boolean(editingOfferId || (showCreateOffer && createOfferType));
-  const isStoreProductsLoading =
-    shouldShowOfferBuilder &&
-    !storeProductsFetcher.data?.storeProducts &&
-    storeProductsFetcher.state !== "idle";
-
   const toast =
     searchParams.get("toast") ||
     (actionData && "toast" in actionData ? actionData.toast : undefined);
@@ -425,20 +425,7 @@ export default function Index() {
               onSelect={(offerType) => setCreateOfferType(offerType)}
             />
           )}
-          {(shouldShowOfferBuilder || editingOfferId) &&
-            (isStoreProductsLoading ? (
-              <div className="bg-white rounded-[12px] border border-[#e3e8ed] p-[24px] shadow-sm">
-                <div className="animate-pulse space-y-[12px]">
-                  <div className="h-[24px] w-[220px] bg-[#f1f2f4] rounded-[6px]" />
-                  <div className="h-[16px] w-[320px] bg-[#f1f2f4] rounded-[6px]" />
-                  <div className="h-[16px] w-[280px] bg-[#f1f2f4] rounded-[6px]" />
-                  <div className="h-[120px] w-full bg-[#f1f2f4] rounded-[8px]" />
-                </div>
-                <p className="mt-[12px] text-[13px] text-[#6d7175]">
-                  Loading products for offer editor...
-                </p>
-              </div>
-            ) : (
+          {(shouldShowOfferBuilder || editingOfferId) && (
               <CreateNewOffer
                 onBack={() => {
                   if (editingOfferId) {
@@ -464,7 +451,7 @@ export default function Index() {
                   offerType: o.offerType,
                 }))}
               />
-            ))}
+          )}
           {activeTab === "analytics" && (
             <AnalyticsPage shop={shop} offers={offers} defaultOfferId={analyticsOfferId} />
           )}
