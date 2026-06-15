@@ -20,6 +20,24 @@ const LEGACY_OFFER_COUNT_KEY = "ciwi-bundle-offer-count";
 const METAFIELDS_SET_CHUNK = 25;
 const METAFIELDS_DELETE_CHUNK = 50;
 
+const SHOP_BUNDLE_METAFIELD_DEFINITIONS = [
+  {
+    key: BUNDLE_STOREFRONT_OFFERS_KEY,
+    type: "json",
+    name: "Ciwi Bundle Storefront Offers",
+  },
+  {
+    key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+    type: "json",
+    name: "Ciwi Bundle Function Offers Copy",
+  },
+  {
+    key: BUNDLE_OFFER_SYNC_AT_KEY,
+    type: "single_line_text_field",
+    name: "Ciwi Bundle Offer Sync At",
+  },
+] as const;
+
 type MetafieldsSetInput = {
   ownerId: string;
   namespace: string;
@@ -120,6 +138,128 @@ async function metafieldsDeleteByOwnerKeys(
   }
 }
 
+async function ensureShopBundleMetafieldDefinitions(admin: any): Promise<void> {
+  const json = await graphqlJson(
+    admin,
+    `#graphql
+      query ShopCiBundleMetafieldDefinitions {
+        metafieldDefinitions(first: 50, ownerType: SHOP, namespace: "ciwi_bundle") {
+          nodes {
+            id
+            key
+            access {
+              storefront
+            }
+          }
+        }
+      }
+    `,
+  );
+  if (json.errors?.length) {
+    throw new Error(json.errors.map((e) => e.message || "unknown").join("; "));
+  }
+
+  const nodes =
+    (
+      json.data as {
+        metafieldDefinitions?: {
+          nodes?: Array<{ id: string; key: string; access?: { storefront?: string } }>;
+        };
+      }
+    )?.metafieldDefinitions?.nodes ?? [];
+  const byKey = new Map(nodes.map((node) => [node.key, node]));
+
+  for (const definition of SHOP_BUNDLE_METAFIELD_DEFINITIONS) {
+    const existing = byKey.get(definition.key);
+    if (!existing) {
+      const createJson = await graphqlJson(
+        admin,
+        `#graphql
+          mutation CreateShopBundleMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+            metafieldDefinitionCreate(definition: $definition) {
+              createdDefinition {
+                id
+                key
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        {
+          definition: {
+            name: definition.name,
+            namespace: BUNDLE_SHOP_METAFIELD_NAMESPACE,
+            key: definition.key,
+            ownerType: "SHOP",
+            type: definition.type,
+            access: {
+              storefront: "PUBLIC_READ",
+            },
+          },
+        },
+      );
+      if (createJson.errors?.length) {
+        throw new Error(createJson.errors.map((e) => e.message || "unknown").join("; "));
+      }
+      const userErrors = (
+        createJson.data as {
+          metafieldDefinitionCreate?: { userErrors?: Array<{ message?: string }> };
+        }
+      )?.metafieldDefinitionCreate?.userErrors;
+      if (userErrors?.length) {
+        throw new Error(userErrors.map((e) => e.message || "unknown").join("; "));
+      }
+      continue;
+    }
+
+    if (existing.access?.storefront === "PUBLIC_READ") {
+      continue;
+    }
+
+    const updateJson = await graphqlJson(
+      admin,
+      `#graphql
+        mutation UpdateShopBundleMetafieldDefinition($definition: MetafieldDefinitionUpdateInput!) {
+          metafieldDefinitionUpdate(definition: $definition) {
+            updatedDefinition {
+              id
+              key
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      {
+        definition: {
+          namespace: BUNDLE_SHOP_METAFIELD_NAMESPACE,
+          key: definition.key,
+          ownerType: "SHOP",
+          access: {
+            storefront: "PUBLIC_READ",
+          },
+        },
+      },
+    );
+    if (updateJson.errors?.length) {
+      throw new Error(updateJson.errors.map((e) => e.message || "unknown").join("; "));
+    }
+    const userErrors = (
+      updateJson.data as {
+        metafieldDefinitionUpdate?: { userErrors?: Array<{ message?: string }> };
+      }
+    )?.metafieldDefinitionUpdate?.userErrors;
+    if (userErrors?.length) {
+      throw new Error(userErrors.map((e) => e.message || "unknown").join("; "));
+    }
+  }
+}
+
 async function metafieldsSetChunked(
   admin: any,
   metafields: MetafieldsSetInput[],
@@ -171,6 +311,8 @@ export async function reconcileShopOfferShardedMetafields(
   },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
+    await ensureShopBundleMetafieldDefinitions(admin);
+
     const existingKeys = await listShopCiBundleMetafieldKeys(admin);
     const keysToDelete: string[] = [];
     for (const key of existingKeys) {

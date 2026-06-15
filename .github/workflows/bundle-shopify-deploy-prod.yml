@@ -10,6 +10,10 @@ defaults:
   run:
     working-directory: bundleV2
 
+env:
+  # 临时关闭飞书通知；恢复时改为 "true"
+  FEISHU_NOTIFY_ENABLED: "false"
+
 jobs:
   deploy_shopify:
     name: Shopify app deploy (prod.toml)
@@ -137,7 +141,7 @@ jobs:
           exit 1
 
       - name: Notify Feishu on Render deploy success
-        if: ${{ success() }}
+        if: ${{ success() && env.FEISHU_NOTIFY_ENABLED == 'true' }}
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           RENDER_DEPLOY_URL: ${{ steps.trigger_render.outputs.deploy_url }}
@@ -163,7 +167,7 @@ jobs:
             -d "$PAYLOAD"
 
       - name: Notify Feishu on Render deploy failure
-        if: ${{ failure() }}
+        if: ${{ failure() && env.FEISHU_NOTIFY_ENABLED == 'true' }}
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           RENDER_DEPLOY_URL: ${{ steps.trigger_render.outputs.deploy_url }}

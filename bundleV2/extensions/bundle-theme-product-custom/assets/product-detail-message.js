@@ -4700,7 +4700,7 @@ function renderStorefrontPreviewCardShell(options) {
   const listLayoutFormat = options?.listLayoutFormat || theme.layoutFormat || "vertical";
   const buttonHtml =
     theme.showCustomButton && options?.buttonOnClick
-      ? `<button class="create-offer-preview-button" onclick="${esc(
+      ? `<button type="button" class="create-offer-preview-button" onclick="${esc(
           options.buttonOnClick,
         )}" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(
           theme.buttonPrimaryColor,
@@ -5188,7 +5188,7 @@ function renderStorefrontBxgyPreview(offer, successHtml, errorHtml) {
     itemsHtml,
     successHtml,
     errorHtml,
-    buttonOnClick: "window.ciwiHandleBundleAddToCart()",
+    buttonOnClick: "window.ciwiHandleBundleAddToCart(event)",
     extraHtml: progressiveBxgy,
   });
 }
@@ -5229,7 +5229,7 @@ function renderStorefrontDifferentProductsPreview(offer, successHtml, errorHtml)
     itemsHtml,
     successHtml,
     errorHtml,
-    buttonOnClick: "window.ciwiHandleBundleAddToCart()",
+    buttonOnClick: "window.ciwiHandleBundleAddToCart(event)",
     extraHtml: progressiveDifferent,
   });
 }
@@ -5822,19 +5822,104 @@ function renderBundlePreviewHtml(offer) {
   });
 }
 
+function parseCiwiMetafieldRawText(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return null;
+
+  const candidates = [trimmed];
+  if (trimmed.startsWith('"')) {
+    let escaped = false;
+    for (let i = 1; i < trimmed.length; i += 1) {
+      const ch = trimmed[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        candidates.push(trimmed.slice(0, i + 1));
+        break;
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      let parsed = JSON.parse(candidate);
+      if (typeof parsed === "string") {
+        parsed = JSON.parse(parsed);
+      }
+      if (parsed && typeof parsed === "object" && Array.isArray(parsed.offers)) {
+        return parsed;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  // 旧店面缓存可能 bake 了损坏 JSON（例如 3571 后出现脏字符）——按解析器报错位置截取前缀。
+  try {
+    JSON.parse(trimmed);
+  } catch (error) {
+    const match = String(error?.message || "").match(/position (\d+)/i);
+    if (match) {
+      const pos = Number(match[1]);
+      for (const end of [pos, pos - 1, pos + 1]) {
+        if (end <= 0 || end > trimmed.length) continue;
+        try {
+          let parsed = JSON.parse(trimmed.slice(0, end));
+          if (typeof parsed === "string") {
+            parsed = JSON.parse(parsed);
+          }
+          if (parsed && typeof parsed === "object" && Array.isArray(parsed.offers)) {
+            console.warn("[ciwi] parsed truncated bundle-offers payload", {
+              requestedBytes: trimmed.length,
+              usedBytes: end,
+              updatedAt: parsed.updatedAt,
+              offerCount: parsed.offers.length,
+            });
+            return parsed;
+          }
+        } catch {
+          // try adjacent cut point
+        }
+      }
+    }
+  }
+
+  let fallback = trimmed;
+  if (fallback.startsWith('"') && fallback.endsWith('"')) {
+    fallback = fallback.slice(1, -1);
+  }
+  const jsonLike = fallback.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
+  const parsed = JSON.parse(jsonLike);
+  if (parsed && typeof parsed === "object" && Array.isArray(parsed.offers)) {
+    return parsed;
+  }
+  return null;
+}
+
 function parseCiwiMetafieldScript(scriptId) {
   const metaEl = getSourceScriptElement(scriptId);
   if (!metaEl) return null;
 
-  let raw = (metaEl.innerText || metaEl.textContent || "").trim();
+  const raw = (metaEl.innerText || metaEl.textContent || "").trim();
   if (!raw) return null;
 
-  // 与 bundle-cart.js 一致：兼容 Ruby hash 风格的字符串化输出
-  if (raw.startsWith('"') && raw.endsWith('"')) {
-    raw = raw.slice(1, -1);
+  // metafield 编码可能是：
+  //   ① 干净单层 JSON 对象 `{...}`（json 类型 metafield + Liquid `| json`，当前写法）；
+  //   ② 双重编码的 JSON 字符串 `"{\"...}"`（历史上 metafield 曾是字符串类型，
+  //      Liquid `| json` 把已是字符串的值又编码了一层）——旧缓存页仍可能命中。
+  //   ③ 双重编码后再拼接脏尾巴（position N 后出现非 JSON 字符）——截取外层引号内有效段再解析。
+  try {
+    return parseCiwiMetafieldRawText(raw);
+  } catch (error) {
+    console.error("[ciwi] Failed to parse metafield script", scriptId, error);
+    return null;
   }
-  const jsonLike = raw.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
-  return JSON.parse(jsonLike);
 }
 
 function readOffersConfigFromMetafield() {
@@ -5848,6 +5933,12 @@ function readOffersConfigFromMetafield() {
       return null;
     }
     const parsed = parseCiwiMetafieldScript("bundle-offers");
+    if (parsed?.updatedAt) {
+      console.log("[ciwi] bundle-offers metafield", {
+        updatedAt: parsed.updatedAt,
+        offerCount: parsed.offers?.length ?? 0,
+      });
+    }
     return parsed;
   } catch (e) {
     console.error("[ciwi] Failed to parse bundle offers metafield", e);
