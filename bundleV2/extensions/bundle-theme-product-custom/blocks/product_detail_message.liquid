@@ -67,12 +67,9 @@
     }
   </script>
 
-  {% if shop.metafields.ciwi_bundle %}
-    {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
-      <script type="application/json" data-ciwi-script="bundle-offers">
-        {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value | json }}
-      </script>
-    {% endif %}
+  {% assign ciwi_offers_mf = shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
+  {% if ciwi_offers_mf and ciwi_offers_mf.value != blank %}
+    <script type="application/json" data-ciwi-script="bundle-offers">{{ ciwi_offers_mf.value | json }}</script>
   {% endif %}
 </div>
 

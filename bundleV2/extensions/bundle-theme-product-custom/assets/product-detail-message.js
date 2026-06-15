@@ -4217,12 +4217,90 @@ function bindBundleInteractions(root) {
 }
 
 let __ciwiNativeAddSubmitPassthrough = false;
+let __ciwiBundleCartAddInFlight = false;
+
+function getBundleAddToCartButtons() {
+  const buttons = [];
+  const bundleBtn = document.querySelector(
+    ".ciwi-bundle-wrapper .create-offer-preview-button",
+  );
+  if (bundleBtn) buttons.push(bundleBtn);
+
+  const form = getAddToCartForm();
+  if (!form) return buttons;
+
+  const formId = form.getAttribute("id");
+  const selectors = [
+    "button[type='submit']",
+    "button[name='add']",
+    "input[type='submit']",
+    "input[name='add']",
+  ];
+  selectors.forEach((selector) => {
+    form.querySelectorAll(selector).forEach((element) => buttons.push(element));
+    if (formId) {
+      document
+        .querySelectorAll(`${selector}[form="${formId}"]`)
+        .forEach((element) => buttons.push(element));
+    }
+  });
+  return Array.from(new Set(buttons));
+}
+
+function setBundleAddToCartLoading(isLoading) {
+  getBundleAddToCartButtons().forEach((button) => {
+    const isInput = button.tagName === "INPUT";
+    if (isLoading) {
+      if (!button.dataset.ciwiDefaultLabel) {
+        button.dataset.ciwiDefaultLabel = isInput
+          ? String(button.value || "")
+          : String(button.textContent || "").trim();
+      }
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.classList.add("ciwi-bundle-add-loading");
+      if (isInput) {
+        button.value = "Adding...";
+      } else {
+        button.textContent = "Adding...";
+      }
+      return;
+    }
+
+    const defaultLabel = String(button.dataset.ciwiDefaultLabel || "");
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    button.classList.remove("ciwi-bundle-add-loading");
+    if (isInput) {
+      button.value = defaultLabel;
+    } else if (defaultLabel) {
+      button.textContent = defaultLabel;
+    }
+  });
+}
+
+function runBundleCartAddFlow(workFn) {
+  if (__ciwiBundleCartAddInFlight) return Promise.resolve(null);
+  __ciwiBundleCartAddInFlight = true;
+  setBundleAddToCartLoading(true);
+  return Promise.resolve()
+    .then(workFn)
+    .finally(() => {
+      __ciwiBundleCartAddInFlight = false;
+      setBundleAddToCartLoading(false);
+    });
+}
+
+function finishSuccessfulBundleCartAdd(addResponse) {
+  notifyThemeAfterCartAdd(addResponse);
+}
 
 window.ciwiHandleBundleAddToCart = function(event) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
   }
+  if (__ciwiBundleCartAddInFlight) return;
   const currentOffer = getCurrentOffer(offersConfigCache);
   const explicitCount = getSelectedCountForOffer(currentOffer);
   const count =
@@ -4247,25 +4325,28 @@ window.ciwiHandleBundleAddToCart = function(event) {
     currentOffer?.offerType === "quantity-breaks-different" &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
-    performDifferentProductsCartAdd()
-      .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
-      .catch((error) => {
-        console.error("[ciwi] performDifferentProductsCartAdd failed", error);
-      });
+    void runBundleCartAddFlow(() =>
+      performDifferentProductsCartAdd().then((addResponse) => {
+        if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+        return addResponse;
+      }),
+    ).catch((error) => {
+      console.error("[ciwi] performDifferentProductsCartAdd failed", error);
+    });
     return;
   }
   if (
     currentOffer?.offerType === "free-gift" &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
-    performFreeGiftCartAdd()
-      .then((ok) => {
-        if (ok) return notifyThemeAfterCartAdd();
-        return false;
-      })
-      .catch((error) => {
-        console.error("[ciwi] performFreeGiftCartAdd failed", error);
-      });
+    void runBundleCartAddFlow(() =>
+      performFreeGiftCartAdd().then((addResponse) => {
+        if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+        return addResponse;
+      }),
+    ).catch((error) => {
+      console.error("[ciwi] performFreeGiftCartAdd failed", error);
+    });
     return;
   }
   if (
@@ -4273,18 +4354,21 @@ window.ciwiHandleBundleAddToCart = function(event) {
       currentOffer?.offerType === "quantity-breaks-same") &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
-    performSingleVariantBundleCartAdd(currentOffer, cartQuantity, {
-      fallbackToDefault: explicitCount == null,
-    })
-      .then((ok) => {
-        if (ok) return notifyThemeAfterCartAdd();
+    void runBundleCartAddFlow(() =>
+      performSingleVariantBundleCartAdd(currentOffer, cartQuantity, {
+        fallbackToDefault: explicitCount == null,
+      }).then((addResponse) => {
+        if (addResponse) {
+          finishSuccessfulBundleCartAdd(addResponse);
+          return addResponse;
+        }
         submitBundleFormFallback();
-        return false;
-      })
-      .catch((error) => {
-        console.error("[ciwi] performSingleVariantBundleCartAdd failed", error);
-        submitBundleFormFallback();
-      });
+        return null;
+      }),
+    ).catch((error) => {
+      console.error("[ciwi] performSingleVariantBundleCartAdd failed", error);
+      submitBundleFormFallback();
+    });
     return;
   }
   submitBundleFormFallback();
@@ -4522,9 +4606,9 @@ async function performDifferentProductsCartAdd() {
       res.status,
       body?.description || body?.message || body,
     );
-    return false;
+    return null;
   }
-  return true;
+  return body;
 }
 
 window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
@@ -4700,7 +4784,9 @@ function renderStorefrontPreviewCardShell(options) {
   const listLayoutFormat = options?.listLayoutFormat || theme.layoutFormat || "vertical";
   const buttonHtml =
     theme.showCustomButton && options?.buttonOnClick
-      ? `<button class="create-offer-preview-button" onclick="${esc(
+      ? `<button type="button" class="create-offer-preview-button" data-ciwi-default-label="${esc(
+          theme.buttonText,
+        )}" onclick="${esc(
           options.buttonOnClick,
         )}" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(
           theme.buttonPrimaryColor,
@@ -5188,7 +5274,7 @@ function renderStorefrontBxgyPreview(offer, successHtml, errorHtml) {
     itemsHtml,
     successHtml,
     errorHtml,
-    buttonOnClick: "window.ciwiHandleBundleAddToCart()",
+    buttonOnClick: "window.ciwiHandleBundleAddToCart(event)",
     extraHtml: progressiveBxgy,
   });
 }
@@ -5229,7 +5315,7 @@ function renderStorefrontDifferentProductsPreview(offer, successHtml, errorHtml)
     itemsHtml,
     successHtml,
     errorHtml,
-    buttonOnClick: "window.ciwiHandleBundleAddToCart()",
+    buttonOnClick: "window.ciwiHandleBundleAddToCart(event)",
     extraHtml: progressiveDifferent,
   });
 }
@@ -5468,9 +5554,9 @@ async function performFreeGiftCartAdd() {
       res.status,
       body?.description || body?.message || body,
     );
-    return false;
+    return null;
   }
-  return true;
+  return body;
 }
 
 async function performSingleVariantBundleCartAdd(offer, quantity, options) {
@@ -5498,30 +5584,38 @@ async function performSingleVariantBundleCartAdd(offer, quantity, options) {
       res.status,
       body?.description || body?.message || body,
     );
-    return false;
+    return null;
   }
-  return true;
+  return body;
+}
+
+function buildCartEventDetailFromAddResponse(addResponse) {
+  if (!addResponse || typeof addResponse !== "object") {
+    return { cart: null };
+  }
+  if (Array.isArray(addResponse.items)) {
+    return { cart: { items: addResponse.items } };
+  }
+  if (addResponse.id != null || addResponse.variant_id != null) {
+    return { cart: { items: [addResponse] } };
+  }
+  return { cart: addResponse };
 }
 
 /**
  * AJAX 加购成功后通知主题刷新购物车/侧栏（不跳转 /cart）。
- * Dawn 及部分主题会监听 cart:refresh / cart:updated；多派发几种常见事件以提高兼容性。
+ * 直接使用 cart/add.js 响应构造事件 detail，避免串行等待 /cart.js。
  */
-async function notifyThemeAfterCartAdd() {
+function notifyThemeAfterCartAdd(addResponse) {
+  const detail = buildCartEventDetailFromAddResponse(addResponse);
   try {
-    const res = await fetch("/cart.js", {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-    });
-    const cart = res.ok ? await res.json().catch(() => null) : null;
-
     document.documentElement.dispatchEvent(
       new CustomEvent("cart:refresh", { bubbles: true }),
     );
-    document.dispatchEvent(new CustomEvent("cart:updated", { detail: { cart } }));
-    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail: { cart } }));
+    document.dispatchEvent(new CustomEvent("cart:updated", { detail }));
+    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail }));
     document.body.dispatchEvent(
-      new CustomEvent("ajaxCart:updated", { bubbles: true, detail: { cart } }),
+      new CustomEvent("ajaxCart:updated", { bubbles: true, detail }),
     );
   } catch (error) {
     console.warn("[ciwi] notifyThemeAfterCartAdd failed", error);
@@ -5621,7 +5715,7 @@ async function addItemsToCartWithFallback(items, offer) {
       : null;
 
   if (res.ok) {
-    return true;
+    return body;
   }
 
   if (isCloudflareChallengeResponse(rawText, res, contentType)) {
@@ -5731,9 +5825,12 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
     event.preventDefault();
     event.stopPropagation();
   }
-  const ok = await performCompleteBundleCartAdd();
-  if (!ok) return;
-  await notifyThemeAfterCartAdd();
+  if (__ciwiBundleCartAddInFlight) return;
+  await runBundleCartAddFlow(async () => {
+    const addResponse = await performCompleteBundleCartAdd();
+    if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+    return addResponse;
+  });
 };
 
 function renderBundlePreviewHtml(offer) {
@@ -5822,19 +5919,104 @@ function renderBundlePreviewHtml(offer) {
   });
 }
 
+function parseCiwiMetafieldRawText(raw) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return null;
+
+  const candidates = [trimmed];
+  if (trimmed.startsWith('"')) {
+    let escaped = false;
+    for (let i = 1; i < trimmed.length; i += 1) {
+      const ch = trimmed[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        candidates.push(trimmed.slice(0, i + 1));
+        break;
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      let parsed = JSON.parse(candidate);
+      if (typeof parsed === "string") {
+        parsed = JSON.parse(parsed);
+      }
+      if (parsed && typeof parsed === "object" && Array.isArray(parsed.offers)) {
+        return parsed;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  // 旧店面缓存可能 bake 了损坏 JSON（例如 3571 后出现脏字符）——按解析器报错位置截取前缀。
+  try {
+    JSON.parse(trimmed);
+  } catch (error) {
+    const match = String(error?.message || "").match(/position (\d+)/i);
+    if (match) {
+      const pos = Number(match[1]);
+      for (const end of [pos, pos - 1, pos + 1]) {
+        if (end <= 0 || end > trimmed.length) continue;
+        try {
+          let parsed = JSON.parse(trimmed.slice(0, end));
+          if (typeof parsed === "string") {
+            parsed = JSON.parse(parsed);
+          }
+          if (parsed && typeof parsed === "object" && Array.isArray(parsed.offers)) {
+            console.warn("[ciwi] parsed truncated bundle-offers payload", {
+              requestedBytes: trimmed.length,
+              usedBytes: end,
+              updatedAt: parsed.updatedAt,
+              offerCount: parsed.offers.length,
+            });
+            return parsed;
+          }
+        } catch {
+          // try adjacent cut point
+        }
+      }
+    }
+  }
+
+  let fallback = trimmed;
+  if (fallback.startsWith('"') && fallback.endsWith('"')) {
+    fallback = fallback.slice(1, -1);
+  }
+  const jsonLike = fallback.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
+  const parsed = JSON.parse(jsonLike);
+  if (parsed && typeof parsed === "object" && Array.isArray(parsed.offers)) {
+    return parsed;
+  }
+  return null;
+}
+
 function parseCiwiMetafieldScript(scriptId) {
   const metaEl = getSourceScriptElement(scriptId);
   if (!metaEl) return null;
 
-  let raw = (metaEl.innerText || metaEl.textContent || "").trim();
+  const raw = (metaEl.innerText || metaEl.textContent || "").trim();
   if (!raw) return null;
 
-  // 与 bundle-cart.js 一致：兼容 Ruby hash 风格的字符串化输出
-  if (raw.startsWith('"') && raw.endsWith('"')) {
-    raw = raw.slice(1, -1);
+  // metafield 编码可能是：
+  //   ① 干净单层 JSON 对象 `{...}`（json 类型 metafield + Liquid `| json`，当前写法）；
+  //   ② 双重编码的 JSON 字符串 `"{\"...}"`（历史上 metafield 曾是字符串类型，
+  //      Liquid `| json` 把已是字符串的值又编码了一层）——旧缓存页仍可能命中。
+  //   ③ 双重编码后再拼接脏尾巴（position N 后出现非 JSON 字符）——截取外层引号内有效段再解析。
+  try {
+    return parseCiwiMetafieldRawText(raw);
+  } catch (error) {
+    console.error("[ciwi] Failed to parse metafield script", scriptId, error);
+    return null;
   }
-  const jsonLike = raw.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
-  return JSON.parse(jsonLike);
 }
 
 function readOffersConfigFromMetafield() {
@@ -5848,6 +6030,12 @@ function readOffersConfigFromMetafield() {
       return null;
     }
     const parsed = parseCiwiMetafieldScript("bundle-offers");
+    if (parsed?.updatedAt) {
+      console.log("[ciwi] bundle-offers metafield", {
+        updatedAt: parsed.updatedAt,
+        offerCount: parsed.offers?.length ?? 0,
+      });
+    }
     return parsed;
   } catch (e) {
     console.error("[ciwi] Failed to parse bundle offers metafield", e);
@@ -6057,8 +6245,10 @@ function attachBundlePriceSync(offer) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation?.();
-        void performCompleteBundleCartAdd().then(async (ok) => {
-          if (ok) await notifyThemeAfterCartAdd();
+        void runBundleCartAddFlow(async () => {
+          const addResponse = await performCompleteBundleCartAdd();
+          if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+          return addResponse;
         });
       },
       { capture: true, signal },
