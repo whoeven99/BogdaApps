@@ -34,3 +34,6 @@ database.sqlite
 # Local test program (do not commit)
 /.testprogram/
 
+# Agent / debug script outputs
+scripts/tmp/
+

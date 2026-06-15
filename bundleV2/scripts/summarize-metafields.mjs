@@ -3,9 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
+const tmpDir = path.join(dir, "tmp");
 
 function readJson(name) {
-  const raw = fs.readFileSync(path.join(dir, name), "utf8").replace(/^\uFEFF/, "");
+  const raw = fs.readFileSync(path.join(tmpDir, name), "utf8").replace(/^\uFEFF/, "");
   return JSON.parse(raw);
 }
 
@@ -15,7 +16,7 @@ function byteLen(value) {
 
 console.log("=== ciwishop.myshopify.com — Shop metafields (ciwi_bundle) ===\n");
 
-const shop = readJson(".tmp-shop.json");
+const shop = readJson("shop.json");
 const edges = shop?.shop?.metafields?.edges ?? [];
 
 const pick = (key) => edges.find((e) => e.node.key === key)?.node;
@@ -66,7 +67,7 @@ if (other.length) {
 
 console.log("=== Discount 节点 metafields (Function) ===\n");
 
-const discount = readJson(".tmp-discount.json");
+const discount = readJson("discount.json");
 for (const n of discount?.discountNodes?.nodes ?? []) {
   const title = n.discount?.title ?? "?";
   const cls = (n.discount?.discountClasses ?? []).join(", ");
