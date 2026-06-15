@@ -19,6 +19,22 @@ const RETRY_MS = 12_000;
 const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
 const SESSION_STORAGE_PENDING_CART_REFRESH_KEY = "ciwi-pending-cart-refresh";
 const CIWI_BUNDLE_ADDED_QUERY_PARAM = "ciwi_bundle_added";
+
+// 调试日志开关：默认静默，生产环境不再往 console 刷 [ciwi] 信息日志。
+// 排查时任选其一开启：URL 加 ?ciwi_debug=1，或控制台执行 localStorage.setItem("ciwiDebug","1")。
+// 注意：这只影响信息性日志（ciwiLog）；真正的失败仍用 console.warn/error 照常输出。
+const CIWI_DEBUG_ENABLED = (() => {
+  try {
+    if (/[?&]ciwi_debug=1\b/.test(window.location.search)) return true;
+    return Boolean(window.localStorage && window.localStorage.getItem("ciwiDebug") === "1");
+  } catch {
+    return false;
+  }
+})();
+function ciwiLog(...args) {
+  if (CIWI_DEBUG_ENABLED) console.log(...args);
+}
+
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
@@ -2791,7 +2807,7 @@ async function consumePendingCartRefresh() {
       url.searchParams.delete(CIWI_BUNDLE_ADDED_QUERY_PARAM);
       window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     }
-    console.log("[ciwi] consumed pending bundle add return", {
+    ciwiLog("[ciwi] consumed pending bundle add return", {
       reason: String(parsed?.reason || ""),
       ageMs: hasValidPendingState ? ageMs : null,
       usedQueryFlag: hasSuccessQuery,
@@ -3084,7 +3100,7 @@ function blockStorefrontOfferEligibility(reason, logArgs) {
 
 function logStorefrontOfferSkip(offer, result) {
   const logArgs = Array.isArray(result?.logArgs) ? result.logArgs : [];
-  console.log("[ciwi]", result?.reason || "offer skipped: eligibility failed", offer?.id, ...logArgs);
+  ciwiLog("[ciwi]", result?.reason || "offer skipped: eligibility failed", offer?.id, ...logArgs);
 }
 
 function createStorefrontOfferContext() {
@@ -3431,10 +3447,10 @@ function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const context = createStorefrontOfferContext();
 
-  console.log("[ciwi] offers total:", offers.length, "currentProductGid:", context.currentProductGid, "currentMarketId:", context.currentMarketId);
+  ciwiLog("[ciwi] offers total:", offers.length, "currentProductGid:", context.currentProductGid, "currentMarketId:", context.currentMarketId);
 
   if (!offers.length) {
-    console.log("[ciwi] no offers in metafield — skip bundle UI");
+    ciwiLog("[ciwi] no offers in metafield — skip bundle UI");
     return null;
   }
 
@@ -3460,7 +3476,7 @@ function getCurrentOffer(offersConfig) {
     }
 
     if (shouldHideOfferForInventory(offer)) {
-      console.log("[ciwi] offer skipped: hidden by inventory state", offer.id, offer.offerType);
+      ciwiLog("[ciwi] offer skipped: hidden by inventory state", offer.id, offer.offerType);
       continue;
     }
 
@@ -3472,7 +3488,7 @@ function getCurrentOffer(offersConfig) {
       defaultSavings,
       displayPriority,
     });
-    console.log("[ciwi] offer candidate for current product", {
+    ciwiLog("[ciwi] offer candidate for current product", {
       index,
       offerId: offer.id,
       offerName: offer.name,
@@ -3494,7 +3510,7 @@ function getCurrentOffer(offersConfig) {
       return left.index - right.index;
     });
     const winner = matchingCandidates[0];
-    console.log("[ciwi] offer selected for current product", {
+    ciwiLog("[ciwi] offer selected for current product", {
       index: winner.index,
       offerId: winner.offer.id,
       offerName: winner.offer.name,
@@ -3507,7 +3523,7 @@ function getCurrentOffer(offersConfig) {
     return winner.offer;
   }
 
-  console.log("[ciwi] no matching offer for current product — skip bundle UI");
+  ciwiLog("[ciwi] no matching offer for current product — skip bundle UI");
   return null;
 }
 
@@ -3976,7 +3992,7 @@ function updateThemeQuantityInput(count) {
         input.disabled = true;
       }
     });
-    console.log("[ciwi] updateThemeQuantityInput", {
+    ciwiLog("[ciwi] updateThemeQuantityInput", {
       requestedCount: Number(count),
       formId: form.getAttribute("id") || "",
       quantityInputs: allQtyInputs.map((input, index) => ({
@@ -4041,7 +4057,7 @@ function updateThemeSellingPlanInput(sellingPlanId) {
 
 function syncSubscriptionSelectionToTheme(offer) {
   if (!offer || offer.offerType !== "subscription") {
-    console.log(
+    ciwiLog(
       "[ciwi][subscription] syncSubscriptionSelectionToTheme skipped: offer is not subscription type",
       { offerType: offer?.offerType },
     );
@@ -4051,7 +4067,7 @@ function syncSubscriptionSelectionToTheme(offer) {
   const defaultSellingPlanId =
     subscriptionState.sellingPlanId || getDefaultSellingPlanId();
   const mode = window.__ciwiBundleState?.subscriptionMode || "one-time";
-  console.log("[ciwi][subscription] syncSubscriptionSelectionToTheme", {
+  ciwiLog("[ciwi][subscription] syncSubscriptionSelectionToTheme", {
     mode,
     defaultSellingPlanId,
     offerId: offer.offerId || offer.id,
@@ -4104,7 +4120,7 @@ window.ciwiSelectBundleOption = function(count) {
 };
 
 window.ciwiSelectSubscriptionMode = function(mode) {
-  console.log("[ciwi][subscription] ciwiSelectSubscriptionMode called", { mode });
+  ciwiLog("[ciwi][subscription] ciwiSelectSubscriptionMode called", { mode });
   if (!window.__ciwiBundleState) {
     console.warn("[ciwi][subscription] __ciwiBundleState is not initialized");
     return;
@@ -4112,7 +4128,7 @@ window.ciwiSelectSubscriptionMode = function(mode) {
   const nextMode = mode === "subscription" ? "subscription" : "one-time";
   const prevMode = window.__ciwiBundleState.subscriptionMode;
   window.__ciwiBundleState.subscriptionMode = nextMode;
-  console.log("[ciwi][subscription] mode changed", { prevMode, nextMode });
+  ciwiLog("[ciwi][subscription] mode changed", { prevMode, nextMode });
 
   // 中文注释：如果用户选择订阅，但商品没有可用的 selling plan，直接给用户反馈而不是静默回退
   if (nextMode === "subscription") {
@@ -4144,7 +4160,7 @@ window.ciwiSelectSubscriptionMode = function(mode) {
     wrap.innerHTML = html;
     bindBundleInteractions(wrap);
     syncSubscriptionSelectionToTheme(currentOffer);
-    console.log("[ciwi][subscription] bundle UI re-rendered after mode change");
+    ciwiLog("[ciwi][subscription] bundle UI re-rendered after mode change");
   } else {
     console.warn("[ciwi][subscription] renderBundlePreviewHtml returned empty, UI not updated");
   }
@@ -4188,7 +4204,7 @@ function bindBundleInteractions(root) {
   const subscriptionOptions = Array.from(
     root.querySelectorAll("[data-ciwi-subscription-mode]"),
   );
-  console.log("[ciwi][subscription] bindBundleInteractions — subscription options count:", subscriptionOptions.length);
+  ciwiLog("[ciwi][subscription] bindBundleInteractions — subscription options count:", subscriptionOptions.length);
 
   subscriptionOptions.forEach((option) => {
     if (option.dataset.ciwiBound === "true") return;
@@ -4199,7 +4215,7 @@ function bindBundleInteractions(root) {
     option.addEventListener(
       "click",
       (event) => {
-        console.log("[ciwi][subscription] click on option", {
+        ciwiLog("[ciwi][subscription] click on option", {
           mode,
           target: event.target?.tagName,
         });
@@ -4215,7 +4231,7 @@ function bindBundleInteractions(root) {
     if (radio) {
       radio.addEventListener("change", () => {
         if (!radio.checked) return;
-        console.log("[ciwi][subscription] radio change fallback", { mode });
+        ciwiLog("[ciwi][subscription] radio change fallback", { mode });
         // 中文注释：ciwiSelectSubscriptionMode 幂等，重复调用安全
         window.ciwiSelectSubscriptionMode(mode);
       });
@@ -4380,14 +4396,17 @@ function waitForThemeCartRefresh(baselineCount, timeoutMs = 6000) {
 }
 
 async function submitViaNativeThemeCart(offer, quantity, options) {
-  const baselineCount = await readCartItemCountSafe();
-  submitBundleFormFallback();
-  const themeHandled = await waitForThemeCartRefresh(baselineCount);
-  if (themeHandled) return true;
-  const nextCount = await readCartItemCountSafe();
-  if (nextCount != null && baselineCount != null && nextCount > baselineCount) {
+  // 优先走主题原生表单加购。提交成功即认定主题负责本次加购：
+  //   - 不再用 cart.js 轮询确认（加购瞬间各 app 抢 cart.js，限流 429 时确认必失败，
+  //     旧逻辑会误判“主题没加成”→ 再走 JSON 接口重复加购，造成双倍加购隐患）；
+  //   - 同时少发 2 次 cart.js（baseline + 复查），减轻我们对 429 风暴的贡献。
+  const nativeSubmitted = submitBundleFormFallback();
+  if (nativeSubmitted) {
+    // 仅等 UI 刷新信号（drawer 打开 / cart 事件），不重复加购。
+    await waitForThemeCartRefresh(null);
     return true;
   }
+  // 页面没有可用的原生表单时，才用 JSON 接口兜底加购。
   const addResponse = await performSingleVariantBundleCartAdd(offer, quantity, options);
   if (addResponse) {
     await finishSuccessfulBundleCartAdd(addResponse);
@@ -4408,7 +4427,7 @@ window.ciwiHandleBundleAddToCart = function(event) {
     explicitCount == null ? getDefaultSelectedCountForOffer(currentOffer) : explicitCount;
   const cartQuantity = getCartQuantityForSelectedOffer(currentOffer, count);
   clearBundleErrorMessage();
-  console.log("[ciwi] handleBundleAddToCart", {
+  ciwiLog("[ciwi] handleBundleAddToCart", {
     offerId: currentOffer?.id || "",
     offerType: currentOffer?.offerType || "",
     selectedCount: Number(count),
@@ -4475,7 +4494,7 @@ function submitBundleFormFallback() {
           : []),
       ]),
     );
-    console.log("[ciwi] submitBundleFormFallback", {
+    ciwiLog("[ciwi] submitBundleFormFallback", {
       formId: formId || "",
       quantityInputs: quantityInputs.map((input, index) => ({
         index,
@@ -4508,8 +4527,11 @@ function submitBundleFormFallback() {
     } else {
       form.submit();
     }
+    // 已提交原生表单：主题负责本次加购。返回 true 让调用方据此避免重复加购。
+    return true;
   } else {
     console.error("[ciwi] Add to cart form not found");
+    return false;
   }
 }
 
@@ -5414,7 +5436,7 @@ function renderStorefrontDifferentProductsPreview(offer, successHtml, errorHtml)
 
 function buildStorefrontSubscriptionPreviewModel(offer, offerSettings) {
   const hasProductSubscription = getCurrentProductHasSubscription();
-  console.log("[ciwi][subscription] render pre-check", {
+  ciwiLog("[ciwi][subscription] render pre-check", {
     offerType: offer?.offerType,
     hasProductSubscription,
     subscriptionEnabled: offerSettings.subscriptionEnabled,
@@ -6392,7 +6414,7 @@ function renderBundlePreviewHtml(offer) {
     offerSettings,
   );
   if (subscriptionModel) {
-    console.log("[ciwi][subscription] render subscription block", {
+    ciwiLog("[ciwi][subscription] render subscription block", {
       selectedMode: subscriptionModel.selectedMode,
       defaultSellingPlanId: subscriptionModel.defaultSellingPlanId,
       subscriptionTitle: subscriptionModel.subscriptionTitle,
@@ -6528,7 +6550,7 @@ function readOffersConfigFromMetafield() {
     }
     const parsed = parseCiwiMetafieldScript("bundle-offers");
     if (parsed?.updatedAt) {
-      console.log("[ciwi] bundle-offers metafield", {
+      ciwiLog("[ciwi] bundle-offers metafield", {
         updatedAt: parsed.updatedAt,
         offerCount: parsed.offers?.length ?? 0,
       });
@@ -6741,7 +6763,7 @@ function attachBundlePriceSync(offer) {
         if (!document.querySelector(".ciwi-bundle-wrapper")) return;
         if (__ciwiNativeAddSubmitPassthrough) {
           __ciwiNativeAddSubmitPassthrough = false;
-          console.log("[ciwi] native add passthrough");
+          ciwiLog("[ciwi] native add passthrough");
           return;
         }
         e.preventDefault();
@@ -6765,7 +6787,7 @@ function attachBundlePriceSync(offer) {
         if (!document.querySelector(".ciwi-bundle-wrapper")) return;
         if (__ciwiNativeAddSubmitPassthrough) {
           __ciwiNativeAddSubmitPassthrough = false;
-          console.log("[ciwi] native add passthrough");
+          ciwiLog("[ciwi] native add passthrough");
           return;
         }
         e.preventDefault();
@@ -6856,13 +6878,13 @@ function run() {
     if (!offersConfigCache) {
       offersConfigCache = readOffersConfigFromMetafield();
       if (offersConfigCache) {
-        console.log("[ciwi] metafield offers loaded", offersConfigCache);
+        ciwiLog("[ciwi] metafield offers loaded", offersConfigCache);
       }
     }
 
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {
-      console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
+      ciwiLog("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
     }
     if (currentOffer.offerType === "complete-bundle") {
@@ -6926,7 +6948,7 @@ function run() {
 // 尽早读取一次（在 DOMContentLoaded 之前）
 offersConfigCache = readOffersConfigFromMetafield();
 if (offersConfigCache) {
-  console.log("[ciwi] metafield offers preloaded", offersConfigCache);
+  ciwiLog("[ciwi] metafield offers preloaded", offersConfigCache);
 }
 
 if (document.readyState === "loading") {
