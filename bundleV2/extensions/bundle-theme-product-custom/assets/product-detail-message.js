@@ -4317,7 +4317,100 @@ function runBundleCartAddFlow(workFn) {
 }
 
 function finishSuccessfulBundleCartAdd(addResponse) {
-  return refreshThemeCartUi(addResponse);
+  return presentThemeCartAddSuccess(addResponse);
+}
+
+function shouldUseNativeThemeCartSubmit(offer, explicitCount) {
+  if (!offer) return true;
+  if (offer.offerType === "complete-bundle") return false;
+  if (
+    offer.offerType === "free-gift" &&
+    explicitCount !== CIWI_SINGLE_OPTION_COUNT
+  ) {
+    return false;
+  }
+  if (
+    offer.offerType === "quantity-breaks-different" &&
+    explicitCount !== CIWI_SINGLE_OPTION_COUNT
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function readCartItemCountSafe() {
+  try {
+    const cart = await fetchFullCartJson();
+    if (!cart) return null;
+    return Math.max(0, Math.trunc(Number(cart.item_count) || 0));
+  } catch {
+    return null;
+  }
+}
+
+function waitForThemeCartRefresh(baselineCount, timeoutMs = 6000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const onSignal = () => finish(true);
+    let drawerObserver = null;
+    const cleanup = () => {
+      clearTimeout(timer);
+      document.removeEventListener("cart:updated", onSignal);
+      document.removeEventListener("cart:refresh", onSignal);
+      document.removeEventListener("cart:change", onSignal);
+      window.removeEventListener("shopify:cart:change", onSignal);
+      if (drawerObserver) drawerObserver.disconnect();
+    };
+    const cartUi = getThemeCartUiElement();
+    if (cartUi) {
+      drawerObserver = new MutationObserver(() => {
+        if (
+          cartUi.classList.contains("active") ||
+          cartUi.classList.contains("animate") ||
+          cartUi.hasAttribute("open")
+        ) {
+          finish(true);
+        }
+      });
+      drawerObserver.observe(cartUi, {
+        attributes: true,
+        attributeFilter: ["open", "class"],
+      });
+    }
+    document.addEventListener("cart:updated", onSignal, { once: true });
+    document.addEventListener("cart:refresh", onSignal, { once: true });
+    document.addEventListener("cart:change", onSignal, { once: true });
+    window.addEventListener("shopify:cart:change", onSignal, { once: true });
+    const timer = setTimeout(async () => {
+      if (baselineCount != null) {
+        const nextCount = await readCartItemCountSafe();
+        if (nextCount != null && nextCount > baselineCount) {
+          finish(true);
+          return;
+        }
+      }
+      finish(false);
+    }, timeoutMs);
+  });
+}
+
+async function submitViaNativeThemeCart() {
+  const baselineCount = await readCartItemCountSafe();
+  submitBundleFormFallback();
+  const themeHandled = await waitForThemeCartRefresh(baselineCount);
+  if (themeHandled) return true;
+  const nextCount = await readCartItemCountSafe();
+  if (nextCount != null && baselineCount != null && nextCount > baselineCount) {
+    return true;
+  }
+  await refreshThemeCartUi(null);
+  return false;
 }
 
 window.ciwiHandleBundleAddToCart = function(event) {
@@ -4346,6 +4439,14 @@ window.ciwiHandleBundleAddToCart = function(event) {
   updateThemeQuantityInput(cartQuantity);
   ensureBundleLineProperties(currentOffer, { fallbackToDefault: explicitCount == null });
   syncSubscriptionSelectionToTheme(currentOffer);
+
+  if (shouldUseNativeThemeCartSubmit(currentOffer, explicitCount)) {
+    void runBundleCartAddFlow(() => submitViaNativeThemeCart()).catch((error) => {
+      console.error("[ciwi] submitViaNativeThemeCart failed", error);
+    });
+    return;
+  }
+
   if (
     currentOffer?.offerType === "quantity-breaks-different" &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
@@ -4369,27 +4470,6 @@ window.ciwiHandleBundleAddToCart = function(event) {
       return addResponse;
     }).catch((error) => {
       console.error("[ciwi] performFreeGiftCartAdd failed", error);
-    });
-    return;
-  }
-  if (
-    (currentOffer?.offerType === "bxgy" ||
-      currentOffer?.offerType === "quantity-breaks-same") &&
-    explicitCount !== CIWI_SINGLE_OPTION_COUNT
-  ) {
-    void runBundleCartAddFlow(async () => {
-      const addResponse = await performSingleVariantBundleCartAdd(currentOffer, cartQuantity, {
-        fallbackToDefault: explicitCount == null,
-      });
-      if (addResponse) {
-        await finishSuccessfulBundleCartAdd(addResponse);
-        return addResponse;
-      }
-      submitBundleFormFallback();
-      return null;
-    }).catch((error) => {
-      console.error("[ciwi] performSingleVariantBundleCartAdd failed", error);
-      submitBundleFormFallback();
     });
     return;
   }
@@ -5598,11 +5678,44 @@ async function performSingleVariantBundleCartAdd(offer, quantity, options) {
 }
 
 function getThemeCartUiElement() {
+  const productForm = document.querySelector("product-form");
+  if (productForm?.cart) return productForm.cart;
   return (
     document.querySelector("cart-drawer") ||
     document.querySelector("cart-notification") ||
     null
   );
+}
+
+function getThemeCartRenderTargets() {
+  const targets = [];
+  const seen = new Set();
+  const push = (element) => {
+    if (!element || seen.has(element)) return;
+    seen.add(element);
+    targets.push(element);
+  };
+  push(document.querySelector("product-form")?.cart);
+  push(document.querySelector("cart-drawer"));
+  push(document.querySelector("cart-notification"));
+  return targets;
+}
+
+function normalizeCartAddResponseForTheme(addResponse) {
+  if (!addResponse || typeof addResponse !== "object") return null;
+  const normalized = { ...addResponse };
+  if (Array.isArray(normalized.items) && normalized.items.length) {
+    const firstItem = normalized.items[0];
+    if (!normalized.key && firstItem?.key) normalized.key = firstItem.key;
+    if (normalized.id == null && firstItem?.id != null) normalized.id = firstItem.id;
+    if (normalized.variant_id == null && firstItem?.variant_id != null) {
+      normalized.variant_id = firstItem.variant_id;
+    }
+    if (normalized.product_id == null && firstItem?.product_id != null) {
+      normalized.product_id = firstItem.product_id;
+    }
+  }
+  return normalized;
 }
 
 const DEFAULT_THEME_CART_SECTION_IDS = [
@@ -5618,9 +5731,9 @@ function getShopifyRootPath() {
 }
 
 function getThemeCartSectionIds() {
-  const sectionIds = new Set(DEFAULT_THEME_CART_SECTION_IDS);
-  const cartUi = getThemeCartUiElement();
-  if (cartUi && typeof cartUi.getSectionsToRender === "function") {
+  const sectionIds = new Set();
+  getThemeCartRenderTargets().forEach((cartUi) => {
+    if (!cartUi || typeof cartUi.getSectionsToRender !== "function") return;
     try {
       cartUi
         .getSectionsToRender()
@@ -5630,7 +5743,8 @@ function getThemeCartSectionIds() {
     } catch (error) {
       console.warn("[ciwi] getSectionsToRender failed", error);
     }
-  }
+  });
+  DEFAULT_THEME_CART_SECTION_IDS.forEach((sectionId) => sectionIds.add(sectionId));
   document.querySelectorAll('[id^="shopify-section-"]').forEach((element) => {
     const sectionId = element.id.replace(/^shopify-section-/, "");
     if (/cart|drawer|header|bubble|mini/i.test(sectionId)) {
@@ -5650,12 +5764,75 @@ function appendCartSectionRenderingFields(payload) {
   };
 }
 
+function buildCartAddFormData(payload) {
+  const formData = new FormData();
+  const normalizedPayload =
+    payload && typeof payload === "object" ? appendCartSectionRenderingFields(payload) : {};
+
+  if (Array.isArray(normalizedPayload.items) && normalizedPayload.items.length) {
+    normalizedPayload.items.forEach((item, index) => {
+      formData.append(`items[${index}][id]`, String(Math.trunc(Number(item?.id) || 0)));
+      formData.append(
+        `items[${index}][quantity]`,
+        String(Math.max(1, Math.trunc(Number(item?.quantity) || 1))),
+      );
+      const properties =
+        item?.properties && typeof item.properties === "object" ? item.properties : null;
+      if (properties) {
+        Object.entries(properties).forEach(([key, value]) => {
+          formData.append(`items[${index}][properties][${key}]`, String(value ?? ""));
+        });
+      }
+    });
+  } else if (normalizedPayload.id != null) {
+    formData.append("id", String(Math.trunc(Number(normalizedPayload.id) || 0)));
+    formData.append(
+      "quantity",
+      String(Math.max(1, Math.trunc(Number(normalizedPayload.quantity) || 1))),
+    );
+    const properties =
+      normalizedPayload.properties && typeof normalizedPayload.properties === "object"
+        ? normalizedPayload.properties
+        : null;
+    if (properties) {
+      Object.entries(properties).forEach(([key, value]) => {
+        formData.append(`properties[${key}]`, String(value ?? ""));
+      });
+    }
+  }
+
+  const cartUi = getThemeCartUiElement();
+  let sectionIds = String(normalizedPayload.sections || "")
+    .split(",")
+    .map((sectionId) => sectionId.trim())
+    .filter(Boolean);
+  if (cartUi && typeof cartUi.getSectionsToRender === "function") {
+    try {
+      const themeSectionIds = cartUi
+        .getSectionsToRender()
+        .map((section) => String(section?.id || "").trim())
+        .filter(Boolean);
+      if (themeSectionIds.length) sectionIds = themeSectionIds;
+    } catch {
+      // keep defaults
+    }
+  }
+  if (sectionIds.length) {
+    formData.append("sections", sectionIds.join(","));
+  }
+  formData.append(
+    "sections_url",
+    String(normalizedPayload.sections_url || `${window.location.pathname}${window.location.search}`),
+  );
+  return formData;
+}
+
 async function postCartAddJsonPayload(payload) {
   const res = await fetch(`${getShopifyRootPath()}cart/add.js`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
     credentials: "same-origin",
-    body: JSON.stringify(appendCartSectionRenderingFields(payload)),
+    headers: { Accept: "application/json" },
+    body: buildCartAddFormData(payload),
   });
   const contentType = String(res.headers.get("content-type") || "");
   const rawText = await res.text().catch(() => "");
@@ -5688,9 +5865,9 @@ function buildSectionsRequestUrl(basePath, sectionIds) {
 async function fetchThemeCartSectionsJson() {
   const sectionIds = getThemeCartSectionIds();
   const candidatePaths = [
+    `${getShopifyRootPath()}cart`,
     `${window.location.pathname}${window.location.search}`,
     getShopifyRootPath(),
-    `${getShopifyRootPath()}cart`,
   ];
   for (const basePath of candidatePaths) {
     try {
@@ -5739,6 +5916,9 @@ async function hydrateThemeCartRenderState(addResponse) {
     // 仅当 add 响应未带可用 section HTML 时，才补抓（最多一次 cart.js + 一轮 sections）。
     cart = await fetchFullCartJson();
     sections = await fetchThemeCartSectionsJson();
+  } else if (addResponse?.item_count == null) {
+    // 多商品 add 响应常只有 items[]，补一次 cart.js 拿 item_count。
+    cart = await fetchFullCartJson();
   }
 
   if (!cartSectionsHaveRenderableHtml(sections)) {
@@ -5794,17 +5974,80 @@ function tryOpenThemeCartDrawer() {
   return false;
 }
 
+async function presentThemeCartAddSuccess(addResponse) {
+  try {
+    let renderState = normalizeCartAddResponseForTheme(addResponse);
+    if (!renderState) {
+      tryOpenThemeCartDrawer();
+      return false;
+    }
+
+    if (!cartSectionsHaveRenderableHtml(renderState.sections)) {
+      renderState = (await hydrateThemeCartRenderState(renderState)) || renderState;
+    }
+
+    dispatchCartUpdateEvents(buildCartEventDetailFromAddResponse(renderState));
+
+    if (cartSectionsHaveRenderableHtml(renderState.sections)) {
+      for (const target of getThemeCartRenderTargets()) {
+        if (typeof target.renderContents !== "function") continue;
+        try {
+          target.classList?.remove("is-empty");
+          target.renderContents(renderState);
+          if (typeof target.open === "function") {
+            target.open();
+          }
+          updateCartCountBadges(renderState.item_count);
+          return true;
+        } catch (error) {
+          console.warn("[ciwi] theme cart renderContents failed", error);
+        }
+      }
+
+      let applied = false;
+      Object.entries(renderState.sections).forEach(([sectionId, html]) => {
+        if (typeof html !== "string" || !html.trim()) return;
+        const sectionRoot =
+          document.getElementById(sectionId) ||
+          document.getElementById(`shopify-section-${sectionId}`);
+        if (!sectionRoot) return;
+        sectionRoot.innerHTML = html;
+        applied = true;
+      });
+      if (applied) {
+        updateCartCountBadges(renderState.item_count);
+        tryOpenThemeCartDrawer();
+        return true;
+      }
+    }
+
+    if (renderState.item_count == null) {
+      const cart = await fetchFullCartJson();
+      if (cart?.item_count != null) {
+        renderState.item_count = cart.item_count;
+      }
+    }
+    updateCartCountBadges(renderState.item_count);
+    tryOpenThemeCartDrawer();
+    return renderState.item_count != null;
+  } catch (error) {
+    console.warn("[ciwi] presentThemeCartAddSuccess failed", error);
+    tryOpenThemeCartDrawer();
+    return false;
+  }
+}
+
 async function applyThemeCartUiFromAddResponse(addResponse) {
   if (!addResponse || typeof addResponse !== "object") return false;
   if (!cartSectionsHaveRenderableHtml(addResponse.sections)) return false;
 
-  const cartUi = getThemeCartUiElement();
-  if (cartUi && typeof cartUi.renderContents === "function") {
+  for (const target of getThemeCartRenderTargets()) {
+    if (typeof target.renderContents !== "function") continue;
     try {
-      cartUi.classList.remove("is-empty");
-      cartUi.renderContents(addResponse);
-      if (typeof cartUi.open === "function") {
-        cartUi.open();
+      target.classList?.remove("is-empty");
+      target.renderContents(addResponse);
+      if (typeof target.open === "function") {
+        target.open();
       }
       return true;
     } catch (error) {
@@ -5815,7 +6058,9 @@ async function applyThemeCartUiFromAddResponse(addResponse) {
   let applied = false;
   Object.entries(addResponse.sections).forEach(([sectionId, html]) => {
     if (typeof html !== "string" || !html.trim()) return;
-    const sectionRoot = document.getElementById(`shopify-section-${sectionId}`);
+    const sectionRoot =
+      document.getElementById(sectionId) ||
+      document.getElementById(`shopify-section-${sectionId}`);
     if (!sectionRoot) return;
     sectionRoot.innerHTML = html;
     applied = true;
@@ -5876,35 +6121,7 @@ function tryRefreshProductFormCartUi(renderState) {
  * AJAX 加购成功后刷新主题购物车 UI（在 loading 结束前 await）。
  */
 async function refreshThemeCartUi(addResponse) {
-  try {
-    // 整次刷新最多一次额外网络请求（且只在 add 响应缺 sections 时发生），
-    // 避免与主题自身的 cart.json 拉取叠加成请求突发触发 429。
-    const renderState = await hydrateThemeCartRenderState(addResponse);
-    dispatchCartUpdateEvents(
-      buildCartEventDetailFromAddResponse(renderState || addResponse),
-    );
-
-    if (renderState && cartSectionsHaveRenderableHtml(renderState.sections)) {
-      if (await applyThemeCartUiFromAddResponse(renderState)) {
-        updateCartCountBadges(renderState.item_count);
-        return true;
-      }
-      if (tryRefreshProductFormCartUi(renderState)) {
-        updateCartCountBadges(renderState.item_count);
-        return true;
-      }
-    }
-
-    // 兜底：拿不到可注入的 section HTML，用已有 cart 数据更新角标并打开抽屉，让主题自渲染。
-    if (renderState) {
-      updateCartCountBadges(renderState.item_count);
-    }
-    tryOpenThemeCartDrawer();
-    return false;
-  } catch (error) {
-    console.warn("[ciwi] refreshThemeCartUi failed", error);
-    return false;
-  }
+  return presentThemeCartAddSuccess(addResponse);
 }
 
 function getBundleLinePropertiesForOffer(offer, options) {
@@ -5980,7 +6197,20 @@ function isCloudflareChallengeResponse(responseText, response, contentType) {
 }
 
 async function addItemsToCartWithFallback(items, offer) {
-  const { ok, status, body, rawText, contentType } = await postCartAddJsonPayload({ items });
+  const lineProperties = getBundleLinePropertiesForOffer(offer, { fallbackToDefault: true });
+  const itemsWithProperties = items.map((item, index) => {
+    if (index !== 0 || !lineProperties) return item;
+    return {
+      ...item,
+      properties: {
+        ...(item?.properties && typeof item.properties === "object" ? item.properties : {}),
+        ...lineProperties,
+      },
+    };
+  });
+  const { ok, status, body, rawText, contentType } = await postCartAddJsonPayload({
+    items: itemsWithProperties,
+  });
 
   if (ok) {
     return body;
@@ -6032,7 +6262,11 @@ async function performCompleteBundleCartAdd() {
     const barToUse =
       config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
     if (!barToUse || isCompleteBundleSingleBarConfig(barToUse)) {
-      return await addItemsToCartWithFallback(items, currentOffer);
+      updateThemeQuantityInput(quantity);
+      ensureBundleLineProperties(currentOffer, { fallbackToDefault: true });
+      syncSubscriptionSelectionToTheme(currentOffer);
+      const nativeOk = await submitViaNativeThemeCart();
+      return nativeOk ? { __ciwiNativeCartAdd: true } : false;
     }
     if (!Array.isArray(barToUse.products) || !barToUse.products.length) {
       return false;
@@ -6096,6 +6330,7 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
   if (__ciwiBundleCartAddInFlight) return;
   await runBundleCartAddFlow(async () => {
     const addResponse = await performCompleteBundleCartAdd();
+    if (addResponse?.__ciwiNativeCartAdd) return addResponse;
     if (addResponse) await finishSuccessfulBundleCartAdd(addResponse);
     return addResponse;
   });
@@ -6510,11 +6745,17 @@ function attachBundlePriceSync(offer) {
         const productForm = getAddToCartForm();
         if (!isThemeAddTrigger(e.target, productForm)) return;
         if (!document.querySelector(".ciwi-bundle-wrapper")) return;
+        if (__ciwiNativeAddSubmitPassthrough) {
+          __ciwiNativeAddSubmitPassthrough = false;
+          console.log("[ciwi] native add passthrough");
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation?.();
         void runBundleCartAddFlow(async () => {
           const addResponse = await performCompleteBundleCartAdd();
+          if (addResponse?.__ciwiNativeCartAdd) return addResponse;
           if (addResponse) await finishSuccessfulBundleCartAdd(addResponse);
           return addResponse;
         });
