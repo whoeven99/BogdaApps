@@ -1909,9 +1909,25 @@ function buildOneCompleteBundleProductHtml(bar, product, options) {
 }
 
 function getCurrentProductGid() {
-  const productId = window?.ShopifyAnalytics?.meta?.product?.id;
-  if (!productId) return null;
-  return `gid://shopify/Product/${productId}`;
+  const analyticsProductId = window?.ShopifyAnalytics?.meta?.product?.id;
+  if (analyticsProductId) {
+    return toProductGid(analyticsProductId);
+  }
+
+  const configEl = getBundleConfigElement();
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      const configProductId = config.productId;
+      if (configProductId != null && String(configProductId).trim() !== "") {
+        return toProductGid(configProductId);
+      }
+    } catch {
+      // ignore malformed bundles-config
+    }
+  }
+
+  return null;
 }
 
 function getCurrentMarketId() {
@@ -2842,6 +2858,85 @@ function getDefaultCompleteBundleBar(config) {
   return bars.find((bar) => String(bar?.id || "") === String(defaultBarId || "")) || bars[0] || null;
 }
 
+function getCompleteBundleBarSavingsEstimate(config, bar, currentUnitPrice) {
+  if (!bar || isCompleteBundleSingleBarConfig(bar)) return 0;
+  const selectedItemIds = new Set(
+    getSelectedCompleteBundleItemIds(config, bar, { useStoredSelection: false }),
+  );
+  if (!selectedItemIds.size) return 0;
+  let sumOriginal = Math.max(0, Number(currentUnitPrice) || 0);
+  for (const product of getCompleteBundleSelectableItems(config, bar)) {
+    if (!selectedItemIds.has(String(product?.productId || ""))) continue;
+    const variant = resolveCompleteBundleVariant(bar, product, {
+      useStoredSelection: false,
+      preferSellable: true,
+    });
+    const base = parseMoneyStringToNumber(variant?.price || product?.price || "");
+    sumOriginal += Math.max(0, base);
+  }
+  const bundlePricing = applyCompleteBundleProductPricing(
+    (bar.pricing && bar.pricing.mode) || "full_price",
+    Number(bar.pricing && bar.pricing.value) || 0,
+    sumOriginal,
+  );
+  return Math.max(0, Math.round((sumOriginal - bundlePricing.final) * 100) / 100);
+}
+
+function resolveStorefrontOfferDisplayPriority(offer, context) {
+  if (!offer || !context) return 0;
+  const offerType = String(offer.offerType || "");
+
+  if (offerType === "complete-bundle") {
+    const completeBundle = getParsedStorefrontCompleteBundleConfig(offer);
+    const triggerProductIds = Array.isArray(completeBundle.triggerProductIds)
+      ? completeBundle.triggerProductIds
+      : [];
+    if (
+      context.currentProductGid &&
+      productIdListIncludes(triggerProductIds, context.currentProductGid)
+    ) {
+      return 100;
+    }
+    return 0;
+  }
+
+  if (offerType === "bxgy") {
+    const rule = getPreferredActionableBxgyRule(offer.discountRulesJson);
+    const buyProductIds = Array.isArray(rule?.buyProductIds) ? rule.buyProductIds : [];
+    if (
+      context.currentProductGid &&
+      productIdListIncludes(buyProductIds, context.currentProductGid)
+    ) {
+      return 90;
+    }
+    return 20;
+  }
+
+  if (offerType === "free-gift") {
+    const freeGiftConfig = getParsedStorefrontFreeGiftConfig(offer);
+    const triggerProducts = Array.isArray(freeGiftConfig.triggerProducts)
+      ? freeGiftConfig.triggerProducts
+      : [];
+    if (
+      context.currentProductGid &&
+      productIdListIncludes(triggerProducts, context.currentProductGid)
+    ) {
+      return 85;
+    }
+    return 20;
+  }
+
+  if (offerType === "quantity-breaks-different") {
+    return 50;
+  }
+
+  if (offerType === "quantity-breaks-same" || offerType === "subscription") {
+    return 40;
+  }
+
+  return 20;
+}
+
 function getCurrentDefaultOfferSavings(offer) {
   const snapshot = getDefaultOfferStateSnapshot();
   const currentUnitPrice = Math.max(0, Number(snapshot?.unitPrice) || 0);
@@ -2849,28 +2944,14 @@ function getCurrentDefaultOfferSavings(offer) {
 
   if (offer.offerType === "complete-bundle") {
     const config = getParsedStorefrontCompleteBundleConfig(offer);
-    const bar = getDefaultCompleteBundleBar(config);
-    if (!bar || isCompleteBundleSingleBarConfig(bar)) return 0;
-    const selectedItemIds = new Set(
-      getSelectedCompleteBundleItemIds(config, bar, { useStoredSelection: false }),
-    );
-    if (!selectedItemIds.size) return 0;
-    let sumOriginal = currentUnitPrice;
-    for (const product of getCompleteBundleSelectableItems(config, bar)) {
-      if (!selectedItemIds.has(String(product?.productId || ""))) continue;
-      const variant = resolveCompleteBundleVariant(bar, product, {
-        useStoredSelection: false,
-        preferSellable: true,
-      });
-      const base = parseMoneyStringToNumber(variant?.price || product?.price || "");
-      sumOriginal += Math.max(0, base);
+    let bestSavings = 0;
+    for (const bar of config.bars) {
+      bestSavings = Math.max(
+        bestSavings,
+        getCompleteBundleBarSavingsEstimate(config, bar, currentUnitPrice),
+      );
     }
-    const bundlePricing = applyCompleteBundleProductPricing(
-      (bar.pricing && bar.pricing.mode) || "full_price",
-      Number(bar.pricing && bar.pricing.value) || 0,
-      sumOriginal,
-    );
-    return Math.max(0, Math.round((sumOriginal - bundlePricing.final) * 100) / 100);
+    return bestSavings;
   }
 
   if (offer.offerType === "quantity-breaks-different") {
@@ -3361,10 +3442,12 @@ function getCurrentOffer(offersConfig) {
     }
 
     const defaultSavings = Math.max(0, Number(getCurrentDefaultOfferSavings(offer)) || 0);
+    const displayPriority = resolveStorefrontOfferDisplayPriority(offer, context);
     matchingCandidates.push({
       offer,
       index,
       defaultSavings,
+      displayPriority,
     });
     console.log("[ciwi] offer candidate for current product", {
       index,
@@ -3373,11 +3456,15 @@ function getCurrentOffer(offersConfig) {
       offerType: offer.offerType,
       currentProductGid: context.currentProductGid,
       defaultSavings,
+      displayPriority,
     });
   }
 
   if (matchingCandidates.length > 0) {
     matchingCandidates.sort((left, right) => {
+      if (right.displayPriority !== left.displayPriority) {
+        return right.displayPriority - left.displayPriority;
+      }
       if (right.defaultSavings !== left.defaultSavings) {
         return right.defaultSavings - left.defaultSavings;
       }
@@ -3391,6 +3478,7 @@ function getCurrentOffer(offersConfig) {
       offerType: winner.offer.offerType,
       currentProductGid: context.currentProductGid,
       defaultSavings: winner.defaultSavings,
+      displayPriority: winner.displayPriority,
       candidateCount: matchingCandidates.length,
     });
     return winner.offer;

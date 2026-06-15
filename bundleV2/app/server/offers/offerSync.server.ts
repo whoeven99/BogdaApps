@@ -1,6 +1,5 @@
 import prisma from "../../db.server";
 import {
-  reconcileBundleAutomaticDiscounts,
   syncCartLinesAutomaticDiscountMetafield,
 } from "../../shopify.server";
 import { isOfferPublishedForBundleMetafieldSync } from "../../utils/offerParsing";
@@ -13,6 +12,7 @@ import {
   buildCompactOffersPayload,
   buildStorefrontOffersStructured,
   measureUtf8Bytes,
+  offersFitWithinShardLimits,
   FUNCTION_OFFERS_MAX_BYTES,
 } from "./offerPayload.server";
 import {
@@ -92,7 +92,8 @@ async function syncFunctionOwnerOffersMetafield(
       activeOfferCount: activeOffers.length,
       compactPayloadBytes: measureUtf8Bytes(functionMetafieldValue),
     });
-    await reconcileBundleAutomaticDiscounts(admin);
+    // 不再每次保存都 reconcile（重）：discount 节点在 afterAuth 建好；
+    // syncCartLinesAutomaticDiscountMetafield 内部在"找不到 owner"时会自愈式补跑一次。
     const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
       admin,
       functionMetafieldValue,
@@ -153,16 +154,31 @@ export async function syncShopOffersMetafield(
       });
     }
 
-    // Keep the checkout Function owner in sync before slower storefront hydration.
-    // The theme can still render from the Shop metafield, but checkout discounts only see
-    // the Automatic Discount owner metafields.
+    // 真正会导致结账折扣静默失效的是「某个 discount class 的分片放不下而被丢弃」，
+    // 聚合字节数不溢出也可能某一类溢出。这里按 class 校验并显式上报。
+    const shardFit = offersFitWithinShardLimits(functionMetafieldValue);
+    if (!shardFit.ok) {
+      console.error("[offers-sync] offers overflow per-class shard limit; some offers will be DROPPED at checkout", {
+        overflowClasses: shardFit.overflowClasses,
+        limitPerShard: FUNCTION_OFFERS_MAX_BYTES,
+      });
+      logOfferMetafieldSyncPhase("shard-overflow", shopNameToSync, syncContext, {
+        overflowClasses: shardFit.overflowClasses,
+      });
+    }
+
+    // 结账折扣（Function owner metafield）与前台展示（Shop metafield）是两个独立目的，
+    // 解耦：函数 owner 同步失败不再阻断主题 metafield 写入，反之亦然；末尾聚合上报。
     const discountSyncResult = await syncFunctionOwnerOffersMetafield(
       admin,
       shopNameToSync,
       syncContext,
     );
     if (!discountSyncResult.ok) {
-      return discountSyncResult;
+      logOfferMetafieldSyncPhase("discount-metafields-failed", shopNameToSync, syncContext, {
+        message: discountSyncResult.message,
+        note: "continuing to storefront metafield write despite checkout-discount sync failure",
+      });
     }
 
     let storefrontStructured: Awaited<ReturnType<typeof buildStorefrontOffersStructured>>;
@@ -237,6 +253,11 @@ export async function syncShopOffersMetafield(
       storefrontPayloadBytes: measureUtf8Bytes(mergedStorefrontPreview),
       functionPreviewPayloadBytes: measureUtf8Bytes(functionMetafieldValue),
     });
+
+    // 主题 metafield 已写成功；若结账折扣同步此前失败，仍把该失败作为最终结果上报。
+    if (!discountSyncResult.ok) {
+      return { ...discountSyncResult, step: "discount-metafields" };
+    }
 
     logOfferMetafieldSyncPhase("complete", shopNameToSync, syncContext, {
       shopId,
