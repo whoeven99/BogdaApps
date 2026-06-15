@@ -212,6 +212,90 @@ export function expandCompactOffer(raw: Offer | CompactOfferWire | null | undefi
   };
 }
 
+function isCompactOfferWire(raw: Offer | CompactOfferWire | null | undefined): raw is CompactOfferWire {
+  if (!raw || typeof raw !== "object") return false;
+  return (
+    !("offerType" in raw) &&
+    !("selectedProductsJson" in raw) &&
+    ("t" in raw || "i" in raw || "s" in raw || "d" in raw || "o" in raw)
+  );
+}
+
+function extractSelectedIdsFromWire(
+  wire: Offer | CompactOfferWire | null | undefined,
+  expanded: Offer,
+): { selectedIds: string[]; packedPool: string | null } {
+  if (isCompactOfferWire(wire) && wire.s != null) {
+    if (typeof wire.s === "string") {
+      return { selectedIds: parseSelectedIds(wire.s), packedPool: null };
+    }
+    if (wire.s && typeof wire.s === "object" && !Array.isArray(wire.s)) {
+      const packed = (wire.s as { p?: unknown }).p;
+      if (typeof packed === "string" && packed.trim()) {
+        return { selectedIds: [], packedPool: packed.trim() };
+      }
+    }
+    return { selectedIds: parseSelectedIdsFromParsed(wire.s), packedPool: null };
+  }
+  return { selectedIds: parseSelectedIds(expanded.selectedProductsJson), packedPool: null };
+}
+
+function lineMatchesPackedProductPool(
+  productId: string | undefined,
+  variantId: string | undefined,
+  packedPool: string,
+): boolean {
+  if (!packedPool) return false;
+  for (const rawId of [productId, variantId]) {
+    const key = buildOfferLookupKey(rawId);
+    if (!key) continue;
+    if (
+      packedPool === key ||
+      packedPool.startsWith(`${key},`) ||
+      packedPool.endsWith(`,${key}`) ||
+      packedPool.includes(`,${key},`)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function lineMatchesCompiledOfferSelection(
+  productId: string | undefined,
+  variantId: string | undefined,
+  compiledOffer: CompiledOfferRuntime,
+): boolean {
+  if (compiledOffer.packedSelectedPool) {
+    return lineMatchesPackedProductPool(
+      productId,
+      variantId,
+      compiledOffer.packedSelectedPool,
+    );
+  }
+  if (!compiledOffer.selectedLookupKeys.size) return true;
+  return lineMatchesSelectedLookupKeys(
+    productId,
+    variantId,
+    compiledOffer.selectedLookupKeys,
+  );
+}
+
+function cartIntersectsCompiledOfferSelection(
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
+  compiledOffer: CompiledOfferRuntime,
+): boolean {
+  if (compiledOffer.packedSelectedPool) {
+    for (const cartKey of cartIndex.lookupKeys) {
+      if (lineMatchesPackedProductPool(cartKey, cartKey, compiledOffer.packedSelectedPool)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return cartIntersectsLookupKeys(cartIndex, compiledOffer.selectedLookupKeys);
+}
+
 type IndexedCartLine = {
   line: CartInput["cart"]["lines"][number];
   unitPrice: number;
@@ -238,6 +322,10 @@ type CompiledOfferRuntime = {
   offer: Offer;
   settings: ParsedOfferSettings;
   selectedIds: string[];
+  /** 预计算的 numeric product/variant lookup key，避免大 product 池上的 O(n) 线性扫描。 */
+  selectedLookupKeys: Set<string>;
+  /** 大商品池紧凑字段 `p`（逗号分隔），避免 split/Set 带来的 WASM 指令爆炸。 */
+  packedSelectedPool: string | null;
   standardRules: DiscountTier[];
   bxgyRules: BxgyDiscountRule[];
   hasUnifiedBxgyTier: boolean;
@@ -927,7 +1015,7 @@ export function bundleCartDiscountGenerateRun(
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
-  const compiledOffers = offers.map((offer) => compileOfferRuntime(expandCompactOffer(offer)));
+  const compiledOffers = offers.map((wire) => compileOfferRuntimeFromWire(wire));
   const enteredCodes = new Set(
     [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
   );
@@ -1592,79 +1680,18 @@ function resolveAcceptedCouponCode(
 
 function compileOfferSettings(offerSettingsJson?: string | null): ParsedOfferSettings {
   if (!offerSettingsJson) {
-    return {
-      markets: "all",
-      customerSegments: ["all"],
-      customerProfileFilters: [],
-      ipCountryCodes: [],
-      couponAccess: { enabled: false, code: "" },
-      quantityEnabled: true,
-    };
+    return compileOfferSettingsFromParsed(null);
   }
 
   try {
-    const parsed = JSON.parse(offerSettingsJson) as {
-      markets?: unknown;
-      customerSegments?: unknown;
-      customerProfileFilters?: unknown;
-      ipCountryCodes?: unknown;
-      couponEnabled?: unknown;
-      couponCode?: unknown;
-      quantity?: unknown;
-      showQuantityBar?: unknown;
-    };
-
-    const customerSegments =
-      typeof parsed.customerSegments === "string" && parsed.customerSegments.trim()
-        ? Array.from(
-            new Set(
-              parsed.customerSegments
-                .split(",")
-                .map((segment) => normalizeCustomerSegmentHandle(segment))
-                .filter(Boolean),
-            ),
-          )
-        : ["all"];
-
-    const customerProfileFilters =
-      typeof parsed.customerProfileFilters === "string" && parsed.customerProfileFilters.trim()
-        ? Array.from(
-            new Set(
-              parsed.customerProfileFilters
-                .split(",")
-                .map((value) => normalizeCustomerSegmentHandle(value))
-                .filter(Boolean),
-            ),
-          )
-        : [];
-
-    const ipCountryCodes =
-      typeof parsed.ipCountryCodes === "string" && parsed.ipCountryCodes.trim()
-        ? Array.from(
-            new Set(
-              parsed.ipCountryCodes
-                .split(",")
-                .map((value) => normalizeCountryCode(value))
-                .filter(Boolean),
-            ),
-          )
-        : [];
-
-    return {
-      markets:
-        typeof parsed.markets === "string" && parsed.markets.trim()
-          ? parsed.markets.trim()
-          : "all",
-      customerSegments: customerSegments.length ? customerSegments : ["all"],
-      customerProfileFilters,
-      ipCountryCodes,
-      couponAccess: {
-        enabled: parsed.couponEnabled === true,
-        code: normalizeCouponCode(parsed.couponCode),
-      },
-      quantityEnabled: !(parsed.quantity === false || parsed.showQuantityBar === false),
-    };
+    return compileOfferSettingsFromParsed(JSON.parse(offerSettingsJson));
   } catch {
+    return compileOfferSettingsFromParsed(null);
+  }
+}
+
+function compileOfferSettingsFromParsed(parsed: unknown): ParsedOfferSettings {
+  if (!parsed || typeof parsed !== "object") {
     return {
       markets: "all",
       customerSegments: ["all"],
@@ -1674,6 +1701,85 @@ function compileOfferSettings(offerSettingsJson?: string | null): ParsedOfferSet
       quantityEnabled: true,
     };
   }
+
+  const settings = parsed as {
+    markets?: unknown;
+    customerSegments?: unknown;
+    customerProfileFilters?: unknown;
+    ipCountryCodes?: unknown;
+    couponEnabled?: unknown;
+    couponCode?: unknown;
+    quantity?: unknown;
+    showQuantityBar?: unknown;
+  };
+
+  const customerSegments =
+    typeof settings.customerSegments === "string" && settings.customerSegments.trim()
+      ? Array.from(
+          new Set(
+            settings.customerSegments
+              .split(",")
+              .map((segment) => normalizeCustomerSegmentHandle(segment))
+              .filter(Boolean),
+          ),
+        )
+      : ["all"];
+
+  const customerProfileFilters =
+    typeof settings.customerProfileFilters === "string" && settings.customerProfileFilters.trim()
+      ? Array.from(
+          new Set(
+            settings.customerProfileFilters
+              .split(",")
+              .map((value) => normalizeCustomerSegmentHandle(value))
+              .filter(Boolean),
+          ),
+        )
+      : [];
+
+  const ipCountryCodes =
+    typeof settings.ipCountryCodes === "string" && settings.ipCountryCodes.trim()
+      ? Array.from(
+          new Set(
+            settings.ipCountryCodes
+              .split(",")
+              .map((value) => normalizeCountryCode(value))
+              .filter(Boolean),
+          ),
+        )
+      : [];
+
+  return {
+    markets:
+      typeof settings.markets === "string" && settings.markets.trim()
+        ? settings.markets.trim()
+        : "all",
+    customerSegments: customerSegments.length ? customerSegments : ["all"],
+    customerProfileFilters,
+    ipCountryCodes,
+    couponAccess: {
+      enabled: settings.couponEnabled === true,
+      code: normalizeCouponCode(settings.couponCode),
+    },
+    quantityEnabled: !(settings.quantity === false || settings.showQuantityBar === false),
+  };
+}
+
+function compileOfferSettingsFromWire(
+  wire: Offer | CompactOfferWire | null | undefined,
+  expanded: Offer,
+): ParsedOfferSettings {
+  if (isCompactOfferWire(wire) && wire.o != null) {
+    if (typeof wire.o === "string") {
+      return compileOfferSettings(wire.o);
+    }
+    return compileOfferSettingsFromParsed(wire.o);
+  }
+  return compileOfferSettings(expanded.offerSettingsJson);
+}
+
+function needsSelectedProductsJsonString(offerType?: string): boolean {
+  return offerType === "complete-bundle" || offerType === "free-gift";
 }
 
 function parseDiscountRulesJson(
@@ -1682,95 +1788,111 @@ function parseDiscountRulesJson(
   if (!discountRulesJson) return [];
 
   try {
-    const parsed = JSON.parse(discountRulesJson) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    const tiers: DiscountTier[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== "object") continue;
-      if ((item as { tierType?: unknown }).tierType === "single") continue;
-      const count = Number((item as { count?: unknown }).count);
-      const logicType =
-        (item as { logicType?: unknown }).logicType === "bxgy" ? "bxgy" : "standard";
-      const discountPercent = Number(
-        (item as { discountPercent?: unknown }).discountPercent,
-      );
-      if (!Number.isFinite(count) || count < 1) continue;
-      if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
-      const normalizedBuyQuantity =
-        logicType === "bxgy" &&
-        Number.isFinite(Number((item as { buyQuantity?: unknown }).buyQuantity))
-          ? Math.max(
-              1,
-              Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
-            )
-          : undefined;
-      const rewardType =
-        (item as { rewardType?: unknown }).rewardType === "gift_product" ||
-        (item as { rewardType?: unknown }).rewardType === "free_shipping"
-          ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
-          : "percentage_off";
-      tiers.push({
-        count: logicType === "bxgy" ? normalizedBuyQuantity || Math.trunc(count) : Math.trunc(count),
-        discountPercent: logicType === "bxgy" ? 100 : discountPercent,
-        discountClass:
-          rewardType === "gift_product"
-            ? "order"
-            : rewardType === "free_shipping"
-              ? "shipping"
-              : (item as { discountClass?: unknown }).discountClass === "order" ||
-                  (item as { discountClass?: unknown }).discountClass === "shipping"
-                ? ((item as { discountClass: "order" | "shipping" }).discountClass)
-                : "product",
-        conditionType:
-          (item as { conditionType?: unknown }).conditionType === "cart_amount"
-            ? "cart_amount"
-            : "item_quantity",
-        amountThreshold: Number.isFinite(
-          Number((item as { amountThreshold?: unknown }).amountThreshold),
-        )
-          ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
-          : undefined,
-        rewardType,
-        giftQuantity: Number.isFinite(
-          Number((item as { giftQuantity?: unknown }).giftQuantity),
-        )
-          ? Math.max(1, Math.trunc(Number((item as { giftQuantity?: unknown }).giftQuantity)))
-          : undefined,
-        logicType,
-        buyQuantity: normalizedBuyQuantity,
-        getQuantity: Number.isFinite(
-          Number((item as { getQuantity?: unknown }).getQuantity),
-        )
-          ? Math.max(
-              1,
-              Math.trunc(Number((item as { getQuantity?: unknown }).getQuantity)),
-            )
-          : undefined,
-        maxUsesPerOrder:
-          logicType === "bxgy"
-            ? 1
-            : Number.isFinite(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder))
-              ? Math.max(
-                  1,
-                  Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
-                )
-              : undefined,
-        rewardProductIds: Array.isArray(
-          (item as { rewardProductIds?: unknown }).rewardProductIds,
-        )
-          ? ((item as { rewardProductIds: unknown[] }).rewardProductIds)
-              .map((id) => String(id || "").trim())
-              .filter(Boolean)
-          : [],
-      });
-    }
-
-    tiers.sort((a, b) => a.count - b.count);
-    return tiers;
+    return parseDiscountRulesFromParsed(JSON.parse(discountRulesJson));
   } catch {
     return [];
   }
+}
+
+function parseDiscountRulesFromParsed(parsed: unknown): DiscountTier[] {
+  if (!Array.isArray(parsed)) return [];
+
+  const tiers: DiscountTier[] = [];
+  for (const item of parsed) {
+    if (!item || typeof item !== "object") continue;
+    if ((item as { tierType?: unknown }).tierType === "single") continue;
+    const count = Number((item as { count?: unknown }).count);
+    const logicType =
+      (item as { logicType?: unknown }).logicType === "bxgy" ? "bxgy" : "standard";
+    const discountPercent = Number(
+      (item as { discountPercent?: unknown }).discountPercent,
+    );
+    if (!Number.isFinite(count) || count < 1) continue;
+    if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
+    const normalizedBuyQuantity =
+      logicType === "bxgy" &&
+      Number.isFinite(Number((item as { buyQuantity?: unknown }).buyQuantity))
+        ? Math.max(
+            1,
+            Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
+          )
+        : undefined;
+    const rewardType =
+      (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+      (item as { rewardType?: unknown }).rewardType === "free_shipping"
+        ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+        : "percentage_off";
+    tiers.push({
+      count: logicType === "bxgy" ? normalizedBuyQuantity || Math.trunc(count) : Math.trunc(count),
+      discountPercent: logicType === "bxgy" ? 100 : discountPercent,
+      discountClass:
+        rewardType === "gift_product"
+          ? "order"
+          : rewardType === "free_shipping"
+            ? "shipping"
+            : (item as { discountClass?: unknown }).discountClass === "order" ||
+                (item as { discountClass?: unknown }).discountClass === "shipping"
+              ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+              : "product",
+      conditionType:
+        (item as { conditionType?: unknown }).conditionType === "cart_amount"
+          ? "cart_amount"
+          : "item_quantity",
+      amountThreshold: Number.isFinite(
+        Number((item as { amountThreshold?: unknown }).amountThreshold),
+      )
+        ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
+        : undefined,
+      rewardType,
+      giftQuantity: Number.isFinite(
+        Number((item as { giftQuantity?: unknown }).giftQuantity),
+      )
+        ? Math.max(1, Math.trunc(Number((item as { giftQuantity?: unknown }).giftQuantity)))
+        : undefined,
+      logicType,
+      buyQuantity: normalizedBuyQuantity,
+      getQuantity: Number.isFinite(
+        Number((item as { getQuantity?: unknown }).getQuantity),
+      )
+        ? Math.max(
+            1,
+            Math.trunc(Number((item as { getQuantity?: unknown }).getQuantity)),
+          )
+        : undefined,
+      maxUsesPerOrder:
+        logicType === "bxgy"
+          ? 1
+          : Number.isFinite(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder))
+            ? Math.max(
+                1,
+                Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
+              )
+            : undefined,
+      rewardProductIds: Array.isArray(
+        (item as { rewardProductIds?: unknown }).rewardProductIds,
+      )
+        ? ((item as { rewardProductIds: unknown[] }).rewardProductIds)
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+    });
+  }
+
+  tiers.sort((a, b) => a.count - b.count);
+  return tiers;
+}
+
+function parseDiscountRulesFromWire(
+  wire: Offer | CompactOfferWire | null | undefined,
+  expanded: Offer,
+): DiscountTier[] {
+  if (isCompactOfferWire(wire) && wire.d != null) {
+    if (typeof wire.d === "string") {
+      return parseDiscountRulesJson(wire.d);
+    }
+    return parseDiscountRulesFromParsed(wire.d);
+  }
+  return parseDiscountRulesJson(expanded.discountRulesJson);
 }
 
 function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscountRule[] {
@@ -1879,9 +2001,81 @@ function buildBxgyRulesFromUnifiedDiscountRules(
   });
 }
 
-function compileOfferRuntime(offer: Offer): CompiledOfferRuntime {
+function parseBxgyDiscountRulesFromWire(
+  wire: Offer | CompactOfferWire | null | undefined,
+  expanded: Offer,
+): BxgyDiscountRule[] {
+  if (isCompactOfferWire(wire) && wire.d != null) {
+    if (typeof wire.d === "string") {
+      return parseBxgyDiscountRules(wire.d);
+    }
+    try {
+      return parseBxgyDiscountRules(JSON.stringify(wire.d));
+    } catch {
+      return [];
+    }
+  }
+  return parseBxgyDiscountRules(expanded.discountRulesJson);
+}
+
+function compileOfferRuntimeFromWire(
+  wire: Offer | CompactOfferWire | null | undefined,
+): CompiledOfferRuntime {
+  if (!wire || typeof wire !== "object") {
+    return compileOfferRuntime({} as Offer, []);
+  }
+  if (!isCompactOfferWire(wire)) {
+    return compileOfferRuntime(wire as Offer);
+  }
+
+  const compact = wire;
+  const offerType = compact.t;
+  const offer: Offer = {
+    id: compact.i,
+    cartTitle: compact.c ?? "",
+    offerType,
+    status: compact.x,
+    startTime: compact.b ?? undefined,
+    endTime: compact.e ?? undefined,
+    selectedProductsJson:
+      needsSelectedProductsJsonString(offerType) && compact.s != null
+        ? jsonFieldToString(compact.s)
+        : null,
+    discountRulesJson: null,
+    offerSettingsJson: null,
+  };
+  const selection = extractSelectedIdsFromWire(compact, offer);
+  const selectedIds = selection.selectedIds;
+  const packedSelectedPool = selection.packedPool;
+  const settings = compileOfferSettingsFromWire(compact, offer);
+  const standardRules = parseDiscountRulesFromWire(compact, offer);
+  const dedicatedBxgyRules = parseBxgyDiscountRulesFromWire(compact, offer);
+  const hasUnifiedBxgy = hasUnifiedBxgyTier(null, standardRules);
+  const bxgyRules =
+    dedicatedBxgyRules.length > 0
+      ? dedicatedBxgyRules
+      : hasUnifiedBxgy
+        ? buildBxgyRulesFromUnifiedDiscountRules(offer, selectedIds, standardRules)
+        : [];
+
+  return {
+    offer,
+    settings,
+    selectedIds,
+    selectedLookupKeys: packedSelectedPool
+      ? new Set<string>()
+      : buildSelectedLookupKeys(selectedIds),
+    packedSelectedPool,
+    standardRules,
+    bxgyRules,
+    hasUnifiedBxgyTier: hasUnifiedBxgy,
+  };
+}
+
+function compileOfferRuntime(offer: Offer, selectedIdsOverride?: string[]): CompiledOfferRuntime {
   const settings = compileOfferSettings(offer.offerSettingsJson);
-  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  const selectedIds = selectedIdsOverride ?? parseSelectedIds(offer.selectedProductsJson);
+  const selectedLookupKeys = buildSelectedLookupKeys(selectedIds);
   const standardRules = parseDiscountRulesJson(offer.discountRulesJson);
   const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
   const hasUnifiedBxgy = hasUnifiedBxgyTier(offer.discountRulesJson, standardRules);
@@ -1896,6 +2090,8 @@ function compileOfferRuntime(offer: Offer): CompiledOfferRuntime {
     offer,
     settings,
     selectedIds,
+    selectedLookupKeys,
+    packedSelectedPool: null,
     standardRules,
     bxgyRules,
     hasUnifiedBxgyTier: hasUnifiedBxgy,
@@ -1950,20 +2146,19 @@ function getEffectiveBxgyRules(compiledOffer: CompiledOfferRuntime): BxgyDiscoun
 function cartContainsConfiguredIds(
   cartIndex: ReturnType<typeof buildIndexedCartLines>,
   configuredIds: string[],
+  configuredLookupKeys?: Set<string>,
 ): boolean {
-  if (!configuredIds.length) return false;
-  return configuredIds.some((configuredId) => {
-    const lookupKey = buildOfferLookupKey(configuredId);
-    return lookupKey ? cartIndex.lookupKeys.has(lookupKey) : false;
-  });
+  const lookupKeys = configuredLookupKeys ?? buildSelectedLookupKeys(configuredIds);
+  return cartIntersectsLookupKeys(cartIndex, lookupKeys);
 }
 
 function offerIntersectsCartForBxgyEvaluation(
   compiledOffer: CompiledOfferRuntime,
   cartIndex: ReturnType<typeof buildIndexedCartLines>,
 ): boolean {
-  const selectedIds = compiledOffer.selectedIds;
-  if (cartContainsConfiguredIds(cartIndex, selectedIds)) return true;
+  if (cartIntersectsCompiledOfferSelection(cartIndex, compiledOffer)) {
+    return true;
+  }
 
   const bxgyRules = getEffectiveBxgyRules(compiledOffer);
   const ruleScopedIds = Array.from(
@@ -1976,7 +2171,11 @@ function offerIntersectsCartForBxgyEvaluation(
   );
   if (cartContainsConfiguredIds(cartIndex, ruleScopedIds)) return true;
 
-  return selectedIds.length === 0 && ruleScopedIds.length === 0;
+  return (
+    !compiledOffer.packedSelectedPool &&
+    compiledOffer.selectedIds.length === 0 &&
+    ruleScopedIds.length === 0
+  );
 }
 
 /**
@@ -2047,9 +2246,11 @@ function calculateBxgyDiscount(
         continue;
       }
       const candidates: ProductDiscountCandidate[] = [];
-      for (const selectedProductId of selectedProductIds) {
-        const matchingLines = getIndexedCartEntriesForConfiguredIds(cartIndex, [selectedProductId])
-          .filter((entry) => entry.quantity > 0);
+      for (const cartLookupKey of cartIndex.lookupKeys) {
+        if (!compiledOffer.selectedLookupKeys.has(cartLookupKey)) continue;
+        const matchingLines = (cartIndex.byLookupKey.get(cartLookupKey) ?? []).filter(
+          (entry) => entry.quantity > 0,
+        );
 
         if (!matchingLines.length) continue;
 
@@ -2062,7 +2263,7 @@ function calculateBxgyDiscount(
 
         log("bxgy_same_product_rule_eval", {
           offerId: offer.id,
-          selectedProductId,
+          selectedProductId: cartLookupKey,
           ruleBuyQuantity: selected.rule.buyQuantity,
           ruleGetQuantity: selected.rule.getQuantity,
           totalQuantity,
@@ -2073,7 +2274,7 @@ function calculateBxgyDiscount(
 
         log("bxgy_same_product_line_eval", {
           offerId: offer.id,
-          selectedProductId,
+          selectedProductId: cartLookupKey,
           totalQuantity,
           bundleQuantity: selected.resolved.bundleQuantity,
           promotionTimes: selected.promotionTimes,
@@ -2119,7 +2320,7 @@ function calculateBxgyDiscount(
 
         log("bxgy_same_product_rule_applied", {
           offerId: offer.id,
-          selectedProductId,
+          selectedProductId: cartLookupKey,
           buyQuantity: selected.resolved.buyQuantity,
           configuredGetQuantity: selected.rule.getQuantity,
           bundleQuantity: selected.resolved.bundleQuantity,
@@ -2138,22 +2339,28 @@ function calculateBxgyDiscount(
 
     if (offer.offerType !== "quantity-breaks-different") {
       const candidates: ProductDiscountCandidate[] = [];
-      const productPool = Array.from(
-        new Set(
-          bxgyRules.flatMap((rule) =>
-            Array.isArray(rule.buyProductIds) ? rule.buyProductIds : [],
+      const productPoolKeys = buildSelectedLookupKeys(
+        Array.from(
+          new Set(
+            bxgyRules.flatMap((rule) =>
+              Array.isArray(rule.buyProductIds) ? rule.buyProductIds : [],
+            ),
           ),
         ),
       );
-      for (const selectedProductId of productPool) {
-        const matchingLines = getIndexedCartEntriesForConfiguredIds(cartIndex, [selectedProductId])
-          .filter((entry) => entry.quantity > 0);
+      for (const cartLookupKey of cartIndex.lookupKeys) {
+        if (!productPoolKeys.has(cartLookupKey)) continue;
+        const matchingLines = (cartIndex.byLookupKey.get(cartLookupKey) ?? []).filter(
+          (entry) => entry.quantity > 0,
+        );
 
         if (!matchingLines.length) continue;
 
         const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
         const applicableRules = bxgyRules.filter((rule) =>
-          (rule.buyProductIds ?? []).some((id) => productIdsMatch(id, selectedProductId)),
+          (rule.buyProductIds ?? []).some(
+            (id) => buildOfferLookupKey(id) === cartLookupKey,
+          ),
         );
         const selected = pickBestSameProductRuleForQuantity(totalQuantity, applicableRules);
         if (!selected) continue;
@@ -2500,11 +2707,11 @@ function formatDiscountPercentValue(percent: number): string {
   return percent.toFixed(1);
 }
 
-function getScopedLinesForSelectedIds(
+function getScopedLinesForCompiledOffer(
   cartLines: CartInput["cart"]["lines"],
-  selectedIds: string[],
+  compiledOffer: CompiledOfferRuntime,
 ): CartInput["cart"]["lines"] {
-  if (!selectedIds.length) {
+  if (!compiledOffer.packedSelectedPool && !compiledOffer.selectedIds.length) {
     return cartLines.filter(
       (line) => line.merchandise.__typename === "ProductVariant",
     );
@@ -2512,13 +2719,31 @@ function getScopedLinesForSelectedIds(
 
   return cartLines.filter((line) => {
     if (line.merchandise.__typename !== "ProductVariant") return false;
+    return lineMatchesCompiledOfferSelection(
+      line.merchandise.product?.id,
+      line.merchandise.id,
+      compiledOffer,
+    );
+  });
+}
+
+function getScopedLinesForSelectedIds(
+  cartLines: CartInput["cart"]["lines"],
+  selectedIds: string[],
+  selectedLookupKeys?: Set<string>,
+): CartInput["cart"]["lines"] {
+  if (!selectedIds.length) {
+    return cartLines.filter(
+      (line) => line.merchandise.__typename === "ProductVariant",
+    );
+  }
+
+  const keySet = selectedLookupKeys ?? buildSelectedLookupKeys(selectedIds);
+  return cartLines.filter((line) => {
+    if (line.merchandise.__typename !== "ProductVariant") return false;
     const productId = line.merchandise.product?.id;
     const variantId = line.merchandise.id;
-    return selectedIds.some(
-      (sid) =>
-        (productId && productIdsMatch(productId, sid)) ||
-        (variantId && productIdsMatch(variantId, sid)),
-    );
+    return lineMatchesSelectedLookupKeys(productId, variantId, keySet);
   });
 }
 
@@ -2679,7 +2904,7 @@ function buildOrderDiscountCandidatesFromCompiledOffers(
   for (const compiledOffer of offers) {
     const offer = compiledOffer.offer;
     if (!offerPassesScheduleAndMarket(offer, marketId, nowMs, compiledOffer.settings)) continue;
-    const scopedLines = getScopedLinesForSelectedIds(input.cart.lines, compiledOffer.selectedIds);
+    const scopedLines = getScopedLinesForCompiledOffer(input.cart.lines, compiledOffer);
     if (!scopedLines.length) continue;
 
     const metrics = scopedLines.reduce(
@@ -2739,77 +2964,87 @@ function getDiscountPercentValue(
   return getBestProductDiscountPercentValue(discountRulesJson, quantity);
 }
 
+function parseSelectedIdsFromParsed(parsed: unknown): string[] {
+  // Handle BXGY format: { buyProducts: string[], getProducts: string[] }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const packed = (parsed as { p?: unknown }).p;
+    if (typeof packed === "string" && packed.trim()) {
+      return packed
+        .split(",")
+        .map((id) => String(id || "").trim())
+        .filter(Boolean);
+    }
+
+    const productIds = (parsed as { productIds?: unknown }).productIds;
+    if (Array.isArray(productIds)) {
+      return productIds
+        .map((id) => String(id || "").trim())
+        .filter(Boolean);
+    }
+
+    /** complete-bundle：{ bars: [{ products: [{ productId }] }] } */
+    const bars = (parsed as { bars?: unknown }).bars;
+    if (Array.isArray(bars) && bars.length) {
+      const ids: string[] = [];
+      for (const bar of bars) {
+        if (!bar || typeof bar !== "object") continue;
+        const products = (bar as { products?: unknown }).products;
+        if (!Array.isArray(products)) continue;
+        for (const p of products) {
+          if (p && typeof p === "object") {
+            const pid = (p as { productId?: unknown }).productId;
+            if (typeof pid === "string" && pid.trim()) ids.push(pid.trim());
+          }
+        }
+      }
+      return [...new Set(ids)];
+    }
+
+    const buyProducts = (parsed as { buyProducts?: string[] }).buyProducts;
+    const getProducts = (parsed as { getProducts?: string[] }).getProducts;
+    const triggerProducts = (parsed as { triggerProducts?: string[] }).triggerProducts;
+    const giftProducts = (parsed as { giftProducts?: string[] }).giftProducts;
+
+    const allIds: string[] = [];
+    if (Array.isArray(buyProducts)) {
+      allIds.push(...buyProducts.filter((id) => typeof id === "string"));
+    }
+    if (Array.isArray(getProducts)) {
+      allIds.push(...getProducts.filter((id) => typeof id === "string"));
+    }
+    if (Array.isArray(triggerProducts)) {
+      allIds.push(...triggerProducts.filter((id) => typeof id === "string"));
+    }
+    if (Array.isArray(giftProducts)) {
+      allIds.push(...giftProducts.filter((id) => typeof id === "string"));
+    }
+    return [...new Set(allIds)]; // Remove duplicates
+  }
+
+  // Handle regular format: string[] or object[]
+  if (!Array.isArray(parsed)) return [];
+
+  const ids: string[] = [];
+  for (const item of parsed) {
+    if (typeof item === "string") {
+      ids.push(item);
+      continue;
+    }
+
+    if (item && typeof item === "object") {
+      const id = (item as { id?: unknown }).id;
+      if (typeof id === "string") ids.push(id);
+    }
+  }
+
+  return ids;
+}
+
 const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
   if (!selectedProductsJson) return [];
 
   try {
-    const parsed = JSON.parse(selectedProductsJson);
-    
-    // Handle BXGY format: { buyProducts: string[], getProducts: string[] }
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const productIds = (parsed as { productIds?: unknown }).productIds;
-      if (Array.isArray(productIds)) {
-        return productIds
-          .map((id) => String(id || "").trim())
-          .filter(Boolean);
-      }
-
-      /** complete-bundle：{ bars: [{ products: [{ productId }] }] } */
-      const bars = (parsed as { bars?: unknown }).bars;
-      if (Array.isArray(bars) && bars.length) {
-        const ids: string[] = [];
-        for (const bar of bars) {
-          if (!bar || typeof bar !== "object") continue;
-          const products = (bar as { products?: unknown }).products;
-          if (!Array.isArray(products)) continue;
-          for (const p of products) {
-            if (p && typeof p === "object") {
-              const pid = (p as { productId?: unknown }).productId;
-              if (typeof pid === "string" && pid.trim()) ids.push(pid.trim());
-            }
-          }
-        }
-        return [...new Set(ids)];
-      }
-
-      const buyProducts = (parsed as { buyProducts?: string[] }).buyProducts;
-      const getProducts = (parsed as { getProducts?: string[] }).getProducts;
-      const triggerProducts = (parsed as { triggerProducts?: string[] }).triggerProducts;
-      const giftProducts = (parsed as { giftProducts?: string[] }).giftProducts;
-      
-      const allIds: string[] = [];
-      if (Array.isArray(buyProducts)) {
-        allIds.push(...buyProducts.filter(id => typeof id === "string"));
-      }
-      if (Array.isArray(getProducts)) {
-        allIds.push(...getProducts.filter(id => typeof id === "string"));
-      }
-      if (Array.isArray(triggerProducts)) {
-        allIds.push(...triggerProducts.filter(id => typeof id === "string"));
-      }
-      if (Array.isArray(giftProducts)) {
-        allIds.push(...giftProducts.filter(id => typeof id === "string"));
-      }
-      return [...new Set(allIds)]; // Remove duplicates
-    }
-    
-    // Handle regular format: string[] or object[]
-    if (!Array.isArray(parsed)) return [];
-
-    const ids: string[] = [];
-    for (const item of parsed) {
-      if (typeof item === "string") {
-        ids.push(item);
-        continue;
-      }
-
-      if (item && typeof item === "object") {
-        const id = (item as { id?: unknown }).id;
-        if (typeof id === "string") ids.push(id);
-      }
-    }
-
-    return ids;
+    return parseSelectedIdsFromParsed(JSON.parse(selectedProductsJson));
   } catch {
     return [];
   }
@@ -3295,13 +3530,50 @@ export function resolveExclusiveProductCandidates(
 /**
  * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
  */
+/** 超过此数量时不逐条展开 lookup index，改为运行时 Set 命中（避免 WASM 指令爆炸）。 */
+const LARGE_PRODUCT_POOL_INLINE_INDEX_MAX = 40;
+
 type RegularOfferIndex = {
   matchAllOffers: CompiledOfferRuntime[];
   byLookupKey: Map<string, CompiledOfferRuntime[]>;
+  largePoolOffers: CompiledOfferRuntime[];
 };
 
 function buildOfferLookupKey(raw: string | undefined | null): string {
   return extractShopifyProductNumericId(raw);
+}
+
+function buildSelectedLookupKeys(selectedIds: string[]): Set<string> {
+  const keys = new Set<string>();
+  for (const selectedId of selectedIds) {
+    const lookupKey = buildOfferLookupKey(selectedId);
+    if (lookupKey) keys.add(lookupKey);
+  }
+  return keys;
+}
+
+function cartIntersectsLookupKeys(
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
+  lookupKeys: Set<string>,
+): boolean {
+  if (!lookupKeys.size) return false;
+  for (const cartKey of cartIndex.lookupKeys) {
+    if (lookupKeys.has(cartKey)) return true;
+  }
+  return false;
+}
+
+function lineMatchesSelectedLookupKeys(
+  productId: string | undefined,
+  variantId: string | undefined,
+  selectedLookupKeys: Set<string>,
+): boolean {
+  if (!selectedLookupKeys.size) return true;
+  for (const rawId of [productId, variantId]) {
+    const lookupKey = buildOfferLookupKey(rawId);
+    if (lookupKey && selectedLookupKeys.has(lookupKey)) return true;
+  }
+  return false;
 }
 
 function appendOfferToLookupIndex(
@@ -3321,11 +3593,20 @@ function appendOfferToLookupIndex(
 function buildRegularOfferIndex(offers: CompiledOfferRuntime[]): RegularOfferIndex {
   const byLookupKey = new Map<string, CompiledOfferRuntime[]>();
   const matchAllOffers: CompiledOfferRuntime[] = [];
+  const largePoolOffers: CompiledOfferRuntime[] = [];
 
   for (const compiledOffer of offers) {
     if (!compiledOffer.settings.quantityEnabled) continue;
     if (!compiledOffer.selectedIds.length) {
       matchAllOffers.push(compiledOffer);
+      continue;
+    }
+
+    if (
+      compiledOffer.packedSelectedPool ||
+      compiledOffer.selectedIds.length > LARGE_PRODUCT_POOL_INLINE_INDEX_MAX
+    ) {
+      largePoolOffers.push(compiledOffer);
       continue;
     }
 
@@ -3341,6 +3622,7 @@ function buildRegularOfferIndex(offers: CompiledOfferRuntime[]): RegularOfferInd
   return {
     matchAllOffers,
     byLookupKey,
+    largePoolOffers,
   };
 }
 
@@ -3369,15 +3651,17 @@ const findOffers = (
     }
   }
 
-  return candidateOffers.filter((compiledOffer) => {
-    const selectedIds = compiledOffer.selectedIds;
-    if (!selectedIds.length) return true;
-    return selectedIds.some(
-      (sid) =>
-        (productId && productIdsMatch(productId, sid)) ||
-        (variantId && productIdsMatch(variantId, sid)),
-    );
-  });
+  for (const compiledOffer of offerIndex.largePoolOffers) {
+    const offerId = String(compiledOffer.offer.id || "");
+    if (seenOfferIds.has(offerId)) continue;
+    if (!lineMatchesCompiledOfferSelection(productId, variantId, compiledOffer)) {
+      continue;
+    }
+    seenOfferIds.add(offerId);
+    candidateOffers.push(compiledOffer);
+  }
+
+  return candidateOffers;
 };
 
 /**

@@ -3987,6 +3987,20 @@ function normalizeCompleteBundlePricingModeForFn(raw: unknown): CompleteBundlePr
 }
 
 /**
+ * 超过此数量时 Function payload 用逗号分隔字段 `p` 代替 JSON 数组，
+ * 显著降低 Shopify WASM 解析 metafield 时的指令消耗。
+ */
+export const FUNCTION_PACK_PRODUCT_IDS_THRESHOLD = 40;
+
+export function packProductIdsForFunctionPayload(ids: string[]): Record<string, unknown> {
+  const numericIds = ids.map((id) => String(id || "").trim()).filter(Boolean);
+  if (numericIds.length >= FUNCTION_PACK_PRODUCT_IDS_THRESHOLD) {
+    return { p: numericIds.join(",") };
+  }
+  return { productIds: numericIds };
+}
+
+/**
  * Shopify Function 输入专用：裁剪 `selectedProductsJson`，去掉主题/预览用的大字段，
  * 降低 shop `ciwi-bundle-offers-fn` 与 automatic discount owner 瘦配置的 UTF-8 体积。
  * 不修改数据库中的原始 JSON，仅在 metafield 同步路径使用。
@@ -4185,13 +4199,18 @@ const DEFAULT_OFFER_TYPE_PAYLOAD_STRATEGY: OfferTypePayloadStrategy = {
   trimSelectedProductsJsonForFunction: (raw, finish) => {
     const ids = parseSelectedProductIds(raw);
     if (ids.length) {
-      return finish(JSON.stringify({ productIds: ids }));
+      return finish(JSON.stringify(packProductIdsForFunctionPayload(ids)));
     }
     return finish(raw);
   },
 };
 
 const OFFER_TYPE_PAYLOAD_STRATEGIES: Record<string, OfferTypePayloadStrategy> = {
+  "quantity-breaks-same": {
+    buildSelectedProductsPayload: ({ selectedProductsData }) => selectedProductsData,
+    buildDiscountRulesPayload: ({ quantityRulesPayload }) => quantityRulesPayload,
+    trimSelectedProductsJsonForFunction: DEFAULT_OFFER_TYPE_PAYLOAD_STRATEGY.trimSelectedProductsJsonForFunction,
+  },
   "quantity-breaks-different": {
     buildSelectedProductsPayload: ({ selectedProductIds, differentProductsSharedPoolProductIds }) => ({
       productIds:

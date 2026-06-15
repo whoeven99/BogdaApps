@@ -144,6 +144,27 @@ export async function syncShopOffersMetafield(
       activeOfferCount: activeOffers.length,
     });
 
+    const functionInputUtf8Bytes = measureUtf8Bytes(functionMetafieldValue);
+    if (functionInputUtf8Bytes > FUNCTION_OFFERS_MAX_BYTES) {
+      console.warn("[offers-sync] compact offers JSON exceeds Shopify Function input limit (~10kB)", {
+        utf8Bytes: functionInputUtf8Bytes,
+        limit: FUNCTION_OFFERS_MAX_BYTES,
+        key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+      });
+    }
+
+    // Keep the checkout Function owner in sync before slower storefront hydration.
+    // The theme can still render from the Shop metafield, but checkout discounts only see
+    // the Automatic Discount owner metafields.
+    const discountSyncResult = await syncFunctionOwnerOffersMetafield(
+      admin,
+      shopNameToSync,
+      syncContext,
+    );
+    if (!discountSyncResult.ok) {
+      return discountSyncResult;
+    }
+
     let storefrontStructured: Awaited<ReturnType<typeof buildStorefrontOffersStructured>>;
     try {
       storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
@@ -161,15 +182,6 @@ export async function syncShopOffersMetafield(
       storefrontOfferCount: storefrontStructured.offers.length,
       storefrontPayloadBytes: measureUtf8Bytes(mergedStorefrontPreview),
     });
-
-    const functionInputUtf8Bytes = measureUtf8Bytes(functionMetafieldValue);
-    if (functionInputUtf8Bytes > FUNCTION_OFFERS_MAX_BYTES) {
-      console.warn("[offers-sync] compact offers JSON exceeds Shopify Function input limit (~10kB)", {
-        utf8Bytes: functionInputUtf8Bytes,
-        limit: FUNCTION_OFFERS_MAX_BYTES,
-        key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
-      });
-    }
 
     let shopId: string | undefined;
     try {
@@ -225,15 +237,6 @@ export async function syncShopOffersMetafield(
       storefrontPayloadBytes: measureUtf8Bytes(mergedStorefrontPreview),
       functionPreviewPayloadBytes: measureUtf8Bytes(functionMetafieldValue),
     });
-
-    const discountSyncResult = await syncFunctionOwnerOffersMetafield(
-      admin,
-      shopNameToSync,
-      syncContext,
-    );
-    if (!discountSyncResult.ok) {
-      return discountSyncResult;
-    }
 
     logOfferMetafieldSyncPhase("complete", shopNameToSync, syncContext, {
       shopId,
