@@ -211,16 +211,12 @@ async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null
   return functionId;
 }
 
-/**
- * 查询 automatic discount 节点并解析出需要写 metafield 的 owner 目标。
- * 抽成独立函数，便于"首次没找到 owner → reconcile 自愈后重查一次"。
- */
-async function loadAutomaticDiscountSyncTargets(
+/** 查询所有 automatic discount 节点（提取为共享函数，消除 3 处重复） */
+async function queryExistingAutomaticDiscountNodes(
   admin: any,
-  functionId: string,
-  shippingFunctionId: string | null,
-): Promise<AutomaticDiscountSyncTarget[]> {
-  const existingResp = await admin.graphql(
+  extraFields = "",
+): Promise<any[]> {
+  const resp = await admin.graphql(
     `#graphql
       query ExistingAutomaticAppDiscounts {
         discountNodes(first: 100, query: "method:automatic") {
@@ -233,9 +229,15 @@ async function loadAutomaticDiscountSyncTargets(
                 title
                 status
                 discountClasses
+                combinesWith {
+                  orderDiscounts
+                  productDiscounts
+                  shippingDiscounts
+                }
                 appDiscountType {
                   functionId
                 }
+                ${extraFields}
               }
             }
           }
@@ -243,8 +245,132 @@ async function loadAutomaticDiscountSyncTargets(
       }
     `,
   );
-  const existingJson = await existingResp.json();
-  const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
+  const json = await resp.json();
+  return json?.data?.discountNodes?.nodes ?? [];
+}
+
+/** 提取 `discountAutomaticAppUpdate` 调用 + userErrors 处理模式（3 处复用） */
+async function updateAutomaticAppDiscount(
+  admin: any,
+  id: string,
+  input: Record<string, unknown>,
+): Promise<{ errors?: string[] }> {
+  const updateResp = await admin.graphql(
+    `#graphql
+      mutation UpdateAutomaticAppDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
+        discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+          automaticAppDiscount {
+            discountId
+            title
+            status
+            combinesWith {
+              orderDiscounts
+              productDiscounts
+              shippingDiscounts
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        id,
+        automaticAppDiscount: input,
+      },
+    },
+  );
+  const updateJson = (await updateResp.json()) as {
+    data?: {
+      discountAutomaticAppUpdate?: {
+        userErrors?: Array<{ message?: string }>;
+      };
+    };
+    errors?: Array<{ message?: string }>;
+  };
+  if (updateJson.errors?.length) {
+    return { errors: updateJson.errors.map((e) => e.message || "unknown") };
+  }
+  const userErrors = updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
+  if (userErrors.length) {
+    return { errors: userErrors.map((e) => e.message || "unknown") };
+  }
+  return {};
+}
+
+/** 提取 `discountAutomaticAppCreate` 调用 + userErrors 处理模式（2 处复用） */
+async function createAutomaticAppDiscount(
+  admin: any,
+  input: Record<string, unknown>,
+): Promise<{
+  created?: { discountId?: string; title?: string; status?: string; functionId?: string };
+  errors?: string[];
+}> {
+  const createResp = await admin.graphql(
+    `#graphql
+      mutation CreateAutomaticAppDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) {
+        discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) {
+          automaticAppDiscount {
+            discountId
+            title
+            status
+            appDiscountType {
+              functionId
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        automaticAppDiscount: input,
+      },
+    },
+  );
+  const createJson = (await createResp.json()) as {
+    data?: {
+      discountAutomaticAppCreate?: {
+        automaticAppDiscount?: { discountId?: string; title?: string; status?: string; appDiscountType?: { functionId?: string } };
+        userErrors?: Array<{ message?: string }>;
+      };
+    };
+    errors?: Array<{ message?: string }>;
+  };
+  if (createJson.errors?.length) {
+    return { errors: createJson.errors.map((e) => e.message || "unknown") };
+  }
+  const userErrors = createJson?.data?.discountAutomaticAppCreate?.userErrors ?? [];
+  if (userErrors.length) {
+    return { errors: userErrors.map((e) => e.message || "unknown") };
+  }
+  const created = createJson?.data?.discountAutomaticAppCreate?.automaticAppDiscount;
+  return {
+    created: {
+      discountId: created?.discountId,
+      title: created?.title,
+      status: created?.status,
+      functionId: created?.appDiscountType?.functionId,
+    },
+  };
+}
+
+/**
+ * 查询 automatic discount 节点并解析出需要写 metafield 的 owner 目标。
+ * 抽成独立函数，便于"首次没找到 owner → reconcile 自愈后重查一次"。
+ */
+async function loadAutomaticDiscountSyncTargets(
+  admin: any,
+  functionId: string,
+  shippingFunctionId: string | null,
+): Promise<AutomaticDiscountSyncTarget[]> {
+  const discountNodes = await queryExistingAutomaticDiscountNodes(admin);
   const cartTargets = collectAutomaticDiscountSyncTargets({
     discountNodes,
     functionId,
@@ -504,36 +630,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
     return;
   }
 
-  const existingResp = await admin.graphql(
-    `#graphql
-      query ExistingAutomaticAppDiscounts {
-        discountNodes(first: 100, query: "method:automatic AND status:active") {
-          nodes {
-            id
-            discount {
-              __typename
-              ... on DiscountAutomaticApp {
-                discountId
-                title
-                status
-                discountClasses
-                combinesWith {
-                  orderDiscounts
-                  productDiscounts
-                  shippingDiscounts
-                }
-                appDiscountType {
-                  functionId
-                }
-              }
-            }
-          }
-        }
-      }
-    `,
-  );
-  const existingJson = await existingResp.json();
-  const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
+  const discountNodes = await queryExistingAutomaticDiscountNodes(admin);
   const expectedConfigs = getExpectedCartLinesAutomaticDiscountConfigs();
   console.log("[discount][ensure-auto] active automatic discounts loaded", {
     nodeCount: discountNodes.length,
@@ -612,43 +709,15 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
       });
 
       if (needsUpdate) {
-        const updateResp = await admin.graphql(
-          `#graphql
-            mutation UpdateAutomaticAppDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
-              discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
-                automaticAppDiscount {
-                  discountId
-                  title
-                  status
-                }
-                userErrors {
-                  field
-                  message
-                }
-              }
-            }
-          `,
-          {
-            variables: {
-              id: String(targetDiscount.nodeId || ""),
-              automaticAppDiscount: {
-                title: config.title,
-                discountClasses: [...config.discountClasses],
-                combinesWith: config.combinesWith,
-              },
-            },
-          },
-        );
-        const updateJson = await updateResp.json();
-        const userErrors =
-          updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
-        if (userErrors.length > 0) {
+        const result = await updateAutomaticAppDiscount(admin, String(targetDiscount.nodeId || ""), {
+          title: config.title,
+          discountClasses: [...config.discountClasses],
+          combinesWith: config.combinesWith,
+        });
+        if (result.errors?.length) {
           console.error(
             "[discount] failed to update cart automatic app discount to expected config",
-            {
-              key: config.key,
-              userErrors,
-            },
+            { key: config.key, errors: result.errors },
           );
         } else {
           console.log("[discount] cart automatic app discount config updated", {
@@ -671,64 +740,33 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
       discountClasses: config.discountClasses,
     });
 
-    const createResp = await admin.graphql(
-      `#graphql
-        mutation CreateAutomaticAppDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) {
-          discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) {
-            automaticAppDiscount {
-              discountId
-              title
-              status
-              appDiscountType {
-                functionId
-              }
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `,
-      {
-        variables: {
-          automaticAppDiscount: {
-            title: config.title,
-            functionId,
-            startsAt: new Date().toISOString(),
-            discountClasses: [...config.discountClasses],
-            combinesWith: config.combinesWith,
-            metafields: [
-              {
-                namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
-                key: CART_LINES_DISCOUNT_METAFIELD_KEY,
-                type: "json",
-                value: buildEmptyOffersMetafieldValue(),
-              },
-            ],
-          },
+    const result = await createAutomaticAppDiscount(admin, {
+      title: config.title,
+      functionId,
+      startsAt: new Date().toISOString(),
+      discountClasses: [...config.discountClasses],
+      combinesWith: config.combinesWith,
+      metafields: [
+        {
+          namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
+          key: CART_LINES_DISCOUNT_METAFIELD_KEY,
+          type: "json",
+          value: buildEmptyOffersMetafieldValue(),
         },
-      },
-    );
-    const createJson = await createResp.json();
-    const userErrors =
-      createJson?.data?.discountAutomaticAppCreate?.userErrors ?? [];
-
-    if (userErrors.length > 0) {
+      ],
+    });
+    if (result.errors?.length) {
       console.error("[discount] failed to create cart automatic app discount", {
         key: config.key,
-        userErrors,
+        errors: result.errors,
       });
       continue;
     }
-
-    const created =
-      createJson?.data?.discountAutomaticAppCreate?.automaticAppDiscount;
     console.log("[discount] cart automatic app discount created", {
       key: config.key,
-      title: created?.title,
-      status: created?.status,
-      functionId: created?.appDiscountType?.functionId,
+      title: result.created?.title,
+      status: result.created?.status,
+      functionId: result.created?.functionId,
     });
   }
 
@@ -748,77 +786,27 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
  * 与行项目折扣分开：官方要求按 discount class 拆分为不同 automatic discount（或单一 Function 多 class，此处沿用双折扣结构）。
  */
 export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
-  // 目标组合策略：运费折扣需要能与商品折扣叠加，才能实现「套装商品折扣 + 免邮」同时生效。
-  // 同类运费折扣叠加通常不被允许，因此 shippingDiscounts 关闭。
   const expectedCombinesWith = {
     orderDiscounts: false,
     productDiscounts: true,
     shippingDiscounts: false,
   };
 
-  const functionsResp = await admin.graphql(
-    `#graphql
-      query AppDiscountFunctions {
-        shopifyFunctions(first: 100) {
-          nodes {
-            id
-            title
-            apiType
-          }
-        }
-      }
-    `,
-  );
-  const functionsJson = await functionsResp.json();
-  const functionNodes = functionsJson?.data?.shopifyFunctions?.nodes ?? [];
-  const targetFn = functionNodes.find(
-    (fn: any) =>
-      fn?.title === DELIVERY_DISCOUNT_FUNCTION_TITLE &&
-      String(fn?.apiType || "").toLowerCase() === "discount",
-  );
-
-  if (!targetFn?.id) {
+  const discountFunctions = await queryShopifyDiscountFunctions(admin);
+  const targetFnId = findFunctionIdByTitle(discountFunctions, DELIVERY_DISCOUNT_FUNCTION_TITLE);
+  if (!targetFnId) {
     console.warn("[discount-shipping] target function not found:", DELIVERY_DISCOUNT_FUNCTION_TITLE);
-    // 中文关键日志：用于快速确认当前店铺可见的函数列表，排查标题不一致或版本未发布
-    console.warn("[discount-shipping] 未找到配送免邮 Function，当前可见 discount functions：", functionNodes
-      .filter((fn: any) => String(fn?.apiType || "").toLowerCase() === "discount")
-      .map((fn: any) => ({ id: fn?.id, title: fn?.title })));
+    console.warn("[discount-shipping] 未找到配送免邮 Function，当前可见 discount functions：",
+      discountFunctions.map((fn) => ({ id: fn.id, title: fn.title })));
     return;
   }
 
-  const existingResp = await admin.graphql(
-    `#graphql
-      query ExistingAutomaticAppDiscounts {
-        discountNodes(first: 100, query: "method:automatic AND status:active") {
-          nodes {
-            discount {
-              __typename
-              ... on DiscountAutomaticApp {
-                discountId
-                title
-                status
-                combinesWith {
-                  orderDiscounts
-                  productDiscounts
-                  shippingDiscounts
-                }
-                appDiscountType {
-                  functionId
-                }
-              }
-            }
-          }
-        }
-      }
-    `,
-  );
-  const existingJson = await existingResp.json();
-  const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
+  const discountNodes = await queryExistingAutomaticDiscountNodes(admin);
   const existing = discountNodes.find((node: any) => {
     const d = node?.discount;
     if (!d || d.__typename !== "DiscountAutomaticApp") return false;
     if (d?.status !== "ACTIVE") return false;
-    return d?.appDiscountType?.functionId === targetFn.id;
+    return d?.appDiscountType?.functionId === targetFnId;
   });
 
   if (existing?.discount) {
@@ -830,103 +818,39 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
       existingCombinesWith.shippingDiscounts !== expectedCombinesWith.shippingDiscounts;
 
     if (!needUpdate) {
-      console.log("[discount-shipping] automatic app discount already exists", {
-        functionId: targetFn.id,
-      });
+      console.log("[discount-shipping] automatic app discount already exists", { functionId: targetFnId });
       return;
     }
 
-    // 已存在但组合策略不匹配：自动修正，避免「折扣创建成功但结账不免邮」。
-    const updateResp = await admin.graphql(
-      `#graphql
-        mutation UpdateAutomaticAppDiscount(
-          $id: ID!
-          $automaticAppDiscount: DiscountAutomaticAppInput!
-        ) {
-          discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
-            automaticAppDiscount {
-              discountId
-              title
-              status
-              combinesWith {
-                orderDiscounts
-                productDiscounts
-                shippingDiscounts
-              }
-            }
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `,
-      {
-        variables: {
-          id: existingDiscount.discountId,
-          automaticAppDiscount: {
-            combinesWith: expectedCombinesWith,
-          },
-        },
-      },
-    );
-    const updateJson = await updateResp.json();
-    const updateErrors = updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
-    if (updateErrors.length > 0) {
-      console.error("[discount-shipping] failed to update automatic app discount", updateErrors);
+    const result = await updateAutomaticAppDiscount(admin, existingDiscount.discountId, {
+      combinesWith: expectedCombinesWith,
+    });
+    if (result.errors?.length) {
+      console.error("[discount-shipping] failed to update automatic app discount", result.errors);
       return;
     }
     console.log("[discount-shipping] automatic app discount combinesWith updated", {
-      functionId: targetFn.id,
+      functionId: targetFnId,
       combinesWith: expectedCombinesWith,
     });
     return;
   }
 
-  const createResp = await admin.graphql(
-    `#graphql
-      mutation CreateAutomaticAppDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) {
-        discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) {
-          automaticAppDiscount {
-            discountId
-            title
-            status
-            appDiscountType {
-              functionId
-            }
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `,
-    {
-      variables: {
-        automaticAppDiscount: {
-          title: getAutoShippingDiscountTitle(),
-          functionId: targetFn.id,
-          startsAt: new Date().toISOString(),
-          discountClasses: ["SHIPPING"],
-          combinesWith: expectedCombinesWith,
-        },
-      },
-    },
-  );
-  const createJson = await createResp.json();
-  const userErrors = createJson?.data?.discountAutomaticAppCreate?.userErrors ?? [];
-
-  if (userErrors.length > 0) {
-    console.error("[discount-shipping] failed to create automatic app discount", userErrors);
+  const result = await createAutomaticAppDiscount(admin, {
+    title: getAutoShippingDiscountTitle(),
+    functionId: targetFnId,
+    startsAt: new Date().toISOString(),
+    discountClasses: ["SHIPPING"],
+    combinesWith: expectedCombinesWith,
+  });
+  if (result.errors?.length) {
+    console.error("[discount-shipping] failed to create automatic app discount", result.errors);
     return;
   }
-
-  const created = createJson?.data?.discountAutomaticAppCreate?.automaticAppDiscount;
   console.log("[discount-shipping] automatic app discount created", {
-    title: created?.title,
-    status: created?.status,
-    functionId: created?.appDiscountType?.functionId,
+    title: result.created?.title,
+    status: result.created?.status,
+    functionId: result.created?.functionId,
   });
 }
 

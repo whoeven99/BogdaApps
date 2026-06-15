@@ -17,6 +17,9 @@ const LEGACY_OFFER_SHARD_PREFIX = "offer-";
 /** 已不再写入；删除残留 */
 const LEGACY_OFFER_COUNT_KEY = "ciwi-bundle-offer-count";
 
+/** 已清理过的店铺列表（进程内缓存），之后跳过全量 key 扫描步骤 */
+const cleanedShopSet = new Set<string>();
+
 const METAFIELDS_SET_CHUNK = 25;
 const METAFIELDS_DELETE_CHUNK = 50;
 
@@ -299,6 +302,9 @@ async function metafieldsSetChunked(
 /**
  * 写入主题整包 `ciwi-bundle-offers`、Function 用 `ciwi-bundle-offers-fn`、开关与时间戳；
  * 并清理历史分片 `offer-*`、`ciwi-bundle-offer-ids`、`ciwi-bundle-fn-offer-*`、`ciwi-bundle-offer-count`。
+ *
+ * 性能优化：已清理过的店铺（进程内缓存 `cleanedShopSet`）跳过全量 key 扫描 + 删除步骤，
+ * 仅执行 metafield 定义 ensure 和 3 个 key 的写入。
  */
 export async function reconcileShopOfferShardedMetafields(
   admin: any,
@@ -313,28 +319,29 @@ export async function reconcileShopOfferShardedMetafields(
   try {
     await ensureShopBundleMetafieldDefinitions(admin);
 
-    const existingKeys = await listShopCiBundleMetafieldKeys(admin);
-    const keysToDelete: string[] = [];
-    for (const key of existingKeys) {
-      if (key.startsWith(LEGACY_OFFER_SHARD_PREFIX)) {
-        keysToDelete.push(key);
-        continue;
+    if (!cleanedShopSet.has(shopId)) {
+      const existingKeys = await listShopCiBundleMetafieldKeys(admin);
+      const keysToDelete: string[] = [];
+      for (const key of existingKeys) {
+        if (key.startsWith(LEGACY_OFFER_SHARD_PREFIX)) {
+          keysToDelete.push(key);
+          continue;
+        }
+        if (
+          key === LEGACY_BUNDLE_OFFER_IDS_KEY ||
+          key.startsWith(LEGACY_FN_OFFER_SLOT_KEY_PREFIX) ||
+          key === LEGACY_OFFER_COUNT_KEY
+        ) {
+          keysToDelete.push(key);
+        }
       }
-      if (
-        key === LEGACY_BUNDLE_OFFER_IDS_KEY ||
-        key.startsWith(LEGACY_FN_OFFER_SLOT_KEY_PREFIX) ||
-        key === LEGACY_OFFER_COUNT_KEY
-      ) {
-        keysToDelete.push(key);
+      if (existingKeys.includes("ciwi-bundle-enabled")) keysToDelete.push("ciwi-bundle-enabled");
+
+      if (keysToDelete.length) {
+        await metafieldsDeleteByOwnerKeys(admin, shopId, keysToDelete);
       }
+      cleanedShopSet.add(shopId);
     }
-    if (existingKeys.includes("ciwi-bundle-enabled")) keysToDelete.push("ciwi-bundle-enabled");
-
-    if (keysToDelete.length) {
-      await metafieldsDeleteByOwnerKeys(admin, shopId, keysToDelete);
-    }
-
-    const updatedAt = params.syncAtIso;
 
     const metafields: MetafieldsSetInput[] = [
       {

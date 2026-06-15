@@ -33,50 +33,11 @@ type AdminType = {
 
 type SyncResult = { ok: true } | { ok: false; message: string; step?: string };
 
-function isMissingCampaignConfigColumn(error: unknown): boolean {
-  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  return (
-    msg.includes("campaignconfigjson") &&
-    (msg.includes("no such column") ||
-      msg.includes("has no column named") ||
-      msg.includes("column does not exist"))
-  );
-}
-
 export async function loadShopOffersForSync(shopNameToSync: string): Promise<OfferListItem[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prismaAny = prisma as any;
-  try {
-    return (await prismaAny.offer.findMany({
-      where: { shopName: shopNameToSync },
-      orderBy: { createdAt: "desc" },
-    })) as OfferListItem[];
-  } catch (error) {
-    if (!isMissingCampaignConfigColumn(error)) throw error;
-    console.warn("[offers-sync] campaignConfigJson column missing, falling back to legacy offer read");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const legacyRows = await prismaAny.offer.findMany({
-      where: { shopName: shopNameToSync },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        shopName: true,
-        name: true,
-        cartTitle: true,
-        offerType: true,
-        startTime: true,
-        endTime: true,
-        status: true,
-        selectedProductsJson: true,
-        discountRulesJson: true,
-        offerSettingsJson: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return legacyRows.map((offer: any) => ({ ...offer, campaignConfigJson: null })) as OfferListItem[];
-  }
+  return prisma.offer.findMany({
+    where: { shopName: shopNameToSync },
+    orderBy: { createdAt: "desc" },
+  }) as Promise<OfferListItem[]>;
 }
 
 async function syncFunctionOwnerOffersMetafield(
@@ -314,10 +275,8 @@ async function readShopOfferSyncAt(admin: AdminType): Promise<string | null> {
 async function readOfferDbState(
   shopNameToSync: string,
 ): Promise<{ count: number; maxUpdatedAtMs: number }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prismaAny = prisma as any;
   try {
-    const agg = await prismaAny.offer.aggregate({
+    const agg = await prisma.offer.aggregate({
       where: { shopName: shopNameToSync },
       _max: { updatedAt: true },
       _count: { _all: true },
