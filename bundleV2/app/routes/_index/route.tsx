@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useActionData,
   useFetcher,
@@ -23,7 +23,11 @@ import { fetchThemeEditorTargets, getCurrentThemeExtensionEnabled } from "../../
 import { getCachedShopOffers } from "../../shopOffersCache.server";
 import { syncShopOffersMetafieldIfStale } from "../../server/offers/offerSync.server";
 import { handleLoadOffers } from "./actions/loadOffers.server";
-import { handleLoadStoreProducts } from "./actions/loadStoreProducts.server";
+import {
+  handleLoadStoreProducts,
+  handleExpandCollections,
+  handleLoadAllProducts,
+} from "./actions/loadStoreProducts.server";
 import { handleGetProductSubscription } from "./actions/getProductSubscription.server";
 import { handleCreateOrUpdateOffer } from "./actions/offerWrite.server";
 import { handleToggleOfferStatus } from "./actions/offerToggle.server";
@@ -142,6 +146,8 @@ const SKIP_REVALIDATE_INTENTS = new Set([
   "delete-offer",
   "load-offers",
   "load-store-products",
+  "expand-collections",
+  "load-all-products",
   "get-product-subscription-status",
 ]);
 
@@ -174,6 +180,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "load-store-products") {
     const offers = (await getCachedShopOffers(session.shop)) as OfferListItem[];
     return handleLoadStoreProducts(admin, offers);
+  }
+
+  if (intent === "expand-collections") {
+    let collectionIds: string[] = [];
+    try {
+      const raw = String(formData.get("collectionIds") || "[]");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) collectionIds = parsed.map((id) => String(id || "")).filter(Boolean);
+    } catch {
+      collectionIds = [];
+    }
+    return handleExpandCollections(admin, collectionIds);
+  }
+
+  if (intent === "load-all-products") {
+    return handleLoadAllProducts(admin);
   }
 
   if (intent === "get-product-subscription-status") {
@@ -229,11 +251,51 @@ export default function Index() {
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [analyticsOfferId, setAnalyticsOfferId] = useState<string | null>(null);
   const offersFetcher = useFetcher<{ offers: OfferListItem[] }>();
-  const storeProductsFetcher = useFetcher<{ storeProducts: StoreProductItem[] }>();
+  const storeProductsFetcher = useFetcher<{
+    storeProducts: StoreProductItem[];
+    storeCollections?: Array<{ id: string; title: string }>;
+    totalStoreProductCount?: number;
+  }>();
   const lastOffersRefreshToastRef = useRef<string | null>(null);
 
   const offers = offersFetcher.data?.offers ?? [];
   const storeProducts = storeProductsFetcher.data?.storeProducts ?? [];
+  const storeCollections = storeProductsFetcher.data?.storeCollections ?? [];
+  const totalStoreProductCount = storeProductsFetcher.data?.totalStoreProductCount ?? 0;
+
+  // 按需 action 调用（App Bridge v4 已为 window.fetch 注入 session token）。
+  // 失败时返回空集，调用方各自优雅降级（改开 picker / 提示无匹配）。
+  const postBuilderIntent = useCallback(
+    async <T,>(formData: FormData, fallback: T): Promise<T> => {
+      try {
+        const url = window.location.pathname + window.location.search;
+        const res = await fetch(url, { method: "POST", body: formData });
+        if (!res.ok) return fallback;
+        return (await res.json()) as T;
+      } catch {
+        return fallback;
+      }
+    },
+    [],
+  );
+
+  const handleExpandCollections = useCallback(
+    async (collectionIds: string[]): Promise<string[]> => {
+      const formData = new FormData();
+      formData.set("intent", "expand-collections");
+      formData.set("collectionIds", JSON.stringify(collectionIds));
+      const data = await postBuilderIntent<{ productIds?: string[] }>(formData, {});
+      return Array.isArray(data.productIds) ? data.productIds : [];
+    },
+    [postBuilderIntent],
+  );
+
+  const handleLoadAllProducts = useCallback(async (): Promise<StoreProductItem[]> => {
+    const formData = new FormData();
+    formData.set("intent", "load-all-products");
+    const data = await postBuilderIntent<{ storeProducts?: StoreProductItem[] }>(formData, {});
+    return Array.isArray(data.storeProducts) ? data.storeProducts : [];
+  }, [postBuilderIntent]);
   const isOffersLoading = !offersFetcher.data?.offers && offersFetcher.state !== "idle";
   const shouldShowOfferBuilder = Boolean(editingOfferId || (showCreateOffer && createOfferType));
   const toast =
@@ -380,6 +442,10 @@ export default function Index() {
               offers={offers}
               offersLoading={isOffersLoading}
               storeProducts={storeProducts}
+              storeCollections={storeCollections}
+              totalStoreProductCount={totalStoreProductCount}
+              onExpandCollections={handleExpandCollections}
+              onLoadAllProducts={handleLoadAllProducts}
               markets={markets}
               shop={shop}
               themeEditorStoreId={themeEditorStoreId}
@@ -457,6 +523,10 @@ export default function Index() {
                 }
                 initialOfferType={createOfferType ?? undefined}
                 storeProducts={storeProducts}
+                storeCollections={storeCollections}
+                totalStoreProductCount={totalStoreProductCount}
+                onExpandCollections={handleExpandCollections}
+                onLoadAllProducts={handleLoadAllProducts}
                 markets={markets}
                 existingOffers={offers.map((o) => ({
                   id: o.id,

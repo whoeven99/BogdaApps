@@ -553,6 +553,14 @@ interface CreateNewOfferProps {
   initialOffer?: InitialOffer;
   initialOfferType?: OfferTypeId;
   storeProducts?: Product[];
+  /** collection 下拉选项（按需化后不再从全量商品派生） */
+  storeCollections?: Array<{ id: string; title: string }>;
+  /** 店铺商品总数，用于「是否已选全店」判定 */
+  totalStoreProductCount?: number;
+  /** 展开所选 collection → 商品 id（服务端按需查询） */
+  onExpandCollections?: (collectionIds: string[]) => Promise<string[]>;
+  /** select-all / invert / exclude 时按需加载全量轻量商品 */
+  onLoadAllProducts?: () => Promise<Product[]>;
   markets?: MarketItem[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
   existingOffers?: Array<{ id: string; name: string }>;
@@ -706,6 +714,10 @@ export function CreateNewOffer({
   initialOffer,
   initialOfferType,
   storeProducts = [],
+  storeCollections = [],
+  totalStoreProductCount = 0,
+  onExpandCollections,
+  onLoadAllProducts,
   markets: shopMarkets = [],
   existingOffers = [],
   ianaTimezone = "UTC",
@@ -1448,57 +1460,48 @@ export function CreateNewOffer({
     selectedProductsData,
     differentProductsSharedPoolProductsData,
   ]);
-  const allStoreProductIds = useMemo(
-    () => storeProducts.map((product) => String(product.id || "")).filter(Boolean),
-    [storeProducts],
-  );
   useEffect(() => {
     if (triggerSelection !== null) return;
     if (selectedProductsData.length === 0) return;
 
+    // 按需化后不再持有全量 id；用店铺商品总数作为「全店已选」的判定代理。
     const selectedIds = selectedProductsData.map((product) => String(product.id));
-    if (allStoreProductIds.length > 0 && selectedIds.length === allStoreProductIds.length) {
-      const allSet = new Set(allStoreProductIds);
-      const isAllSelected = selectedIds.every((id) => allSet.has(id));
-      if (isAllSelected) {
-        setTriggerSelection({ mode: "all" });
-        return;
-      }
+    if (totalStoreProductCount > 0 && selectedIds.length === totalStoreProductCount) {
+      setTriggerSelection({ mode: "all" });
+      return;
     }
 
     setTriggerSelection({ mode: "custom" });
-  }, [allStoreProductIds, selectedProductsData, triggerSelection]);
+  }, [totalStoreProductCount, selectedProductsData, triggerSelection]);
   const collectionOptions = useMemo(
     () =>
       Array.from(
         new Map(
-          storeProducts.flatMap((product) =>
-            (product.collections || []).map((collection) => [
-              String(collection.id || ""),
-              {
-                label: String(collection.title || ""),
-                value: String(collection.id || ""),
-              } satisfies CollectionOption,
-            ]),
-          ),
+          storeCollections.map((collection) => [
+            String(collection.id || ""),
+            {
+              label: String(collection.title || ""),
+              value: String(collection.id || ""),
+            } satisfies CollectionOption,
+          ]),
         ).values(),
       )
         .filter((option) => option.value && option.label)
         .sort((left, right) => left.label.localeCompare(right.label)),
-    [storeProducts],
+    [storeCollections],
   );
   const triggerSelectionSummary = useMemo(
     () =>
       buildTriggerSelectionSummary({
         selection: triggerSelection,
         selectedCount: selectedProductsData.length,
-        totalStoreProductsCount: allStoreProductIds.length,
+        totalStoreProductsCount: totalStoreProductCount,
         collectionOptions,
       }),
     [
       triggerSelection,
       selectedProductsData.length,
-      allStoreProductIds.length,
+      totalStoreProductCount,
       collectionOptions,
     ],
   );
@@ -1508,20 +1511,32 @@ export function CreateNewOffer({
       .filter((option) => triggerSelection.collectionIds?.includes(option.value))
       .map((option) => option.label);
   }, [triggerSelection, collectionOptions]);
-  const pendingCollectionMatchedProductCount = useMemo(() => {
-    if (pendingCollectionIds.length === 0) return 0;
-    const collectionIdSet = new Set(pendingCollectionIds);
-    return new Set(
-      storeProducts
-        .filter((product) =>
-          (product.collections || []).some((collection) =>
-            collectionIdSet.has(String(collection.id || "")),
-          ),
-        )
-        .map((product) => String(product.id || ""))
-        .filter(Boolean),
-    ).size;
-  }, [pendingCollectionIds, storeProducts]);
+  // 按需化后 collection 下的商品 id 改由服务端查询；选中的 collection 变化时拉取一次用于展示匹配数。
+  const [pendingCollectionMatchedIds, setPendingCollectionMatchedIds] = useState<string[]>([]);
+  const [pendingCollectionMatchLoading, setPendingCollectionMatchLoading] = useState(false);
+  useEffect(() => {
+    if (pendingCollectionIds.length === 0 || !onExpandCollections) {
+      setPendingCollectionMatchedIds([]);
+      setPendingCollectionMatchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPendingCollectionMatchLoading(true);
+    onExpandCollections(pendingCollectionIds)
+      .then((ids) => {
+        if (!cancelled) setPendingCollectionMatchedIds(ids);
+      })
+      .catch(() => {
+        if (!cancelled) setPendingCollectionMatchedIds([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPendingCollectionMatchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingCollectionIds, onExpandCollections]);
+  const pendingCollectionMatchedProductCount = pendingCollectionMatchedIds.length;
   const areStringArraysEqual = (left: string[], right: string[]) =>
     left.length === right.length && left.every((value, index) => value === right[index]);
   const normalizeDifferentProductsRuleToSharedPool = (
@@ -1691,31 +1706,57 @@ export function CreateNewOffer({
       setTriggerSelection(meta);
     }
   };
-  const handleSelectAllTriggerProducts = () => {
-    if (allStoreProductIds.length === 0) {
+  // 全量商品按需加载并缓存（select-all / invert / exclude 共用，避免重复扫店）。
+  const allProductsCacheRef = useRef<Product[] | null>(null);
+  const mapStoreProductsToDraftProducts = (products: Product[]) =>
+    products.map((product) => ({
+      id: String(product.id),
+      title: product.name ?? "Unknown product",
+      image: product.image ?? "https://via.placeholder.com/60",
+      price: product.price ?? "€0.00",
+      variantsCount: Array.isArray(product.variants) ? product.variants.length : 1,
+      hasSubscription: product.hasSubscription === true,
+    }));
+  const ensureAllProducts = async (): Promise<Product[]> => {
+    if (allProductsCacheRef.current) return allProductsCacheRef.current;
+    if (!onLoadAllProducts) return [];
+    try {
+      const products = await onLoadAllProducts();
+      allProductsCacheRef.current = products;
+      return products;
+    } catch {
+      return [];
+    }
+  };
+  const handleSelectAllTriggerProducts = async () => {
+    const products = await ensureAllProducts();
+    if (products.length === 0) {
       message.warning("Product list is still loading. Opening the product picker instead.");
       void openStepTwoTriggerProductPicker(undefined, {
         mode: "custom",
       });
       return;
     }
-    applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(allStoreProductIds));
+    applyStepTwoTriggerProducts(mapStoreProductsToDraftProducts(products));
     setTriggerSelection({ mode: "all" });
   };
   const handleExcludeTriggerProducts = async () => {
-    if (allStoreProductIds.length === 0) {
+    const products = await ensureAllProducts();
+    if (products.length === 0) {
       message.warning("Product list is still loading. Opening the product picker instead.");
       await openStepTwoTriggerProductPicker(undefined, {
         mode: "custom",
       });
       return;
     }
-    await openStepTwoTriggerProductPicker(allStoreProductIds, {
-      mode: "exclude",
-    });
+    await openStepTwoTriggerProductPicker(
+      products.map((product) => String(product.id)),
+      { mode: "exclude" },
+    );
   };
-  const handleInvertTriggerProducts = () => {
-    if (allStoreProductIds.length === 0) {
+  const handleInvertTriggerProducts = async () => {
+    const products = await ensureAllProducts();
+    if (products.length === 0) {
       message.warning("Product list is still loading. Opening the product picker instead.");
       void openStepTwoTriggerProductPicker(undefined, {
         mode: "custom",
@@ -1723,8 +1764,8 @@ export function CreateNewOffer({
       return;
     }
     const selectedIdSet = new Set(selectedProductsData.map((product) => String(product.id)));
-    const invertedIds = allStoreProductIds.filter((id) => !selectedIdSet.has(id));
-    applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(invertedIds));
+    const inverted = products.filter((product) => !selectedIdSet.has(String(product.id)));
+    applyStepTwoTriggerProducts(mapStoreProductsToDraftProducts(inverted));
     setTriggerSelection({ mode: "inverse" });
   };
   const handleSelectTriggerProductsByCollection = () => {
@@ -1735,24 +1776,21 @@ export function CreateNewOffer({
     setPendingCollectionIds([]);
     setCollectionSelectionModalOpen(true);
   };
-  const confirmTriggerProductsByCollection = () => {
+  const confirmTriggerProductsByCollection = async () => {
     if (pendingCollectionIds.length === 0) {
       message.warning("Select at least one collection first.");
       return;
     }
-    const collectionIdSet = new Set(pendingCollectionIds);
-    const matchedProductIds = Array.from(
-      new Set(
-        storeProducts
-          .filter((product) =>
-            (product.collections || []).some((collection) =>
-              collectionIdSet.has(String(collection.id || "")),
-            ),
-          )
-          .map((product) => String(product.id || ""))
-          .filter(Boolean),
-      ),
-    );
+    // 已选 collection 的展开 id 通常已被上面的 effect 拉取缓存；若尚未就绪则现拉一次（权威）。
+    const collectionIdsForConfirm = pendingCollectionIds;
+    let matchedProductIds = pendingCollectionMatchedIds;
+    if (matchedProductIds.length === 0 && onExpandCollections) {
+      try {
+        matchedProductIds = await onExpandCollections(collectionIdsForConfirm);
+      } catch {
+        matchedProductIds = [];
+      }
+    }
     if (matchedProductIds.length === 0) {
       message.warning("No products were found in the selected collections.");
       return;
@@ -1762,7 +1800,7 @@ export function CreateNewOffer({
     window.setTimeout(() => {
       void openStepTwoTriggerProductPicker(matchedProductIds, {
         mode: "collection",
-        collectionIds: pendingCollectionIds,
+        collectionIds: collectionIdsForConfirm,
       });
     }, 0);
   };
@@ -3602,6 +3640,7 @@ export function CreateNewOffer({
           setPendingCollectionIds([]);
         }}
         onOk={confirmTriggerProductsByCollection}
+        confirmLoading={pendingCollectionMatchLoading}
       >
         <div className="space-y-3">
           <div className="text-[13px] text-[#5c6166]">
@@ -3611,10 +3650,19 @@ export function CreateNewOffer({
           </div>
           {pendingCollectionIds.length > 0 ? (
             <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-              {pendingCollectionIds.length} collection
-              {pendingCollectionIds.length === 1 ? "" : "s"} currently match{" "}
-              {pendingCollectionMatchedProductCount} product
-              {pendingCollectionMatchedProductCount === 1 ? "" : "s"} before refinement.
+              {pendingCollectionMatchLoading ? (
+                <>
+                  Counting products in {pendingCollectionIds.length} collection
+                  {pendingCollectionIds.length === 1 ? "" : "s"}…
+                </>
+              ) : (
+                <>
+                  {pendingCollectionIds.length} collection
+                  {pendingCollectionIds.length === 1 ? "" : "s"} currently match{" "}
+                  {pendingCollectionMatchedProductCount} product
+                  {pendingCollectionMatchedProductCount === 1 ? "" : "s"} before refinement.
+                </>
+              )}
             </div>
           ) : null}
           <label className="block text-[13px] font-medium text-[#1c1f23]">
@@ -3920,7 +3968,7 @@ export function CreateNewOffer({
                 draft={campaignDraft}
                 templateOfferType={offerType}
                 actions={campaignDraftActions}
-                totalStoreProductsCount={allStoreProductIds.length}
+                totalStoreProductsCount={totalStoreProductCount}
                 activeTriggerSelectionMode={triggerSelection?.mode ?? null}
                 activeTriggerSelectionSummary={triggerSelectionSummary}
                 activeTriggerSelectionDetails={triggerSelectionDetails}
