@@ -38,6 +38,10 @@ interface DashboardPageProps {
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
   storeProducts?: IndexLoaderData["storeProducts"];
+  storeCollections?: Array<{ id: string; title: string }>;
+  totalStoreProductCount?: number;
+  onExpandCollections?: (collectionIds: string[]) => Promise<string[]>;
+  onLoadAllProducts?: () => Promise<NonNullable<IndexLoaderData["storeProducts"]>>;
   markets?: IndexLoaderData["markets"];
   shop: string;
   themeEditorStoreId: string;
@@ -136,6 +140,10 @@ export function DashboardPage({
   offers,
   offersLoading = false,
   storeProducts = [],
+  storeCollections = [],
+  totalStoreProductCount = 0,
+  onExpandCollections,
+  onLoadAllProducts,
   markets = [],
   shop,
   themeEditorStoreId,
@@ -486,6 +494,10 @@ export function DashboardPage({
           onBack={() => setShowCreateOffer(false)}
           initialOffer={editingOffer}
           storeProducts={storeProducts}
+          storeCollections={storeCollections}
+          totalStoreProductCount={totalStoreProductCount}
+          onExpandCollections={onExpandCollections}
+          onLoadAllProducts={onLoadAllProducts}
           markets={markets}
           ianaTimezone={ianaTimezone}
           existingOffers={(offers ?? []).map((o) => ({

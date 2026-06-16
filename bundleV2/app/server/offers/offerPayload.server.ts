@@ -16,7 +16,7 @@ import {
   trimSelectedProductsJsonForFunction,
 } from "../../utils/offerParsing";
 import type { FunctionDiscountClass } from "../../utils/offerParsing";
-import { fetchStoreProducts } from "../shopify/products.server";
+import { fetchProductsByIds } from "../shopify/products.server";
 
 type AdminType = {
   graphql: (
@@ -481,7 +481,7 @@ export async function buildStorefrontOffersStructured(
 
   const storeProducts =
     storefrontCatalogProductIds.length > 0
-      ? await fetchStoreProducts(admin, storefrontCatalogProductIds)
+      ? await fetchProductsByIds(admin, storefrontCatalogProductIds)
       : [];
   const storeProductMap = new Map(storeProducts.map((p) => [String(p.id || ""), p]));
 

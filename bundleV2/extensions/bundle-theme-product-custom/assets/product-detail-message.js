@@ -4404,21 +4404,35 @@ function waitForThemeCartRefresh(baselineCount, timeoutMs = 6000) {
   });
 }
 
-async function submitViaNativeThemeCart(offer, quantity, options) {
-  // 优先走主题原生表单加购。提交成功即认定主题负责本次加购：
-  //   - 不再用 cart.js 轮询确认（加购瞬间各 app 抢 cart.js，限流 429 时确认必失败，
-  //     旧逻辑会误判“主题没加成”→ 再走 JSON 接口重复加购，造成双倍加购隐患）；
-  //   - 同时少发 2 次 cart.js（baseline + 复查），减轻我们对 429 风暴的贡献。
-  const nativeSubmitted = submitBundleFormFallback();
-  if (nativeSubmitted) {
-    // 仅等 UI 刷新信号（drawer 打开 / cart 事件），不重复加购。
-    await waitForThemeCartRefresh(null);
-    return true;
+async function tryRefreshCartAfterNativeSubmit() {
+  // 原生表单提交后 theme 应已更新 cart DOM。此处只做两件事：
+  // 1) 派发 cart 事件（通知其他 app/脚本）；
+  // 2) 打开购物车抽屉（部分主题不自动打开）。
+  // 刻意不调 fetchFullCartJson() → 避免叠加 /cart.json 429 限流。
+  try {
+    // 派发空 detail 事件 — 其他脚本可自行决定是否拉取 cart 数据
+    dispatchCartUpdateEvents({});
+    // 抽屉打开时会由 theme 自身机制加载最新购物车数据
+    tryOpenThemeCartDrawer();
+  } catch {
+    // 静默失败
   }
-  // 页面没有可用的原生表单时，才用 JSON 接口兜底加购。
+}
+
+async function submitViaNativeThemeCart(offer, quantity, options) {
+  // 先用我们自己的 AJAX 路径加购：拿到完整 cart/add.js 响应后由
+  // presentThemeCartAddSuccess 直接渲染购物车 UI，避免依赖主题 product-form。
+  // 只在 AJAX 失败（网络错误 / 429 等）时回退到原生表单提交。
   const addResponse = await performSingleVariantBundleCartAdd(offer, quantity, options);
   if (addResponse) {
     await finishSuccessfulBundleCartAdd(addResponse);
+    return true;
+  }
+  // AJAX 加购失败 → 回退到原生表单提交。
+  const nativeSubmitted = submitBundleFormFallback();
+  if (nativeSubmitted) {
+    await waitForThemeCartRefresh(null);
+    await tryRefreshCartAfterNativeSubmit();
     return true;
   }
   return false;

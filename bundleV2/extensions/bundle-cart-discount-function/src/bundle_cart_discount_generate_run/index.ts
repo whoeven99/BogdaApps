@@ -300,6 +300,18 @@ export function bundleCartDiscountGenerateRun(
       compiledOffer.offer.offerType === "free-gift" &&
       offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
+
+  // ORDER-only 调用且无任何 ORDER 级 offer → 跳过全部运算
+  if (!hasProductDiscountClass && hasOrderDiscountClass && freeGiftOffers.length === 0) {
+    const hasOrderClassRules = eligibleOffers.some(
+      (o) => o.standardRules.some((r) => r.discountClass === "order"),
+    );
+    if (!hasOrderClassRules) {
+      ENABLE_FUNCTION_LOGS && log("early_exit", { reason: "order_class_no_offers" });
+      return { operations: [] };
+    }
+  }
+
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
   const regularOffers = eligibleOffers.filter(
     (compiledOffer) =>

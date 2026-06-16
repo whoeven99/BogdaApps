@@ -22,6 +22,19 @@ const DELIVERY_DISCOUNT_FUNCTION_TITLE = "Bundle Delivery Discount Function";
 const DELIVERY_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Free Shipping";
 const CART_LINES_DISCOUNT_METAFIELD_NAMESPACE = "$app:ciwi_bundle";
 const CART_LINES_DISCOUNT_METAFIELD_KEY = "offers";
+
+/**
+ * 折扣同步链路的信息性日志默认静默；排查时设 env `DISCOUNT_SYNC_DEBUG=1`（或 true）开启。
+ * 真正的失败仍用 console.warn/error 照常输出，不受此开关影响。
+ */
+const DISCOUNT_SYNC_DEBUG = (() => {
+  const raw = sanitizeEnvLikeValue(process.env.DISCOUNT_SYNC_DEBUG)?.trim().toLowerCase();
+  return raw === "1" || raw === "true";
+})();
+
+function discountLog(...args: unknown[]): void {
+  if (DISCOUNT_SYNC_DEBUG) console.log(...args);
+}
 type AutomaticAppDiscountCombinesWith = {
   orderDiscounts: boolean;
   productDiscounts: boolean;
@@ -198,12 +211,12 @@ function collectAutomaticDiscountSyncTargets(params: {
 }
 
 async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null> {
-  console.log("[discount][function-id] start querying shopifyFunctions");
+  discountLog("[discount][function-id] start querying shopifyFunctions");
   const functionId = await resolveShopifyDiscountFunctionIdByExactTitle(
     admin,
     CART_LINES_DISCOUNT_FUNCTION_TITLE,
   );
-  console.log("[discount][function-id] resolve result", {
+  discountLog("[discount][function-id] resolve result", {
     functionId,
     found: Boolean(functionId),
     targetTitle: CART_LINES_DISCOUNT_FUNCTION_TITLE,
@@ -391,7 +404,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
   metafieldValue?: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    console.log("[discount][sync-meta] start", {
+    discountLog("[discount][sync-meta] start", {
       payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
       appNamespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
     });
@@ -402,7 +415,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       discountFunctions,
       DELIVERY_DISCOUNT_FUNCTION_TITLE,
     );
-    console.log("[discount][sync-meta] resolved function ids", {
+    discountLog("[discount][sync-meta] resolved function ids", {
       cartLinesFunctionId: functionId,
       shippingFunctionId,
     });
@@ -440,7 +453,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
           "No automatic app discount owner found for bundle cart lines or delivery discount functions",
       };
     }
-    console.log("[discount][sync-meta] matched discount targets", {
+    discountLog("[discount][sync-meta] matched discount targets", {
       targets: syncTargets.map((target) => ({
         nodeId: target.nodeId,
         title: target.title,
@@ -479,7 +492,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       })),
     );
 
-    console.log("[discount][sync-meta] resolved sync targets", {
+    discountLog("[discount][sync-meta] resolved sync targets", {
       targetCount: syncTargets.length,
       ownerCount: ownerAssignments.length,
       shardKeys: OFFER_SHARD_KEYS,
@@ -495,7 +508,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     // 先用 discountAutomaticAppUpdate 写入函数 owner 的 metafields（与函数运行时 owner 最稳定对齐）
     for (const target of syncTargets) {
       const shards = shardsForClass(target.discountClass);
-      console.log("[discount][sync-meta] updating automatic app discount metafields", {
+      discountLog("[discount][sync-meta] updating automatic app discount metafields", {
         discountNodeId: target.nodeId,
         discountClass: target.discountClass,
         shardBytes: shards.map((s) => s.length),
@@ -546,14 +559,14 @@ export async function syncCartLinesAutomaticDiscountMetafield(
           userErrors: updateUserErrors,
         });
       } else {
-        console.log("[discount][sync-meta] discountAutomaticAppUpdate success", {
+        discountLog("[discount][sync-meta] discountAutomaticAppUpdate success", {
           discountNodeId: target.nodeId,
           discountClass: target.discountClass,
         });
       }
     }
 
-    console.log("[discount][sync-meta] calling metafieldsSet", {
+    discountLog("[discount][sync-meta] calling metafieldsSet", {
       mutationTargets: ownerAssignments.length * 2,
     });
     const metafieldsSetResponse = await admin.graphql(
@@ -607,7 +620,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       };
     }
 
-    console.log("[discount][sync-meta] success", {
+    discountLog("[discount][sync-meta] success", {
       ownerCount: ownerAssignments.length,
       payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
     });
@@ -620,7 +633,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
 }
 
 export async function ensureCartLinesAutomaticDiscount(admin: any) {
-  console.log("[discount][ensure-auto] start ensure automatic discount");
+  discountLog("[discount][ensure-auto] start ensure automatic discount");
   const functionId = await getCartLinesDiscountFunctionId(admin);
   if (!functionId) {
     console.warn(
@@ -632,7 +645,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
 
   const discountNodes = await queryExistingAutomaticDiscountNodes(admin);
   const expectedConfigs = getExpectedCartLinesAutomaticDiscountConfigs();
-  console.log("[discount][ensure-auto] active automatic discounts loaded", {
+  discountLog("[discount][ensure-auto] active automatic discounts loaded", {
     nodeCount: discountNodes.length,
     functionId,
     expectedTitles: expectedConfigs.map((config) => config.title),
@@ -657,7 +670,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
     })
     .filter(Boolean);
 
-  console.log("[discount][ensure-auto] active cart discount nodes for function", {
+  discountLog("[discount][ensure-auto] active cart discount nodes for function", {
     functionId,
     count: existingCartDiscounts.length,
     discounts: existingCartDiscounts,
@@ -694,7 +707,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
         currentCombinesWith.productDiscounts !== config.combinesWith.productDiscounts ||
         currentCombinesWith.shippingDiscounts !== config.combinesWith.shippingDiscounts;
 
-      console.log("[discount] cart automatic app discount resolved", {
+      discountLog("[discount] cart automatic app discount resolved", {
         key: config.key,
         functionId,
         discountNodeId: targetDiscount.nodeId,
@@ -720,7 +733,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
             { key: config.key, errors: result.errors },
           );
         } else {
-          console.log("[discount] cart automatic app discount config updated", {
+          discountLog("[discount] cart automatic app discount config updated", {
             key: config.key,
             functionId,
             discountNodeId: targetDiscount.nodeId,
@@ -733,7 +746,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
       continue;
     }
 
-    console.log("[discount][ensure-auto] missing cart discount node, creating new one", {
+    discountLog("[discount][ensure-auto] missing cart discount node, creating new one", {
       key: config.key,
       functionId,
       title: config.title,
@@ -762,7 +775,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
       });
       continue;
     }
-    console.log("[discount] cart automatic app discount created", {
+    discountLog("[discount] cart automatic app discount created", {
       key: config.key,
       title: result.created?.title,
       status: result.created?.status,
@@ -818,7 +831,7 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
       existingCombinesWith.shippingDiscounts !== expectedCombinesWith.shippingDiscounts;
 
     if (!needUpdate) {
-      console.log("[discount-shipping] automatic app discount already exists", { functionId: targetFnId });
+      discountLog("[discount-shipping] automatic app discount already exists", { functionId: targetFnId });
       return;
     }
 
@@ -829,7 +842,7 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
       console.error("[discount-shipping] failed to update automatic app discount", result.errors);
       return;
     }
-    console.log("[discount-shipping] automatic app discount combinesWith updated", {
+    discountLog("[discount-shipping] automatic app discount combinesWith updated", {
       functionId: targetFnId,
       combinesWith: expectedCombinesWith,
     });
@@ -847,7 +860,7 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
     console.error("[discount-shipping] failed to create automatic app discount", result.errors);
     return;
   }
-  console.log("[discount-shipping] automatic app discount created", {
+  discountLog("[discount-shipping] automatic app discount created", {
     title: result.created?.title,
     status: result.created?.status,
     functionId: result.created?.functionId,
