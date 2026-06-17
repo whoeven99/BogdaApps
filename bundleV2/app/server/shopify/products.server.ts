@@ -19,6 +19,9 @@ type AdminProductNode = {
   title?: string;
   handle?: string;
   featuredImage?: { url?: string | null } | null;
+  images?: {
+    edges?: Array<{ node?: { url?: string | null } | null }>;
+  } | null;
   collections?: {
     edges?: Array<{ node?: { id?: string | null; title?: string | null } | null }>;
   } | null;
@@ -46,6 +49,16 @@ type AdminType = {
 
 const MAX_PRODUCT_PAGES = 10;
 
+/**
+ * 本地内联 SVG 占位图：仅在商品确实没有任何图片时使用。
+ * 避免依赖外部 via.placeholder.com（常被墙/服务不稳定，会渲染成空白裂图）。
+ */
+const PRODUCT_IMAGE_PLACEHOLDER =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60"><rect width="60" height="60" fill="#f1f1f1"/></svg>',
+  );
+
 function mapAdminProductNodeToStoreProductItem(node: AdminProductNode): StoreProductItem | null {
   if (!node?.id || !node.title) return null;
 
@@ -56,7 +69,12 @@ function mapAdminProductNodeToStoreProductItem(node: AdminProductNode): StorePro
     price: node.variants?.edges?.[0]?.node?.price
       ? `$${node.variants.edges[0].node.price}`
       : "$0.00",
-    image: node.featuredImage?.url || "https://via.placeholder.com/60",
+    // featuredImage 可能为空（商品图只挂在媒体/变体上），用 images(first:1) 兜底，
+    // 都没有才退回本地占位图，确保编辑回填时缩略图能正常显示。
+    image:
+      node.featuredImage?.url ||
+      node.images?.edges?.[0]?.node?.url ||
+      PRODUCT_IMAGE_PLACEHOLDER,
     collections:
       node.collections?.edges
         ?.map((edge) => edge?.node)
@@ -88,6 +106,7 @@ const PRODUCT_LIST_QUERY = `#graphql
         node {
           id title handle
           featuredImage { url }
+          images(first: 1) { edges { node { url } } }
           collections(first: 20) { edges { node { id title } } }
           variants(first: 50) {
             edges {
@@ -110,6 +129,7 @@ const PRODUCTS_BY_IDS_QUERY = `#graphql
       ... on Product {
         id title handle
         featuredImage { url }
+        images(first: 1) { edges { node { url } } }
         collections(first: 20) { edges { node { id title } } }
         variants(first: 50) {
           edges {

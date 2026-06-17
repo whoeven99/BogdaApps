@@ -20,6 +20,8 @@ import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import { OfferTypeSelection } from "../component/CreateNewOffer/OfferTypeSelection";
 import { sanitizeEnvLikeValue } from "../../utils/env";
 import { fetchThemeEditorTargets, getCurrentThemeExtensionEnabled } from "../../server/shopify/theme.server";
+import { useStripRouterSearchParams } from "../../hooks/useStripRouterSearchParams";
+import { buildAppSearchString } from "../../utils/appSearchParams";
 import { getCachedShopOffers } from "../../shopOffersCache.server";
 import { syncShopOffersMetafieldIfStale } from "../../server/offers/offerSync.server";
 import { handleLoadOffers } from "./actions/loadOffers.server";
@@ -223,6 +225,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 type HomeTabKey = "dashboard" | "offers" | "analytics";
 
 export default function Index() {
+  useStripRouterSearchParams();
+
   const {
     markets,
     themeTargets,
@@ -308,9 +312,7 @@ export default function Index() {
     setShowCreateOffer(false);
     setCreateOfferType(null);
     setEditingOfferId(null);
-    if (offersFetcher.state === "idle") {
-      offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
-    }
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
   };
 
   // Handle toast and post-save navigation
@@ -350,7 +352,7 @@ export default function Index() {
       if (toast) {
         const next = new URLSearchParams(searchParams);
         next.delete("toast");
-        navigate({ search: next.toString() ? `?${next.toString()}` : "" }, { replace: true });
+        navigate({ search: buildAppSearchString(next) }, { replace: true });
       }
       setToastMessage(null);
     }, 3000);
@@ -456,7 +458,6 @@ export default function Index() {
               ianaTimezone={ianaTimezone}
               themeExtensionEnabled={themeExtensionEnabled}
               themeExtensionDetectionFailed={themeExtensionDetectionFailed}
-              themeExtensionError={themeExtensionDebug?.error}
               onViewAllOffers={() => setActiveTab("offers")}
               onViewAnalytics={(offerId) => {
                 setAnalyticsOfferId(offerId ?? null);

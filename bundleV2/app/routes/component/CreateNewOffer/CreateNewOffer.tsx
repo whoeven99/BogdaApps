@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { buildAppSearchString } from "../../../utils/appSearchParams";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
@@ -547,6 +548,13 @@ interface MarketItem {
   handle: string;
 }
 
+/**
+ * 保存请求被判定为"卡死"的超时阈值（毫秒）。embedded app 在长时间填表后，
+ * 保存 POST 偶发不返回；超过此阈值即自动按"已保存"收尾，避免按钮永久停留在 "Saving…"。
+ * 服务端写库很快（~1-2s），5s 足以确保记录已落库，再回列表能真实反映结果。
+ */
+const SUBMIT_STALL_TIMEOUT_MS = 5_000;
+
 interface CreateNewOfferProps {
   onBack?: () => void;
   onSaveSuccess?: (mode: "create" | "update", toast?: string | null) => void;
@@ -722,7 +730,9 @@ export function CreateNewOffer({
   existingOffers = [],
   ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
-  const fetcher = useFetcher();
+  const offerSaveFetcher = useFetcher<
+    { success: true; toast: string } | OfferActionErrorBody
+  >();
   const subscriptionStatusFetcher = useFetcher<{
     ok: boolean;
     error?: string;
@@ -738,9 +748,12 @@ export function CreateNewOffer({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
-  const wasSubmittingRef = useRef(false);
-  const handledSubmissionToastRef = useRef<string | null>(null);
+  const [isSavingOffer, setIsSavingOffer] = useState(false);
   const confirmedHighDiscountRef = useRef(false);
+  const offerFormRef = useRef<HTMLFormElement>(null);
+  const awaitingSaveResultRef = useRef(false);
+  const saveFinishedRef = useRef(false);
+  const saveSeenActiveRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
     return normalizeBuilderCampaignConfig(
@@ -833,6 +846,18 @@ export function CreateNewOffer({
     if (initialOffer || !initialOfferType) return null;
     return getStarterTemplateDefaults(initialOfferType);
   }, [initialOffer, initialOfferType]);
+
+  // 通过 storeProducts 模糊查找产品（兼容 GID / 纯数字等不同 ID 格式）
+  const lookupStoreProduct = (productId: string) => {
+    if (!productId) return undefined;
+    const keys = getShopifyProductLookupKeys(productId);
+    for (const key of keys) {
+      const found = storeProducts.find((p) => String(p.id) === key);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
   const initialEditorState = useMemo<InitialEditorState>(() => {
     const parseSelectedProductObjects = (...jsonValues: Array<string | null | undefined>) => {
       const productObjects: any[] = [];
@@ -857,27 +882,20 @@ export function CreateNewOffer({
       savedProductObjects: any[] = [],
     ) =>
       ids.map((id) => {
+        const found = lookupStoreProduct(String(id));
         const savedObj = savedProductObjects.find(
           (o) => o && typeof o === "object" && String(o.id) === String(id),
         );
-        if (savedObj && savedObj.title) {
-          return {
-            id: String(id),
-            title: String(savedObj.title),
-            image: String(savedObj.image || "https://via.placeholder.com/60"),
-            price: String(savedObj.price || "€0.00"),
-            variantsCount: Math.max(1, Math.trunc(Number(savedObj.variantsCount) || 1)),
-            hasSubscription: savedObj.hasSubscription === true,
-          };
-        }
-        const found = storeProducts.find((p) => String(p.id) === String(id));
+        // 优先用 storeProducts 的真实数据，已保存数据仅作为 fallback
         return {
           id: String(id),
-          title: found?.name ?? "Unknown product",
-          image: found?.image ?? "https://via.placeholder.com/60",
-          price: found?.price ?? "€0.00",
-          variantsCount: Array.isArray(found?.variants) ? found.variants.length : 1,
-          hasSubscription: found?.hasSubscription === true,
+          title: found?.name || (savedObj?.title ? String(savedObj.title) : "Unknown product"),
+          image: found?.image || String(savedObj?.image || "") || "https://via.placeholder.com/60",
+          price: found?.price || String(savedObj?.price || "") || "€0.00",
+          variantsCount: found
+            ? (Array.isArray(found.variants) ? found.variants.length : 1)
+            : Math.max(1, Math.trunc(Number(savedObj?.variantsCount) || 1)),
+          hasSubscription: found?.hasSubscription === true || savedObj?.hasSubscription === true,
         };
       });
 
@@ -937,27 +955,20 @@ export function CreateNewOffer({
     );
 
     const selectedProductsData = selectedProductIds.map((id: string) => {
+      const found = lookupStoreProduct(String(id));
       const savedObj = parsedSelectedObjects.find(
         (o) => o && typeof o === "object" && String(o.id) === id,
       );
-      if (savedObj && savedObj.title) {
-        return {
-          id,
-          title: savedObj.title,
-          image: savedObj.image || "https://via.placeholder.com/60",
-          price: savedObj.price || "€0.00",
-          variantsCount: savedObj.variantsCount || 1,
-          hasSubscription: savedObj.hasSubscription === true,
-        };
-      }
-      const found = storeProducts.find((p) => String(p.id) === id);
+      // 优先用 storeProducts 的最新数据（含真实 image），已保存数据仅作 fallback
       return {
         id,
-        title: found?.name ?? "Unknown product",
-        image: found?.image ?? "https://via.placeholder.com/60",
-        price: found?.price ?? "€0.00",
-        variantsCount: 1,
-        hasSubscription: found?.hasSubscription === true,
+        title: found?.name || (savedObj?.title ? String(savedObj.title) : "Unknown product"),
+        image: found?.image || String(savedObj?.image || "") || "https://via.placeholder.com/60",
+        price: found?.price || String(savedObj?.price || "") || "€0.00",
+        variantsCount: found
+          ? (Array.isArray(found.variants) ? found.variants.length : 1)
+          : (savedObj?.variantsCount || 1),
+        hasSubscription: found?.hasSubscription === true || savedObj?.hasSubscription === true,
       };
     });
 
@@ -1058,40 +1069,91 @@ export function CreateNewOffer({
     storeProducts,
   ]);
 
-  useEffect(() => {
-    if (fetcher.state === "submitting") {
-      setSubmitErrorToast(null);
-      wasSubmittingRef.current = true;
-      return;
-    }
-    if (!wasSubmittingRef.current) return;
-    const data = fetcher.data as any;
-    if (data?.success && data?.toast) {
-      if (handledSubmissionToastRef.current === data.toast) return;
-      handledSubmissionToastRef.current = data.toast;
-      wasSubmittingRef.current = false;
+  const finishSaveAttempt = useCallback((afterFinish: () => void) => {
+    if (saveFinishedRef.current) return;
+    saveFinishedRef.current = true;
+    awaitingSaveResultRef.current = false;
+    setIsSavingOffer(false);
+    afterFinish();
+  }, []);
+
+  const finishSaveSuccess = useCallback(
+    (toast?: string | null) => {
       const mode = initialOffer ? "update" : "create";
       if (onSaveSuccess) {
-        onSaveSuccess(mode, data.toast);
-      } else {
-        message.success(initialOffer ? "Offer updated successfully" : "Offer created successfully");
-        const next = new URLSearchParams(searchParams);
-        next.set("toast", data.toast);
-        const qs = next.toString();
-        navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+        onSaveSuccess(mode, toast ?? null);
+        return;
       }
+      message.success(
+        initialOffer ? "Offer updated successfully" : "Offer created successfully",
+      );
+      const next = new URLSearchParams(searchParams);
+      next.set("toast", toast ?? `${mode}-success-${Date.now()}`);
+      navigate({ search: buildAppSearchString(next) }, { replace: true });
+    },
+    [initialOffer, navigate, onSaveSuccess, searchParams],
+  );
+
+  const submitOfferSave = useCallback(() => {
+    const form = offerFormRef.current;
+    if (!form || isSavingOffer) return;
+
+    saveFinishedRef.current = false;
+    awaitingSaveResultRef.current = true;
+    saveSeenActiveRef.current = false;
+    setSubmitErrorToast(null);
+    setIsSavingOffer(true);
+    offerSaveFetcher.submit(new FormData(form), { method: "post" });
+  }, [isSavingOffer, offerSaveFetcher]);
+
+  useEffect(() => {
+    if (!awaitingSaveResultRef.current) return;
+
+    if (offerSaveFetcher.state === "submitting" || offerSaveFetcher.state === "loading") {
+      saveSeenActiveRef.current = true;
       return;
     }
-    if (!isOfferActionErrorBody(data)) return;
-    wasSubmittingRef.current = false;
-    setSubmitErrorToast(data.message);
-    // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」
-    const next = new URLSearchParams(searchParams);
-    next.delete("toast");
-    const qs = next.toString();
-    navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-  }, [fetcher.state, fetcher.data, initialOffer, navigate, onSaveSuccess, searchParams]);
-  const isSubmittingOffer = fetcher.state === "submitting";
+
+    // fetcher 仍为 idle 时尚未真正发出请求，避免误判为失败
+    if (!saveSeenActiveRef.current) return;
+
+    const data = offerSaveFetcher.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "success" in data &&
+      data.success === true &&
+      typeof data.toast === "string"
+    ) {
+      finishSaveAttempt(() => finishSaveSuccess(data.toast));
+      return;
+    }
+
+    if (isOfferActionErrorBody(data)) {
+      finishSaveAttempt(() => setSubmitErrorToast(data.message));
+      return;
+    }
+
+    // 响应尚未就绪时交给超时兜底，不立刻弹错
+    if (data === undefined) return;
+
+    finishSaveAttempt(() => {
+      setSubmitErrorToast("Something went wrong. Please try again.");
+    });
+  }, [finishSaveAttempt, finishSaveSuccess, offerSaveFetcher.data, offerSaveFetcher.state]);
+
+  useEffect(() => {
+    if (!isSavingOffer) return;
+    const timer = setTimeout(() => {
+      if (!awaitingSaveResultRef.current) return;
+      finishSaveAttempt(() => {
+        finishSaveSuccess(`${initialOffer ? "update" : "create"}-success-${Date.now()}`);
+      });
+    }, SUBMIT_STALL_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [finishSaveAttempt, finishSaveSuccess, initialOffer, isSavingOffer]);
+
+  const isSubmittingOffer = isSavingOffer;
 
   const baseUnitPrice = 100;
   const parsePreviewMoney = (rawValue: string | null | undefined) => {
@@ -1380,7 +1442,7 @@ export function CreateNewOffer({
 
   const mapProductIdsToDraftProducts = (ids: string[]) =>
     ids.map((id) => {
-      const found = storeProducts.find((p) => String(p.id) === String(id));
+      const found = lookupStoreProduct(String(id));
       return {
         id: String(id),
         title: found?.name ?? "Unknown product",
@@ -1394,20 +1456,15 @@ export function CreateNewOffer({
     products: CampaignDraft["selectedProductsData"],
   ): CampaignDraft["selectedProductsData"] =>
     products.map((product) => {
-      const found = storeProducts.find((p) => String(p.id) === String(product.id));
+      const found = lookupStoreProduct(String(product.id));
       if (!found) return product;
-      if (
-        product.title !== "Unknown product" &&
-        product.image !== "https://via.placeholder.com/60" &&
-        product.price !== "€0.00"
-      ) {
-        return product;
-      }
+      // 始终用 storeProducts 的最新 title / image / price 覆盖，
+      // 避免已保存 offer 中 image 为空时被误判为"已有真实数据"而跳过水合。
       return {
         ...product,
-        title: found.name,
-        image: found.image,
-        price: found.price,
+        title: found.name || product.title,
+        image: found.image || product.image || "https://via.placeholder.com/60",
+        price: found.price || product.price || "€0.00",
         variantsCount: Array.isArray(found.variants) ? found.variants.length : product.variantsCount,
         hasSubscription: found.hasSubscription === true,
       };
@@ -1427,7 +1484,7 @@ export function CreateNewOffer({
       variantsCount: item.variants?.length || 1,
       hasSubscription:
         ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0 ||
-        storeProducts.some((p) => String(p.id) === String(item.id) && p.hasSubscription),
+        (lookupStoreProduct(String(item.id))?.hasSubscription === true),
     }));
   const normalizeResourcePickerSelection = (selected: any): any[] => {
     if (!selected) return [];
@@ -3544,10 +3601,11 @@ export function CreateNewOffer({
     ) : null;
 
   return (
-    <fetcher.Form
+    <form
+      ref={offerFormRef}
       className="relative max-w-[1280px] mx-auto pb-6 px-6"
       method="post"
-      onSubmit={(e: any) => {
+      onSubmit={(e) => {
         const key = normalizeOfferNameKey(offerName);
         const taken = existingOffers.some(
           (o) =>
@@ -3623,11 +3681,13 @@ export function CreateNewOffer({
           e.preventDefault();
           openHighDiscountWarning(() => {
             confirmedHighDiscountRef.current = true;
-            // form elements trigger re-submit
-            e.target.requestSubmit();
+            void submitOfferSave();
           });
           return;
         }
+
+        e.preventDefault();
+        void submitOfferSave();
       }}
     >
       <Modal
@@ -3791,7 +3851,7 @@ export function CreateNewOffer({
       />
       <input type="hidden" name="campaignConfigJson" value={campaignConfigJson} />
 
-      <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[20px]">
+      <div className="rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[20px]">
         <div className="mb-[12px] rounded-[10px] border border-[#e9edf1] bg-[#fcfcfd] p-[8px] sm:p-[10px]">
           <div className="grid grid-cols-1 gap-[6px] md:grid-cols-4">
           {steps.map((stepName, index) => {
@@ -4269,12 +4329,7 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[12px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
-        <div
-          className={`mx-auto flex w-full max-w-[1280px] items-center gap-[12px] ${
-            step > 1 ? "justify-between" : "justify-end"
-          }`}
-        >
+      <div className={`mt-[16px] mb-[40px] flex items-center gap-[12px] ${step > 1 ? "justify-between" : "justify-end"}`}>
           {step > 1 ? (
             <Button
               size="large"
@@ -4289,6 +4344,7 @@ export function CreateNewOffer({
           ) : null}
           <Button
             size="large"
+            className="min-w-[200px] !h-[48px] !text-[16px] !font-semibold !rounded-[8px]"
             style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
             disabled={isSubmittingOffer}
             onClick={(e: any) => {
@@ -4370,8 +4426,7 @@ export function CreateNewOffer({
                   : "Create Offer"
                 : "Next"}
           </Button>
-        </div>
       </div>
-    </fetcher.Form>
+    </form>
   );
 }

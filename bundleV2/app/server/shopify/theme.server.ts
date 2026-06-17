@@ -160,10 +160,15 @@ async function getThemeExtensionEnabledAcrossThemes(
         .filter(Boolean) ?? [];
 
     if (graphqlErrors.length > 0) {
-      debug.error = graphqlErrors
+      const rawError = graphqlErrors
         .map((item) => String(item?.message || "").trim())
         .filter(Boolean)
         .join(" | ");
+      // 如果错误是 Access denied，多半是缺失 read_themes scope，给出可操作的提示
+      const isAccessDenied = /access denied/i.test(rawError);
+      debug.error = isAccessDenied
+        ? "Missing read_themes permission. Make sure the SCOPES environment variable includes read_themes. If this is a deployed app, add SCOPES to the hosting environment and reinstall the app to grant new permissions."
+        : rawError;
       console.error("[theme-extension] graphql errors while scanning themes", {
         errors: graphqlErrors,
         recoveredThemeCount: themeNodes.length,
