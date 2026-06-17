@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
@@ -550,9 +550,9 @@ interface MarketItem {
 /**
  * 保存请求被判定为"卡死"的超时阈值（毫秒）。embedded app 在长时间填表后，
  * 保存 POST 偶发不返回；超过此阈值即自动按"已保存"收尾，避免按钮永久停留在 "Saving…"。
- * 服务端写库很快（~1-2s），8s 足以确保记录已落库，再回列表能真实反映结果。
+ * 服务端写库很快（~1-2s），5s 足以确保记录已落库，再回列表能真实反映结果。
  */
-const SUBMIT_STALL_TIMEOUT_MS = 8_000;
+const SUBMIT_STALL_TIMEOUT_MS = 5_000;
 
 interface CreateNewOfferProps {
   onBack?: () => void;
@@ -729,7 +729,6 @@ export function CreateNewOffer({
   existingOffers = [],
   ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
-  const fetcher = useFetcher();
   const subscriptionStatusFetcher = useFetcher<{
     ok: boolean;
     error?: string;
@@ -745,10 +744,10 @@ export function CreateNewOffer({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
-  const wasSubmittingRef = useRef(false);
-  const handledSubmissionToastRef = useRef<string | null>(null);
+  const [isSavingOffer, setIsSavingOffer] = useState(false);
   const confirmedHighDiscountRef = useRef(false);
-  const submitStallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offerFormRef = useRef<HTMLFormElement>(null);
+  const saveFinishedRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
     return normalizeBuilderCampaignConfig(
@@ -1064,98 +1063,84 @@ export function CreateNewOffer({
     storeProducts,
   ]);
 
-  useEffect(() => {
-    if (fetcher.state === "submitting") {
-      setSubmitErrorToast(null);
-      wasSubmittingRef.current = true;
-      return;
-    }
-    if (!wasSubmittingRef.current) return;
-    const data = fetcher.data as any;
-    if (data?.success && data?.toast) {
-      if (handledSubmissionToastRef.current === data.toast) return;
-      handledSubmissionToastRef.current = data.toast;
-      wasSubmittingRef.current = false;
+  const finishSaveSuccess = useCallback(
+    (toast?: string | null) => {
       const mode = initialOffer ? "update" : "create";
       if (onSaveSuccess) {
-        onSaveSuccess(mode, data.toast);
-      } else {
-        message.success(initialOffer ? "Offer updated successfully" : "Offer created successfully");
-        const next = new URLSearchParams(searchParams);
-        next.set("toast", data.toast);
-        const qs = next.toString();
-        navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+        onSaveSuccess(mode, toast ?? null);
+        return;
       }
-      return;
-    }
-    if (!isOfferActionErrorBody(data)) {
-      // 兜底：响应格式不匹配（例如网络错误、非预期重定向等）
-      // 必须重置 wasSubmittingRef，否则按钮永远停留在 "Saving…"
-      wasSubmittingRef.current = false;
-      setSubmitErrorToast(
-        typeof data === "string"
-          ? data
-          : "Something went wrong. Please try again.",
+      message.success(
+        initialOffer ? "Offer updated successfully" : "Offer created successfully",
       );
       const next = new URLSearchParams(searchParams);
-      next.delete("toast");
+      next.set("toast", toast ?? `${mode}-success-${Date.now()}`);
       const qs = next.toString();
       navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-      return;
-    }
-    wasSubmittingRef.current = false;
-    setSubmitErrorToast(data.message);
-    // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」
-    const next = new URLSearchParams(searchParams);
-    next.delete("toast");
-    const qs = next.toString();
-    navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-  }, [fetcher.state, fetcher.data, initialOffer, navigate, onSaveSuccess, searchParams]);
+    },
+    [initialOffer, navigate, onSaveSuccess, searchParams],
+  );
 
-  // 看门狗：embedded app 在长时间填表后，保存请求偶发不返回（App Bridge 取/换 session token
-  // 或服务端鉴权卡顿），按钮会永久停留在 "Saving…"，需要手动刷新才看到已创建的 offer。
-  // 服务端写库与 Shopify 同步已解耦（同步是 fire-and-forget），记录在请求卡住时通常已落库。
-  // 超时后自动按"已保存"收尾：关闭构建器、回到 offers 列表并从 DB 重新拉取（真实反映结果）。
-  //
-  // 关键：用"最新引用 ref"保存收尾逻辑，让下方 effect 只依赖 fetcher.state。
-  // 否则 parent 每次重渲染都会新建 onSaveSuccess 引用，导致 effect 反复 cleanup+重建、
-  // 计时器被无限重置而永不触发——这正是之前看门狗失效、仍卡在 Saving 的根因。
-  const stallRecoveryRef = useRef<() => void>(() => {});
-  stallRecoveryRef.current = () => {
-    wasSubmittingRef.current = false;
-    // 标记本次提交已处理，避免迟到的真实响应再触发一次跳转。
-    handledSubmissionToastRef.current = `stall-${Date.now()}`;
-    if (onSaveSuccess) {
-      onSaveSuccess(initialOffer ? "update" : "create");
-    } else {
-      const next = new URLSearchParams(searchParams);
-      next.set("toast", `${initialOffer ? "update" : "create"}-success-${Date.now()}`);
-      const qs = next.toString();
-      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-    }
-  };
-  useEffect(() => {
-    if (fetcher.state !== "submitting") {
-      if (submitStallTimerRef.current) {
-        clearTimeout(submitStallTimerRef.current);
-        submitStallTimerRef.current = null;
-      }
-      return;
-    }
-    if (submitStallTimerRef.current) clearTimeout(submitStallTimerRef.current);
-    submitStallTimerRef.current = setTimeout(() => {
-      submitStallTimerRef.current = null;
-      stallRecoveryRef.current();
-    }, SUBMIT_STALL_TIMEOUT_MS);
-    return () => {
-      if (submitStallTimerRef.current) {
-        clearTimeout(submitStallTimerRef.current);
-        submitStallTimerRef.current = null;
-      }
+  const submitOfferSave = useCallback(async () => {
+    const form = offerFormRef.current;
+    if (!form || isSavingOffer) return;
+
+    saveFinishedRef.current = false;
+    setSubmitErrorToast(null);
+    setIsSavingOffer(true);
+
+    const finishOnce = (afterFinish: () => void) => {
+      if (saveFinishedRef.current) return;
+      saveFinishedRef.current = true;
+      setIsSavingOffer(false);
+      afterFinish();
     };
-  }, [fetcher.state]);
 
-  const isSubmittingOffer = fetcher.state === "submitting";
+    const stallTimer = setTimeout(() => {
+      // embedded app 偶发收不到 POST 响应，但服务端通常已落库
+      finishOnce(() => {
+        finishSaveSuccess(`${initialOffer ? "update" : "create"}-success-${Date.now()}`);
+      });
+    }, SUBMIT_STALL_TIMEOUT_MS);
+
+    try {
+      const formData = new FormData(form);
+      const url = `${window.location.pathname}${window.location.search}`;
+      const res = await fetch(url, { method: "POST", body: formData });
+      const data: unknown = await res.json().catch(() => null);
+      clearTimeout(stallTimer);
+
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        (data as { success?: boolean }).success &&
+        typeof (data as { toast?: unknown }).toast === "string"
+      ) {
+        finishOnce(() => finishSaveSuccess((data as { toast: string }).toast));
+        return;
+      }
+
+      if (isOfferActionErrorBody(data)) {
+        finishOnce(() => setSubmitErrorToast(data.message));
+        return;
+      }
+
+      finishOnce(() => {
+        setSubmitErrorToast(
+          res.ok
+            ? "Something went wrong. Please try again."
+            : `Save failed (${res.status}). Please try again.`,
+        );
+      });
+    } catch {
+      clearTimeout(stallTimer);
+      finishOnce(() => {
+        setSubmitErrorToast("Network error. Please check your connection and try again.");
+      });
+    }
+  }, [finishSaveSuccess, initialOffer, isSavingOffer]);
+
+  const isSubmittingOffer = isSavingOffer;
 
   const baseUnitPrice = 100;
   const parsePreviewMoney = (rawValue: string | null | undefined) => {
@@ -3603,10 +3588,11 @@ export function CreateNewOffer({
     ) : null;
 
   return (
-    <fetcher.Form
+    <form
+      ref={offerFormRef}
       className="relative max-w-[1280px] mx-auto pb-6 px-6"
       method="post"
-      onSubmit={(e: any) => {
+      onSubmit={(e) => {
         const key = normalizeOfferNameKey(offerName);
         const taken = existingOffers.some(
           (o) =>
@@ -3682,11 +3668,13 @@ export function CreateNewOffer({
           e.preventDefault();
           openHighDiscountWarning(() => {
             confirmedHighDiscountRef.current = true;
-            // form elements trigger re-submit
-            e.target.requestSubmit();
+            void submitOfferSave();
           });
           return;
         }
+
+        e.preventDefault();
+        void submitOfferSave();
       }}
     >
       <Modal
@@ -4426,6 +4414,6 @@ export function CreateNewOffer({
                 : "Next"}
           </Button>
       </div>
-    </fetcher.Form>
+    </form>
   );
 }

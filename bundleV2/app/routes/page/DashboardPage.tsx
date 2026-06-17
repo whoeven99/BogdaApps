@@ -487,6 +487,7 @@ export function DashboardPage({
       <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
         <CreateNewOffer
           onBack={() => setShowCreateOffer(false)}
+          onSaveSuccess={() => setShowCreateOffer(false)}
           initialOffer={editingOffer}
           storeProducts={storeProducts}
           storeCollections={storeCollections}

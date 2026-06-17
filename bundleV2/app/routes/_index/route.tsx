@@ -308,9 +308,7 @@ export default function Index() {
     setShowCreateOffer(false);
     setCreateOfferType(null);
     setEditingOfferId(null);
-    if (offersFetcher.state === "idle") {
-      offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
-    }
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
   };
 
   // Handle toast and post-save navigation
