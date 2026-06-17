@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
+import { buildAppSearchString } from "../../utils/appSearchParams";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
@@ -729,6 +730,9 @@ export function CreateNewOffer({
   existingOffers = [],
   ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
+  const offerSaveFetcher = useFetcher<
+    { success: true; toast: string } | OfferActionErrorBody
+  >();
   const subscriptionStatusFetcher = useFetcher<{
     ok: boolean;
     error?: string;
@@ -747,6 +751,7 @@ export function CreateNewOffer({
   const [isSavingOffer, setIsSavingOffer] = useState(false);
   const confirmedHighDiscountRef = useRef(false);
   const offerFormRef = useRef<HTMLFormElement>(null);
+  const awaitingSaveResultRef = useRef(false);
   const saveFinishedRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
@@ -1063,6 +1068,14 @@ export function CreateNewOffer({
     storeProducts,
   ]);
 
+  const finishSaveAttempt = useCallback((afterFinish: () => void) => {
+    if (saveFinishedRef.current) return;
+    saveFinishedRef.current = true;
+    awaitingSaveResultRef.current = false;
+    setIsSavingOffer(false);
+    afterFinish();
+  }, []);
+
   const finishSaveSuccess = useCallback(
     (toast?: string | null) => {
       const mode = initialOffer ? "update" : "create";
@@ -1075,70 +1088,60 @@ export function CreateNewOffer({
       );
       const next = new URLSearchParams(searchParams);
       next.set("toast", toast ?? `${mode}-success-${Date.now()}`);
-      const qs = next.toString();
-      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      navigate({ search: buildAppSearchString(next) }, { replace: true });
     },
     [initialOffer, navigate, onSaveSuccess, searchParams],
   );
 
-  const submitOfferSave = useCallback(async () => {
+  const submitOfferSave = useCallback(() => {
     const form = offerFormRef.current;
     if (!form || isSavingOffer) return;
 
     saveFinishedRef.current = false;
+    awaitingSaveResultRef.current = true;
     setSubmitErrorToast(null);
     setIsSavingOffer(true);
+    offerSaveFetcher.submit(new FormData(form), { method: "post" });
+  }, [isSavingOffer, offerSaveFetcher]);
 
-    const finishOnce = (afterFinish: () => void) => {
-      if (saveFinishedRef.current) return;
-      saveFinishedRef.current = true;
-      setIsSavingOffer(false);
-      afterFinish();
-    };
+  useEffect(() => {
+    if (!awaitingSaveResultRef.current) return;
+    if (offerSaveFetcher.state === "submitting" || offerSaveFetcher.state === "loading") {
+      return;
+    }
 
-    const stallTimer = setTimeout(() => {
-      // embedded app 偶发收不到 POST 响应，但服务端通常已落库
-      finishOnce(() => {
+    const data = offerSaveFetcher.data;
+    if (
+      data &&
+      typeof data === "object" &&
+      "success" in data &&
+      data.success === true &&
+      typeof data.toast === "string"
+    ) {
+      finishSaveAttempt(() => finishSaveSuccess(data.toast));
+      return;
+    }
+
+    if (isOfferActionErrorBody(data)) {
+      finishSaveAttempt(() => setSubmitErrorToast(data.message));
+      return;
+    }
+
+    finishSaveAttempt(() => {
+      setSubmitErrorToast("Something went wrong. Please try again.");
+    });
+  }, [finishSaveAttempt, finishSaveSuccess, offerSaveFetcher.data, offerSaveFetcher.state]);
+
+  useEffect(() => {
+    if (!isSavingOffer) return;
+    const timer = setTimeout(() => {
+      if (!awaitingSaveResultRef.current) return;
+      finishSaveAttempt(() => {
         finishSaveSuccess(`${initialOffer ? "update" : "create"}-success-${Date.now()}`);
       });
     }, SUBMIT_STALL_TIMEOUT_MS);
-
-    try {
-      const formData = new FormData(form);
-      const url = `${window.location.pathname}${window.location.search}`;
-      const res = await fetch(url, { method: "POST", body: formData });
-      const data: unknown = await res.json().catch(() => null);
-      clearTimeout(stallTimer);
-
-      if (
-        typeof data === "object" &&
-        data !== null &&
-        (data as { success?: boolean }).success &&
-        typeof (data as { toast?: unknown }).toast === "string"
-      ) {
-        finishOnce(() => finishSaveSuccess((data as { toast: string }).toast));
-        return;
-      }
-
-      if (isOfferActionErrorBody(data)) {
-        finishOnce(() => setSubmitErrorToast(data.message));
-        return;
-      }
-
-      finishOnce(() => {
-        setSubmitErrorToast(
-          res.ok
-            ? "Something went wrong. Please try again."
-            : `Save failed (${res.status}). Please try again.`,
-        );
-      });
-    } catch {
-      clearTimeout(stallTimer);
-      finishOnce(() => {
-        setSubmitErrorToast("Network error. Please check your connection and try again.");
-      });
-    }
-  }, [finishSaveSuccess, initialOffer, isSavingOffer]);
+    return () => clearTimeout(timer);
+  }, [finishSaveAttempt, finishSaveSuccess, initialOffer, isSavingOffer]);
 
   const isSubmittingOffer = isSavingOffer;
 

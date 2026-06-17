@@ -10,6 +10,7 @@ import {
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
 import { openThemeEditor } from "../../utils/themeEditor";
+import { buildAppSearchString } from "../../utils/appSearchParams";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -277,8 +278,7 @@ export function AllOffersPage({
       setDeletingOffer(null);
       const next = new URLSearchParams(searchParams);
       next.set("toast", deleteToast);
-      const qs = next.toString();
-      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      navigate({ search: buildAppSearchString(next) }, { replace: true });
       return;
     }
 
