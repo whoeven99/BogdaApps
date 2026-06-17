@@ -1082,7 +1082,21 @@ export function CreateNewOffer({
       }
       return;
     }
-    if (!isOfferActionErrorBody(data)) return;
+    if (!isOfferActionErrorBody(data)) {
+      // 兜底：响应格式不匹配（例如网络错误、非预期重定向等）
+      // 必须重置 wasSubmittingRef，否则按钮永远停留在 "Saving…"
+      wasSubmittingRef.current = false;
+      setSubmitErrorToast(
+        typeof data === "string"
+          ? data
+          : "Something went wrong. Please try again.",
+      );
+      const next = new URLSearchParams(searchParams);
+      next.delete("toast");
+      const qs = next.toString();
+      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      return;
+    }
     wasSubmittingRef.current = false;
     setSubmitErrorToast(data.message);
     // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」

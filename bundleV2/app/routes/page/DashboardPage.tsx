@@ -50,7 +50,6 @@ interface DashboardPageProps {
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
   themeExtensionDetectionFailed?: boolean;
-  themeExtensionError?: string;
   themeTargets?: IndexLoaderData["themeTargets"];
   themeExtensionMatchedThemeId?: string;
 }
@@ -152,7 +151,6 @@ export function DashboardPage({
   ianaTimezone,
   themeExtensionEnabled,
   themeExtensionDetectionFailed = false,
-  themeExtensionError,
   themeTargets = [],
   themeExtensionMatchedThemeId,
 }: DashboardPageProps) {
@@ -191,12 +189,9 @@ export function DashboardPage({
     }
     return false;
   });
-  const themeExtensionStatus = themeExtensionDetectionFailed
-    ? "unknown"
-    : themeExtensionEnabled
-      ? "active"
-      : "inactive";
-  const themeExtensionBlocksOffers = themeExtensionStatus === "inactive";
+  const themeExtensionStatus = themeExtensionEnabled ? "active" : "inactive";
+  const themeExtensionBlocksOffers =
+    !themeExtensionEnabled && !themeExtensionDetectionFailed;
 
   const handleCloseBanner = () => {
     setHideBanner(true);
@@ -618,60 +613,32 @@ export function DashboardPage({
             </h2>
             <div
               className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${
-                themeExtensionStatus === "active"
-                  ? "bg-[#d1f7c4]"
-                  : themeExtensionStatus === "unknown"
-                    ? "bg-[#fff1c2]"
-                    : "bg-[#f4f6f8]"
+                themeExtensionStatus === "active" ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"
               }`}
             >
               <div
                 className={`w-[8px] h-[8px] rounded-full ${
-                  themeExtensionStatus === "active"
-                    ? "bg-[#108043]"
-                    : themeExtensionStatus === "unknown"
-                      ? "bg-[#b98900]"
-                      : "bg-[#6d7175]"
+                  themeExtensionStatus === "active" ? "bg-[#108043]" : "bg-[#6d7175]"
                 }`}
               />
               <span
                 className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${
-                  themeExtensionStatus === "active"
-                    ? "text-[#108043]"
-                    : themeExtensionStatus === "unknown"
-                      ? "text-[#916a00]"
-                      : "text-[#5c6166]"
+                  themeExtensionStatus === "active" ? "text-[#108043]" : "text-[#5c6166]"
                 }`}
               >
-                {themeExtensionStatus === "active"
-                  ? "Active"
-                  : themeExtensionStatus === "unknown"
-                    ? "Check failed"
-                    : "Inactive"}
+                {themeExtensionStatus === "active" ? "Active" : "Inactive"}
               </span>
             </div>
           </div>
           <p className="font-sans font-normal text-[16px] leading-[25.6px] text-[#1c1f23] tracking-normal mb-[20px]">
             {themeExtensionStatus === "active"
               ? "Bundles widget is visible in product pages."
-              : themeExtensionStatus === "unknown"
-                ? "Bundle widget status could not be verified right now."
-                : "Bundles widget is currently disabled."}
+              : "Bundles widget is currently disabled."}
           </p>
           <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
             This opens Theme Editor. Enable the app embed or add the app block
             from the Apps panel on the live or draft theme you choose.
           </p>
-          {themeExtensionStatus === "unknown" && themeExtensionError ? (
-            <div className="mb-[12px] rounded-[8px] border border-[#ffe0b2] bg-[#fff8e1] px-[12px] py-[10px]">
-              <p className="m-0 text-[12px] font-medium leading-[18px] text-[#916a00]">
-                Temporary debug error
-              </p>
-              <p className="mt-[4px] mb-0 break-words font-mono text-[12px] leading-[18px] text-[#6d4c00]">
-                {themeExtensionError}
-              </p>
-            </div>
-          ) : null}
           <div className="flex flex-col gap-[12px]">
             <button
               type="button"
@@ -684,7 +651,7 @@ export function DashboardPage({
             >
               {themeExtensionStatus === "active"
                 ? "Disable"
-                : themeExtensionStatus === "unknown"
+                : themeExtensionDetectionFailed
                   ? "Open Theme Editor"
                   : "Enable"}
             </button>

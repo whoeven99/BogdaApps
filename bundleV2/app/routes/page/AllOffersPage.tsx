@@ -285,7 +285,12 @@ export function AllOffersPage({
     if ("_offerActionError" in deleteFetcher.data && deleteFetcher.data._offerActionError) {
       setDeleteError(deleteFetcher.data.message);
       setPendingDeleteIds(new Set());
+      return;
     }
+
+    // 兜底：响应格式不匹配（例如网络错误、非预期响应等）
+    setDeleteError("Something went wrong. Please try again.");
+    setPendingDeleteIds(new Set());
   }, [deleteFetcher.state, deleteFetcher.data, deleteFetcher.formData, navigate, searchParams]);
 
   useEffect(() => {

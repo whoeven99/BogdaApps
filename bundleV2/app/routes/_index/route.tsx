@@ -456,7 +456,6 @@ export default function Index() {
               ianaTimezone={ianaTimezone}
               themeExtensionEnabled={themeExtensionEnabled}
               themeExtensionDetectionFailed={themeExtensionDetectionFailed}
-              themeExtensionError={themeExtensionDebug?.error}
               onViewAllOffers={() => setActiveTab("offers")}
               onViewAnalytics={(offerId) => {
                 setAnalyticsOfferId(offerId ?? null);

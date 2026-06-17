@@ -18,7 +18,7 @@ export async function handleDeleteOffer(
 ): Promise<Response> {
   const idRaw = String(formData.get("offerId") || "").trim();
   if (!idRaw) {
-    return new Response("Missing offer id", { status: 400 });
+    return offerActionErrorResponse("Missing offer id", 400);
   }
 
   const shopName = await resolveSessionShopName(admin, session);
@@ -39,7 +39,7 @@ export async function handleDeleteOffer(
       missingIdMessage: "Missing offer id",
     });
     if (!ownershipValidation.ok) {
-      return new Response(ownershipValidation.message, { status: ownershipValidation.status });
+      return offerActionErrorResponse(ownershipValidation.message, ownershipValidation.status);
     }
 
     shopNameToSync = offerToDelete?.shopName as string | undefined;
