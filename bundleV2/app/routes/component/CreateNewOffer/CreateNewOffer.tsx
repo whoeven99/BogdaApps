@@ -550,8 +550,9 @@ interface MarketItem {
 /**
  * 保存请求被判定为"卡死"的超时阈值（毫秒）。embedded app 在长时间填表后，
  * 保存 POST 偶发不返回；超过此阈值即自动按"已保存"收尾，避免按钮永久停留在 "Saving…"。
+ * 服务端写库很快（~1-2s），8s 足以确保记录已落库，再回列表能真实反映结果。
  */
-const SUBMIT_STALL_TIMEOUT_MS = 12_000;
+const SUBMIT_STALL_TIMEOUT_MS = 8_000;
 
 interface CreateNewOfferProps {
   onBack?: () => void;
@@ -748,7 +749,6 @@ export function CreateNewOffer({
   const handledSubmissionToastRef = useRef<string | null>(null);
   const confirmedHighDiscountRef = useRef(false);
   const submitStallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const submitStallRecoveredRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
     return normalizeBuilderCampaignConfig(
@@ -1115,38 +1115,45 @@ export function CreateNewOffer({
   // 看门狗：embedded app 在长时间填表后，保存请求偶发不返回（App Bridge 取/换 session token
   // 或服务端鉴权卡顿），按钮会永久停留在 "Saving…"，需要手动刷新才看到已创建的 offer。
   // 服务端写库与 Shopify 同步已解耦（同步是 fire-and-forget），记录在请求卡住时通常已落库。
-  // 这里在提交超时后自动按"已保存"收尾：关闭构建器、回到 offers 列表并从 DB 重新拉取（真实反映结果）。
+  // 超时后自动按"已保存"收尾：关闭构建器、回到 offers 列表并从 DB 重新拉取（真实反映结果）。
+  //
+  // 关键：用"最新引用 ref"保存收尾逻辑，让下方 effect 只依赖 fetcher.state。
+  // 否则 parent 每次重渲染都会新建 onSaveSuccess 引用，导致 effect 反复 cleanup+重建、
+  // 计时器被无限重置而永不触发——这正是之前看门狗失效、仍卡在 Saving 的根因。
+  const stallRecoveryRef = useRef<() => void>(() => {});
+  stallRecoveryRef.current = () => {
+    wasSubmittingRef.current = false;
+    // 标记本次提交已处理，避免迟到的真实响应再触发一次跳转。
+    handledSubmissionToastRef.current = `stall-${Date.now()}`;
+    if (onSaveSuccess) {
+      onSaveSuccess(initialOffer ? "update" : "create");
+    } else {
+      const next = new URLSearchParams(searchParams);
+      next.set("toast", `${initialOffer ? "update" : "create"}-success-${Date.now()}`);
+      const qs = next.toString();
+      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+    }
+  };
   useEffect(() => {
-    if (fetcher.state === "submitting") {
-      submitStallRecoveredRef.current = false;
-      if (submitStallTimerRef.current) clearTimeout(submitStallTimerRef.current);
-      submitStallTimerRef.current = setTimeout(() => {
-        if (submitStallRecoveredRef.current) return;
-        submitStallRecoveredRef.current = true;
-        // 标记本次提交已处理，避免迟到的真实响应再触发一次跳转。
-        wasSubmittingRef.current = false;
-        handledSubmissionToastRef.current = `stall-${Date.now()}`;
-        if (onSaveSuccess) {
-          onSaveSuccess(initialOffer ? "update" : "create");
-        } else {
-          const next = new URLSearchParams(searchParams);
-          next.set("toast", `${initialOffer ? "update" : "create"}-success-${Date.now()}`);
-          const qs = next.toString();
-          navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-        }
-      }, SUBMIT_STALL_TIMEOUT_MS);
-      return () => {
-        if (submitStallTimerRef.current) {
-          clearTimeout(submitStallTimerRef.current);
-          submitStallTimerRef.current = null;
-        }
-      };
+    if (fetcher.state !== "submitting") {
+      if (submitStallTimerRef.current) {
+        clearTimeout(submitStallTimerRef.current);
+        submitStallTimerRef.current = null;
+      }
+      return;
     }
-    if (submitStallTimerRef.current) {
-      clearTimeout(submitStallTimerRef.current);
+    if (submitStallTimerRef.current) clearTimeout(submitStallTimerRef.current);
+    submitStallTimerRef.current = setTimeout(() => {
       submitStallTimerRef.current = null;
-    }
-  }, [fetcher.state, initialOffer, navigate, onSaveSuccess, searchParams]);
+      stallRecoveryRef.current();
+    }, SUBMIT_STALL_TIMEOUT_MS);
+    return () => {
+      if (submitStallTimerRef.current) {
+        clearTimeout(submitStallTimerRef.current);
+        submitStallTimerRef.current = null;
+      }
+    };
+  }, [fetcher.state]);
 
   const isSubmittingOffer = fetcher.state === "submitting";
 
