@@ -857,27 +857,20 @@ export function CreateNewOffer({
       savedProductObjects: any[] = [],
     ) =>
       ids.map((id) => {
+        const found = storeProducts.find((p) => String(p.id) === String(id));
         const savedObj = savedProductObjects.find(
           (o) => o && typeof o === "object" && String(o.id) === String(id),
         );
-        if (savedObj && savedObj.title) {
-          return {
-            id: String(id),
-            title: String(savedObj.title),
-            image: String(savedObj.image || "https://via.placeholder.com/60"),
-            price: String(savedObj.price || "€0.00"),
-            variantsCount: Math.max(1, Math.trunc(Number(savedObj.variantsCount) || 1)),
-            hasSubscription: savedObj.hasSubscription === true,
-          };
-        }
-        const found = storeProducts.find((p) => String(p.id) === String(id));
+        // 优先用 storeProducts 的真实数据，已保存数据仅作为 fallback
         return {
           id: String(id),
-          title: found?.name ?? "Unknown product",
-          image: found?.image ?? "https://via.placeholder.com/60",
-          price: found?.price ?? "€0.00",
-          variantsCount: Array.isArray(found?.variants) ? found.variants.length : 1,
-          hasSubscription: found?.hasSubscription === true,
+          title: found?.name || (savedObj?.title ? String(savedObj.title) : "Unknown product"),
+          image: found?.image || String(savedObj?.image || "") || "https://via.placeholder.com/60",
+          price: found?.price || String(savedObj?.price || "") || "€0.00",
+          variantsCount: found
+            ? (Array.isArray(found.variants) ? found.variants.length : 1)
+            : Math.max(1, Math.trunc(Number(savedObj?.variantsCount) || 1)),
+          hasSubscription: found?.hasSubscription === true || savedObj?.hasSubscription === true,
         };
       });
 
@@ -937,27 +930,20 @@ export function CreateNewOffer({
     );
 
     const selectedProductsData = selectedProductIds.map((id: string) => {
+      const found = storeProducts.find((p) => String(p.id) === id);
       const savedObj = parsedSelectedObjects.find(
         (o) => o && typeof o === "object" && String(o.id) === id,
       );
-      if (savedObj && savedObj.title) {
-        return {
-          id,
-          title: savedObj.title,
-          image: savedObj.image || "https://via.placeholder.com/60",
-          price: savedObj.price || "€0.00",
-          variantsCount: savedObj.variantsCount || 1,
-          hasSubscription: savedObj.hasSubscription === true,
-        };
-      }
-      const found = storeProducts.find((p) => String(p.id) === id);
+      // 优先用 storeProducts 的最新数据（含真实 image），已保存数据仅作 fallback
       return {
         id,
-        title: found?.name ?? "Unknown product",
-        image: found?.image ?? "https://via.placeholder.com/60",
-        price: found?.price ?? "€0.00",
-        variantsCount: 1,
-        hasSubscription: found?.hasSubscription === true,
+        title: found?.name || (savedObj?.title ? String(savedObj.title) : "Unknown product"),
+        image: found?.image || String(savedObj?.image || "") || "https://via.placeholder.com/60",
+        price: found?.price || String(savedObj?.price || "") || "€0.00",
+        variantsCount: found
+          ? (Array.isArray(found.variants) ? found.variants.length : 1)
+          : (savedObj?.variantsCount || 1),
+        hasSubscription: found?.hasSubscription === true || savedObj?.hasSubscription === true,
       };
     });
 
@@ -1410,18 +1396,13 @@ export function CreateNewOffer({
     products.map((product) => {
       const found = storeProducts.find((p) => String(p.id) === String(product.id));
       if (!found) return product;
-      if (
-        product.title !== "Unknown product" &&
-        product.image !== "https://via.placeholder.com/60" &&
-        product.price !== "€0.00"
-      ) {
-        return product;
-      }
+      // 始终用 storeProducts 的最新 title / image / price 覆盖，
+      // 避免已保存 offer 中 image 为空时被误判为"已有真实数据"而跳过水合。
       return {
         ...product,
-        title: found.name,
-        image: found.image,
-        price: found.price,
+        title: found.name || product.title,
+        image: found.image || product.image || "https://via.placeholder.com/60",
+        price: found.price || product.price || "€0.00",
         variantsCount: Array.isArray(found.variants) ? found.variants.length : product.variantsCount,
         hasSubscription: found.hasSubscription === true,
       };
@@ -4283,10 +4264,10 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[12px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
+      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[16px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
         <div
           className={`mx-auto flex w-full max-w-[1280px] items-center gap-[12px] ${
-            step > 1 ? "justify-between" : "justify-end"
+            step > 1 ? "justify-between" : "justify-center"
           }`}
         >
           {step > 1 ? (
@@ -4303,6 +4284,7 @@ export function CreateNewOffer({
           ) : null}
           <Button
             size="large"
+            className="min-w-[200px] !h-[48px] !text-[16px] !font-semibold !rounded-[8px]"
             style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
             disabled={isSubmittingOffer}
             onClick={(e: any) => {
