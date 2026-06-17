@@ -753,6 +753,7 @@ export function CreateNewOffer({
   const offerFormRef = useRef<HTMLFormElement>(null);
   const awaitingSaveResultRef = useRef(false);
   const saveFinishedRef = useRef(false);
+  const saveSeenActiveRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
     return normalizeBuilderCampaignConfig(
@@ -1099,6 +1100,7 @@ export function CreateNewOffer({
 
     saveFinishedRef.current = false;
     awaitingSaveResultRef.current = true;
+    saveSeenActiveRef.current = false;
     setSubmitErrorToast(null);
     setIsSavingOffer(true);
     offerSaveFetcher.submit(new FormData(form), { method: "post" });
@@ -1106,9 +1108,14 @@ export function CreateNewOffer({
 
   useEffect(() => {
     if (!awaitingSaveResultRef.current) return;
+
     if (offerSaveFetcher.state === "submitting" || offerSaveFetcher.state === "loading") {
+      saveSeenActiveRef.current = true;
       return;
     }
+
+    // fetcher 仍为 idle 时尚未真正发出请求，避免误判为失败
+    if (!saveSeenActiveRef.current) return;
 
     const data = offerSaveFetcher.data;
     if (
@@ -1126,6 +1133,9 @@ export function CreateNewOffer({
       finishSaveAttempt(() => setSubmitErrorToast(data.message));
       return;
     }
+
+    // 响应尚未就绪时交给超时兜底，不立刻弹错
+    if (data === undefined) return;
 
     finishSaveAttempt(() => {
       setSubmitErrorToast("Something went wrong. Please try again.");
