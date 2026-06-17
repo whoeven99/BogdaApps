@@ -607,34 +607,11 @@ export function DashboardPage({
 
         {/* Theme Extension Widget */}
         <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-          <div className="flex items-center justify-between mb-[16px]">
+          <div className="mb-[16px]">
             <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
               Theme extension
             </h2>
-            <div
-              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${
-                themeExtensionStatus === "active" ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"
-              }`}
-            >
-              <div
-                className={`w-[8px] h-[8px] rounded-full ${
-                  themeExtensionStatus === "active" ? "bg-[#108043]" : "bg-[#6d7175]"
-                }`}
-              />
-              <span
-                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${
-                  themeExtensionStatus === "active" ? "text-[#108043]" : "text-[#5c6166]"
-                }`}
-              >
-                {themeExtensionStatus === "active" ? "Active" : "Inactive"}
-              </span>
-            </div>
           </div>
-          <p className="font-sans font-normal text-[16px] leading-[25.6px] text-[#1c1f23] tracking-normal mb-[20px]">
-            {themeExtensionStatus === "active"
-              ? "Bundles widget is visible in product pages."
-              : "Bundles widget is currently disabled."}
-          </p>
           <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
             This opens Theme Editor. Enable the app embed or add the app block
             from the Apps panel on the live or draft theme you choose.
