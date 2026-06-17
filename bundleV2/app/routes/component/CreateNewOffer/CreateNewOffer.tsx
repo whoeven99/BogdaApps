@@ -547,6 +547,12 @@ interface MarketItem {
   handle: string;
 }
 
+/**
+ * 保存请求被判定为"卡死"的超时阈值（毫秒）。embedded app 在长时间填表后，
+ * 保存 POST 偶发不返回；超过此阈值即自动按"已保存"收尾，避免按钮永久停留在 "Saving…"。
+ */
+const SUBMIT_STALL_TIMEOUT_MS = 12_000;
+
 interface CreateNewOfferProps {
   onBack?: () => void;
   onSaveSuccess?: (mode: "create" | "update", toast?: string | null) => void;
@@ -741,6 +747,8 @@ export function CreateNewOffer({
   const wasSubmittingRef = useRef(false);
   const handledSubmissionToastRef = useRef<string | null>(null);
   const confirmedHighDiscountRef = useRef(false);
+  const submitStallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const submitStallRecoveredRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
     return normalizeBuilderCampaignConfig(
@@ -833,6 +841,18 @@ export function CreateNewOffer({
     if (initialOffer || !initialOfferType) return null;
     return getStarterTemplateDefaults(initialOfferType);
   }, [initialOffer, initialOfferType]);
+
+  // 通过 storeProducts 模糊查找产品（兼容 GID / 纯数字等不同 ID 格式）
+  const lookupStoreProduct = (productId: string) => {
+    if (!productId) return undefined;
+    const keys = getShopifyProductLookupKeys(productId);
+    for (const key of keys) {
+      const found = storeProducts.find((p) => String(p.id) === key);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
   const initialEditorState = useMemo<InitialEditorState>(() => {
     const parseSelectedProductObjects = (...jsonValues: Array<string | null | undefined>) => {
       const productObjects: any[] = [];
@@ -857,7 +877,7 @@ export function CreateNewOffer({
       savedProductObjects: any[] = [],
     ) =>
       ids.map((id) => {
-        const found = storeProducts.find((p) => String(p.id) === String(id));
+        const found = lookupStoreProduct(String(id));
         const savedObj = savedProductObjects.find(
           (o) => o && typeof o === "object" && String(o.id) === String(id),
         );
@@ -930,7 +950,7 @@ export function CreateNewOffer({
     );
 
     const selectedProductsData = selectedProductIds.map((id: string) => {
-      const found = storeProducts.find((p) => String(p.id) === id);
+      const found = lookupStoreProduct(String(id));
       const savedObj = parsedSelectedObjects.find(
         (o) => o && typeof o === "object" && String(o.id) === id,
       );
@@ -1091,6 +1111,43 @@ export function CreateNewOffer({
     const qs = next.toString();
     navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
   }, [fetcher.state, fetcher.data, initialOffer, navigate, onSaveSuccess, searchParams]);
+
+  // 看门狗：embedded app 在长时间填表后，保存请求偶发不返回（App Bridge 取/换 session token
+  // 或服务端鉴权卡顿），按钮会永久停留在 "Saving…"，需要手动刷新才看到已创建的 offer。
+  // 服务端写库与 Shopify 同步已解耦（同步是 fire-and-forget），记录在请求卡住时通常已落库。
+  // 这里在提交超时后自动按"已保存"收尾：关闭构建器、回到 offers 列表并从 DB 重新拉取（真实反映结果）。
+  useEffect(() => {
+    if (fetcher.state === "submitting") {
+      submitStallRecoveredRef.current = false;
+      if (submitStallTimerRef.current) clearTimeout(submitStallTimerRef.current);
+      submitStallTimerRef.current = setTimeout(() => {
+        if (submitStallRecoveredRef.current) return;
+        submitStallRecoveredRef.current = true;
+        // 标记本次提交已处理，避免迟到的真实响应再触发一次跳转。
+        wasSubmittingRef.current = false;
+        handledSubmissionToastRef.current = `stall-${Date.now()}`;
+        if (onSaveSuccess) {
+          onSaveSuccess(initialOffer ? "update" : "create");
+        } else {
+          const next = new URLSearchParams(searchParams);
+          next.set("toast", `${initialOffer ? "update" : "create"}-success-${Date.now()}`);
+          const qs = next.toString();
+          navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+        }
+      }, SUBMIT_STALL_TIMEOUT_MS);
+      return () => {
+        if (submitStallTimerRef.current) {
+          clearTimeout(submitStallTimerRef.current);
+          submitStallTimerRef.current = null;
+        }
+      };
+    }
+    if (submitStallTimerRef.current) {
+      clearTimeout(submitStallTimerRef.current);
+      submitStallTimerRef.current = null;
+    }
+  }, [fetcher.state, initialOffer, navigate, onSaveSuccess, searchParams]);
+
   const isSubmittingOffer = fetcher.state === "submitting";
 
   const baseUnitPrice = 100;
@@ -1380,7 +1437,7 @@ export function CreateNewOffer({
 
   const mapProductIdsToDraftProducts = (ids: string[]) =>
     ids.map((id) => {
-      const found = storeProducts.find((p) => String(p.id) === String(id));
+      const found = lookupStoreProduct(String(id));
       return {
         id: String(id),
         title: found?.name ?? "Unknown product",
@@ -1394,7 +1451,7 @@ export function CreateNewOffer({
     products: CampaignDraft["selectedProductsData"],
   ): CampaignDraft["selectedProductsData"] =>
     products.map((product) => {
-      const found = storeProducts.find((p) => String(p.id) === String(product.id));
+      const found = lookupStoreProduct(String(product.id));
       if (!found) return product;
       // 始终用 storeProducts 的最新 title / image / price 覆盖，
       // 避免已保存 offer 中 image 为空时被误判为"已有真实数据"而跳过水合。
@@ -1422,7 +1479,7 @@ export function CreateNewOffer({
       variantsCount: item.variants?.length || 1,
       hasSubscription:
         ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0 ||
-        storeProducts.some((p) => String(p.id) === String(item.id) && p.hasSubscription),
+        (lookupStoreProduct(String(item.id))?.hasSubscription === true),
     }));
   const normalizeResourcePickerSelection = (selected: any): any[] => {
     if (!selected) return [];
