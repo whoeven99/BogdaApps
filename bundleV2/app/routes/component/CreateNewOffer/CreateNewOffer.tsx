@@ -3786,7 +3786,7 @@ export function CreateNewOffer({
       />
       <input type="hidden" name="campaignConfigJson" value={campaignConfigJson} />
 
-      <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[20px]">
+      <div className="rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[20px]">
         <div className="mb-[12px] rounded-[10px] border border-[#e9edf1] bg-[#fcfcfd] p-[8px] sm:p-[10px]">
           <div className="grid grid-cols-1 gap-[6px] md:grid-cols-4">
           {steps.map((stepName, index) => {
@@ -4264,12 +4264,7 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[16px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
-        <div
-          className={`mx-auto flex w-full max-w-[1280px] items-center gap-[12px] ${
-            step > 1 ? "justify-between" : "justify-center"
-          }`}
-        >
+      <div className={`mt-[16px] mb-[40px] flex items-center gap-[12px] ${step > 1 ? "justify-between" : "justify-end"}`}>
           {step > 1 ? (
             <Button
               size="large"
@@ -4366,7 +4361,6 @@ export function CreateNewOffer({
                   : "Create Offer"
                 : "Next"}
           </Button>
-        </div>
       </div>
     </fetcher.Form>
   );

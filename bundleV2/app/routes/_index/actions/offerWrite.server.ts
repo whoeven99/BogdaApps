@@ -334,7 +334,7 @@ export async function handleCreateOrUpdateOffer(
   // 在写库前构造"假如保存后"的全量 Function payload，超限则拒绝保存并把错误返回前端。
   // 仅在新 payload 既超限、又不小于当前值时拦截，避免已超限的老店连"缩小编辑"都被锁死。
   //
-  // 快速路径：店铺 offer 数量少（≤15）且单条 offer JSON 总和不大时，几乎不可能溢出，
+  // 快速路径：店铺 offer 数量少（≤25）且单条 offer JSON 总和不大（<20KB）时，几乎不可能溢出，
   // 跳过昂贵的 buildCompactOffersPayload 以加速保存响应。
   {
     const prospectiveOfferCount =
@@ -345,7 +345,7 @@ export async function handleCreateOrUpdateOffer(
       (campaignConfigJson?.length ?? 0) +
       (offerSettingsJson?.length ?? 0);
     const skipSizeCheck =
-      prospectiveOfferCount <= 15 && thisOfferJsonSize < 5_000;
+      prospectiveOfferCount <= 25 && thisOfferJsonSize < 20_000;
 
     if (!skipSizeCheck) {
       const prospectiveOffer = {
