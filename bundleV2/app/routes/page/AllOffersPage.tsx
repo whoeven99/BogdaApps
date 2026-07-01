@@ -10,6 +10,7 @@ import {
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
 import { openThemeEditor } from "../../utils/themeEditor";
+import { buildAppSearchString } from "../../utils/appSearchParams";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -277,15 +278,19 @@ export function AllOffersPage({
       setDeletingOffer(null);
       const next = new URLSearchParams(searchParams);
       next.set("toast", deleteToast);
-      const qs = next.toString();
-      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      navigate({ search: buildAppSearchString(next) }, { replace: true });
       return;
     }
 
     if ("_offerActionError" in deleteFetcher.data && deleteFetcher.data._offerActionError) {
       setDeleteError(deleteFetcher.data.message);
       setPendingDeleteIds(new Set());
+      return;
     }
+
+    // 兜底：响应格式不匹配（例如网络错误、非预期响应等）
+    setDeleteError("Something went wrong. Please try again.");
+    setPendingDeleteIds(new Set());
   }, [deleteFetcher.state, deleteFetcher.data, deleteFetcher.formData, navigate, searchParams]);
 
   useEffect(() => {
