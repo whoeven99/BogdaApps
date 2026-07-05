@@ -22,8 +22,7 @@
 
 .debug-prompt-button,
 .config-button,
-.increase-quota-button,
-.view-store-button {
+.increase-quota-button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -42,23 +41,20 @@
 
 .debug-prompt-button:hover,
 .config-button:hover,
-.increase-quota-button:hover,
-.view-store-button:hover {
+.increase-quota-button:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 30px rgba(37, 99, 235, 0.2);
 }
 
 .debug-prompt-button:active,
 .config-button:active,
-.increase-quota-button:active,
-.view-store-button:active {
+.increase-quota-button:active {
   transform: translateY(-1px) scale(0.995);
 }
 
 .debug-prompt-button:focus-visible,
 .config-button:focus-visible,
-.increase-quota-button:focus-visible,
-.view-store-button:focus-visible {
+.increase-quota-button:focus-visible {
   outline: 3px solid rgba(99,102,241,0.18);
   outline-offset: 3px;
 }
@@ -85,8 +81,7 @@
 
   .debug-prompt-button,
   .config-button,
-  .increase-quota-button,
-  .view-store-button {
+  .increase-quota-button {
     width: 100%;
     justify-content: center;
   }

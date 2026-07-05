@@ -25,7 +25,7 @@ export async function handleToggleOfferStatus(
   const nextStatusRaw = String(formData.get("nextStatus") || "").trim();
 
   if (!idRaw) {
-    return new Response("Missing offer id", { status: 400 });
+    return offerActionErrorResponse("Missing offer id", 400);
   }
 
   const nextStatus = nextStatusRaw === "true";
@@ -63,7 +63,7 @@ export async function handleToggleOfferStatus(
     }
 
     if (!existingOffer) {
-      return new Response("Offer not found", { status: 404 });
+      return offerActionErrorResponse("Offer not found", 404);
     }
 
     const ownershipValidation = validateOwnedOfferAccess({
@@ -73,7 +73,7 @@ export async function handleToggleOfferStatus(
       missingIdMessage: "Missing offer id",
     });
     if (!ownershipValidation.ok) {
-      return new Response(ownershipValidation.message, { status: ownershipValidation.status });
+      return offerActionErrorResponse(ownershipValidation.message, ownershipValidation.status);
     }
 
     const nextCampaignConfigJson = buildOfferStatusCampaignConfigJson({

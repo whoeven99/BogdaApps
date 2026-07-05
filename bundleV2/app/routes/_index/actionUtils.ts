@@ -65,12 +65,24 @@ export function isTransientDbWriteError(error: unknown): boolean {
 }
 
 export async function writeOfferWithRetry<T>(writeFn: () => Promise<T>): Promise<T> {
-  try {
-    return await writeFn();
-  } catch (error) {
-    if (!isTransientDbWriteError(error)) throw error;
-    console.warn("offer write failed once, retrying...", error);
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    return writeFn();
+  const maxRetries = 3;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await writeFn();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientDbWriteError(error)) throw error;
+      if (attempt === maxRetries) break;
+      const delay = 150 * Math.pow(2, attempt); // 150, 300, 600 ms
+      console.warn(
+        `offer write attempt ${attempt + 1} failed, retrying in ${delay}ms...`,
+        error instanceof Error ? error.message : error,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
+
+  throw lastError;
 }

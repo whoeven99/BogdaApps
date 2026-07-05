@@ -9,9 +9,13 @@ query BundleDiscountMetafields {
       discount {
         __typename
         ... on DiscountAutomaticApp {
+          discountId
           title
           status
           discountClasses
+          appDiscountType {
+            functionId
+          }
         }
       }
       appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {

@@ -1,0 +1,25 @@
+# 诊断 ciwi-bundle-offers 店面/admin 不一致：metafield 实际 type/updatedAt + 是否存在 definition
+# 用法: shopify store execute --store ciwishop.myshopify.com --json --query-file scripts/graphql/bundle-offers-diagnose.graphql
+
+query BundleOffersDiagnose {
+  shop {
+    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+      id
+      type
+      updatedAt
+      value
+    }
+  }
+  metafieldDefinitions(first: 20, ownerType: SHOP, namespace: "ciwi_bundle") {
+    nodes {
+      key
+      name
+      type {
+        name
+      }
+      access {
+        storefront
+      }
+    }
+  }
+}

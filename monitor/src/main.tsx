@@ -4,7 +4,6 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App';
 import DebugPrompt from "./DebugPrompt/DebugPrompt";
 import Config from "./Config/config";
-import Shop from "./Shop/shop";
 
 const router = createBrowserRouter([
   {
@@ -18,10 +17,6 @@ const router = createBrowserRouter([
   {
     path: '/Config',
     element: <Config />,
-  },
-  {
-    path: '/Shop',
-    element: <Shop />
   }
 ]);
 

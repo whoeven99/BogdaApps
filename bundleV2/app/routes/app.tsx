@@ -14,6 +14,7 @@ import {
   reconcileBundleAutomaticDiscounts,
 } from "../shopify.server";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../utils/env";
+import { useStripRouterSearchParams } from "../hooks/useStripRouterSearchParams";
 
 const ensureWebPixel = async (admin: any, shop: string) => {
   let currentWebPixelId: string | undefined;
@@ -150,6 +151,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function App() {
+  useStripRouterSearchParams();
   const { apiKey, ianaTimezone } = useLoaderData<typeof loader>();
   const ensureWebPixelFetcher = useFetcher<{ ok: boolean; error?: string }>();
 

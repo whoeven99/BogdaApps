@@ -106,6 +106,9 @@ const HIDDEN_OFFER_TYPE_IDS: OfferTypeId[] = [
   "order-discount",
   "coupon",
   "free-gift",
+  "progressive-gifts",
+  "quantity-breaks-different",
+  "subscription",
 ];
 
 export function getVisibleOfferTypeOptions(

@@ -122,15 +122,22 @@ key: ciwi-bundle-offers-fn       <- compact copy (for reference / debugging)
 key: ciwi-bundle-offer-sync-at   <- ISO timestamp of last sync
 ```
 
-**2. Automatic Discount metafield (what the Function actually reads)**
+**2. Automatic Discount metafields (what the Function actually reads)**
 ```
 namespace: $app:ciwi_bundle      <- app-reserved namespace
-key: offers
-Written via discountAutomaticAppUpdate mutation on the discount node
-Also written to default app namespace as fallback
+keys: offers, offers-1           <- per-class payload split into N=2 shards (OFFER_SHARD_KEYS)
+Written via discountAutomaticAppUpdate (+ metafieldsSet) on each discount owner node.
+Each discount class (PRODUCT/ORDER/SHIPPING) lives on its own single-class owner node,
+so its offers are already isolated to that owner's offers/offers-1 shards.
 ```
 
-**Size constraint:** Shopify Functions total input budget is approximately 64 KB. The compact payload must stay small. Code warns at 10 KB. Sharding into multiple metafields does NOT help - the Function input budget consumes all shard data regardless. The correct fix is: compress per-offer fields server-side and filter by startTime/endTime before writing to exclude non-active offers.
+**Size constraint (verified, June 2026):** the real hard limit is **per metafield value: >10,000 bytes is silently NOT returned to the Function** (`FUNCTION_OFFERS_MAX_BYTES`). It is NOT a 64 KB aggregate budget. Mitigations actually in place:
+- v2 compact format (`COMPACT_OFFERS_FORMAT_VERSION = 2`): inline objects (no JSON-in-JSON), single-char keys (`i/c/t/x/b/e/s/d/o`), Product/Variant GIDs stripped to bare numbers.
+- Per-class sharding into `offers` + `offers-1` (each < 10 KB); both Functions read both keys and merge/dedupe by id at runtime (`mergeShardedOfferPayloads`).
+- Write-time guard: `offersFitWithinShardLimits` rejects an offer save with HTTP 422 when a class would overflow its 2×10 KB budget (only blocks the *newly* overflowing case, so already-overflowing shops can still shrink). The sync path also logs a `shard-overflow` error if any class drops offers.
+- Function input total budget (128 KB) and input-query cost (≤30; each metafield field costs 3) are the secondary ceilings. N=2 shards is the query-cost-safe value; raise only after measuring real cost in the Dev Dashboard.
+
+⚠️ The Function reads ONLY `$app:ciwi_bundle`; the old default-`$app` fallback double-write was removed.
 
 ---
 
@@ -181,7 +188,7 @@ Each `Offer` row is transformed to a compact runtime object for the function:
 
 ## Open / Known Issues
 
-1. **Metafield size limit** — If a merchant has many active offers, the compact payload can exceed the ~64 KB Function input budget. Sharding is NOT a solution (total data stays the same). Fix: compress per-offer JSON fields server-side; filter by startTime/endTime at sync time to exclude non-active offers.
+1. **Metafield size limit** — the hard limit is **per metafield value >10 KB is dropped by the Function**, not a 64 KB aggregate. Mitigated by v2 compaction + per-class 2-shard split (offers/offers-1) + a write-time 422 guard + a `shard-overflow` sync log. If a single class still exceeds 2×10 KB, offers are dropped at checkout — next step would be raising the shard count (watch input-query cost) or fetching offers at runtime via a fetch target.
 
 2. **Order-level discount stacking** — `OrderDiscountSelectionStrategy.Maximum` means only one order-level discount applies per checkout. Multiple `free-gift` or order-class offers cannot stack. This is a Shopify platform constraint.
 
