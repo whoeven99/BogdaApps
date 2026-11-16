@@ -255,5 +255,11 @@
   "Image saving failed": "Image saving failed",
   "Model": "Model",
   "Standard": "Standard",
-  "Advance": "Advance"
+  "Advance": "Advance",
+  "imageTranslate": {
+    "scopeMissing": "This app needs Files access to save translated images. Grant access to continue.",
+    "grantAccess": "Grant access",
+    "grantAccessFailed": "Couldn't update Files access. Try again.",
+    "scopeDeclined": "Files access was not granted. Translated images can't be saved until you allow it."
+  }
 }

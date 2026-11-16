@@ -259,5 +259,11 @@
   "Image saving failed": "图片保存失败",
   "Model": "模型",
   "Standard": "标准",
-  "Advance": "进阶"
+  "Advance": "进阶",
+  "imageTranslate": {
+    "scopeMissing": "需要 Files 权限才能保存译图。请授权后继续。",
+    "grantAccess": "去授权",
+    "grantAccessFailed": "未能更新 Files 权限，请重试。",
+    "scopeDeclined": "未授予 Files 权限，译图无法保存。"
+  }
 }

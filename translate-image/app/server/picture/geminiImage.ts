@@ -154,6 +154,12 @@ function signJwt(account: ServiceAccount, tokenUri: string): string {
   return `${header}.${claims}.${base64Url(signer.sign(account.private_key))}`;
 }
 
+export async function getGoogleCloudAccessToken(fetchImpl: typeof fetch = fetch): Promise<string> {
+  const account = readServiceAccount();
+  if (!account) throw new ImageTranslateError("GEMINI_NOT_CONFIGURED");
+  return getAccessToken(account, fetchImpl);
+}
+
 async function getAccessToken(account: ServiceAccount, fetchImpl: typeof fetch): Promise<string> {
   if (
     cachedToken &&

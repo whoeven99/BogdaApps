@@ -48,7 +48,6 @@ import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import { globalStore } from "~/globalStore";
 import {
-  AltTranslate,
   DeleteProductImageData,
   deleteSaveInShopify,
   DeleteSingleImage,
@@ -59,6 +58,7 @@ import {
   UpdateProductImageAltData,
 } from "~/api/JavaServer";
 import { translateImageToFiles } from "~/server/picture/translateImage.server";
+import { translateAltText } from "~/server/picture/altTranslate.server";
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
 import "./style.css";
@@ -261,7 +261,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       case !!altTranslateFetcher:
         try {
           const { alt, targetCode } = altTranslateFetcher;
-          const response = await AltTranslate({
+          const response = await translateAltText({
             shop: shop as string,
             alt,
             targetCode,
@@ -269,12 +269,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           return json({ response });
         } catch (error) {
           console.log("alt translate error action", error);
-          return {
-            success: false,
-            errorCode: 10001,
-            errorMsg: "SERVER_ERROR",
-            response: [],
-          };
+          return json({
+            response: {
+              success: false,
+              errorCode: 10001,
+              errorMsg: "SERVER_ERROR",
+              response: "",
+            },
+          });
         }
       case !!saveImageToShopify:
         try {
@@ -524,7 +526,6 @@ const ImageAltTextPage = () => {
   );
 
   const [open, setOpen] = useState<boolean>(false);
-  const [notTranslateModal, setNotTranslateModal] = useState<boolean>(false);
   const [dataReady, setDataReady] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
@@ -585,140 +586,6 @@ const ImageAltTextPage = () => {
     "vi",
     "zh",
     "zh-tw",
-  ]);
-  const huoshanBaseInput = new Set([
-    "az",
-    "bs",
-    "bn",
-    "cs",
-    "da",
-    "de",
-    "en",
-    "es",
-    "et",
-    "fr",
-    "fi",
-    "gu",
-    "hi",
-    "hr",
-    "it",
-    "id",
-    "ja",
-    "ko",
-    "lv",
-    "mr",
-    "ml",
-    "ms",
-    "nl",
-    "no",
-    "pt",
-    "pa",
-    "pl",
-    "ru",
-    "sv",
-    "sl",
-    "sk",
-    "ta",
-    "th",
-    "tr",
-    "vi",
-    "zh",
-    "zh-tw",
-  ]);
-  const huoshanBaseOutput = new Set([
-    "af",
-    "bn",
-    "bs",
-    "bg",
-    "cs",
-    "da",
-    "de",
-    "en",
-    "el",
-    "et",
-    "fi",
-    "fr",
-    "he",
-    "hr",
-    "hi",
-    "id",
-    "it",
-    "ja",
-    "ka",
-    "ko",
-    "km",
-    "kn",
-    "lv",
-    "ms",
-    "mk",
-    "mn",
-    "mr",
-    "my",
-    "ml",
-    "nl",
-    "no",
-    "pl",
-    "pt",
-    "ru",
-    "ro",
-    "sv",
-    "sk",
-    "th",
-    "tl",
-    "tr",
-    "ta",
-    "te",
-    "uk",
-    "zh",
-    "zh-tw",
-  ]);
-  const aidgeBaseInput = new Set([
-    "zh",
-    "zh-tw",
-    "en",
-    "fr",
-    "it",
-    "ja",
-    "ko",
-    "pt",
-    "ru",
-    "es",
-    "th",
-    "tr",
-    "vi",
-  ]);
-  const aidgeBaseOutput = new Set([
-    "ar",
-    "bn",
-    "zh",
-    "zh-tw",
-    "cs",
-    "da",
-    "nl",
-    "en",
-    "fi",
-    "fr",
-    "de",
-    "el",
-    "he",
-    "hu",
-    "id",
-    "it",
-    "ja",
-    "kk",
-    "ko",
-    "ms",
-    "pl",
-    "pt",
-    "ru",
-    "es",
-    "sv",
-    "th",
-    "tl",
-    "tr",
-    "uk",
-    "ur",
-    "vi",
   ]);
   const allLanguageOptions = [
     { label: "Afrikaans", value: "af" },
@@ -791,43 +658,6 @@ const ImageAltTextPage = () => {
   const [sourceLanguages, setSourceLanguages] = useState<any[]>([]);
   const [targetLanguages, setTargetLanguages] = useState<any[]>();
 
-  const specialSourceRules: Record<string, string[]> = {
-    "zh-tw": ["zh", "en"], // 繁体中文
-    el: ["en", "tr"], // 希腊语
-    kk: ["zh"], // 哈萨克语
-  };
-  const canHuoshanTranslate = (
-    source: string,
-    target: string,
-    imgType: string,
-  ): boolean => {
-    const src = normalizeLocale(source);
-    const tgt = normalizeLocale(target);
-    // 目标语言必须在输出范围
-    if (!huoshanBaseOutput.has(tgt)) return false;
-    // 源语言必须在输入范围
-    if (!huoshanBaseInput.has(src)) return false;
-    // 必须是png或者jpg格式的图片
-    if (imgType !== "png" && imgType !== "jpg") return false;
-    // 检查是否有特殊规则
-    // if (specialSourceRules[tgt]) {
-    //   return specialSourceRules[tgt].includes(src);
-    // }
-    return true;
-  };
-  const canAidgeTranslate = (source: string, target: string): boolean => {
-    const src = normalizeLocale(source);
-    const tgt = normalizeLocale(target);
-    // 目标语言必须在输出范围
-    if (!aidgeBaseInput.has(src)) return false;
-    // 源语言必须在输入范围
-    if (!aidgeBaseOutput.has(tgt)) return false;
-    // 检查是否有特殊规则
-    if (specialSourceRules[tgt]) {
-      return specialSourceRules[tgt].includes(src);
-    }
-    return true;
-  };
   const handleNavigate = () => {
     if (confirmData?.length > 0) {
       shopify.saveBar.leaveConfirmation();
@@ -983,8 +813,7 @@ const ImageAltTextPage = () => {
     return lower;
   };
   useEffect(() => {
-    // 初始化源语言下拉
-    const sourceLangOptions = [...huoshanBaseInput].map((lang) => {
+    const sourceLangOptions = [...allLanguageRenderCode].map((lang) => {
       return {
         label: allLanguageOptions.find((o) => o.value === lang)?.label ?? lang,
         value: lang,
@@ -999,21 +828,6 @@ const ImageAltTextPage = () => {
     });
     setTargetLanguages(targetLangOptions);
   }, []);
-  // 检测图片格式
-  async function detectImageFormat(url: string): Promise<"png" | "jpg" | null> {
-    try {
-      const response = await fetch(url, { method: "HEAD" });
-
-      const contentType = response.headers.get("Content-Type")?.toLowerCase();
-      if (contentType === "image/png") return "png";
-      if (contentType === "image/jpeg") return "jpg";
-
-      return null;
-    } catch (error) {
-      console.error("Failed to fetch image headers:", error);
-      return null;
-    }
-  }
   // 图片翻译
   const TriggerTranslate = async (record: any, languageCode: string) => {
     if (translateImageFetcher.state !== "idle") {
@@ -1037,14 +851,6 @@ const ImageAltTextPage = () => {
   };
   const onClose = () => {
     setTranslatrImageactive(false);
-  };
-  const selectTranslationApi = (imgType: string) => {
-    if (canAidgeTranslate(sourceLanguage, targetLanguage)) {
-      return 1;
-    }
-    if (canHuoshanTranslate(sourceLanguage, targetLanguage, imgType)) {
-      return 2;
-    }
   };
   const handleTranslate = async () => {
     report(
@@ -1085,30 +891,21 @@ const ImageAltTextPage = () => {
       },
     );
     setTranslatrImageactive(false);
-    if (
-      !currentTranslatingImage?.altBeforeTranslation &&
-      !productImageData?.altText
-    ) {
+    const altSource =
+      currentTranslatingImage?.altBeforeTranslation ||
+      productImageData?.altText;
+    if (!altSource) {
       return;
     }
-    const formData = new FormData();
-    formData.append(
-      "altTranslateFetcher",
-      JSON.stringify({
-        alt:
-          currentTranslatingImage.altBeforeTranslation ||
-          productImageData?.altText,
-        targetCode: targetLanguage,
-      }),
+    altTranslateFetcher.submit(
+      {
+        altTranslateFetcher: JSON.stringify({
+          alt: altSource,
+          targetCode: targetLanguage,
+        }),
+      },
+      { method: "post" },
     );
-    formData.append(
-      "altTranslateFetcher",
-      JSON.stringify({
-        alt: currentTranslatingImage.altBeforeTranslation,
-        targetCode: targetLanguage,
-      }),
-    );
-    altTranslateFetcher.submit(formData, { method: "post" });
 
     setTextareaLoading((pre) => ({
       ...pre,
@@ -1117,151 +914,182 @@ const ImageAltTextPage = () => {
   };
 
   useEffect(() => {
-    if (translateImageFetcher.data && altTranslateFetcher.data) {
-      setTranslateLoadingImages((pre) => ({
-        ...pre,
-        [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
-      }));
+    if (!translateImageFetcher.data) return;
+    const translatingKey = `${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`;
+    setTranslateLoadingImages((pre) => ({
+      ...pre,
+      [translatingKey]: false,
+    }));
 
-      if (translateImageFetcher.data.success) {
-        fetcher.submit(
-          {
-            log: `${loader.shop}翻译成功，${currentTranslatingImage.imageId} 原图片${currentTranslatingImage?.imageBeforeUrl}，翻译成功，结果是${translateImageFetcher.data.response}`,
-          },
-          {
-            method: "POST",
-            action: "/app/log",
-          },
-        );
-        shopify.toast.show(t("Image translated successfully"));
-        setImageDatas(
-          imageDatas.map((item: any) => {
-            if (item.languageCode === currentTranslatingImage.languageCode) {
-              return {
-                ...item,
-                imageAfterUrl: translateImageFetcher.data.response,
-              };
-            }
-            return item;
-          }),
-        );
+    if (translateImageFetcher.data.success) {
+      fetcher.submit(
+        {
+          log: `${loader.shop}翻译成功，${currentTranslatingImage.imageId} 原图片${currentTranslatingImage?.imageBeforeUrl}，翻译成功，结果是${translateImageFetcher.data.response}`,
+        },
+        {
+          method: "POST",
+          action: "/app/log",
+        },
+      );
+      shopify.toast.show(t("Image translated successfully"));
+      setImageDatas((prev: any[]) =>
+        prev.map((item: any) => {
+          if (item.languageCode === currentTranslatingImage.languageCode) {
+            return {
+              ...item,
+              imageAfterUrl: translateImageFetcher.data.response,
+            };
+          }
+          return item;
+        }),
+      );
 
-        const replaceTranslateImage = {
-          productId: currentResourceId,
-          imageAfterUrl: translateImageFetcher.data.response,
-          imageId: currentTranslatingImage?.imageId,
-          imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
-          languageCode: currentTranslatingImage.languageCode,
-        };
-        const formData = new FormData();
-        formData.append(
-          "replaceTranslateImage",
-          JSON.stringify(replaceTranslateImage),
+      const replaceTranslateImage = {
+        productId: currentResourceId,
+        imageAfterUrl: translateImageFetcher.data.response,
+        imageId: currentTranslatingImage?.imageId,
+        imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
+        languageCode: currentTranslatingImage.languageCode,
+      };
+      const formData = new FormData();
+      formData.append(
+        "replaceTranslateImage",
+        JSON.stringify(replaceTranslateImage),
+      );
+      replaceTranslateImageFetcher.submit(formData, {
+        method: "post",
+      });
+      if (TRANSLATABLE_TYPES.has(type as string)) {
+        const altText =
+          altTranslateFetcher.data?.response?.response ||
+          currentTranslatingImage.altAfterTranslation ||
+          currentTranslatingImage.altBeforeTranslation ||
+          productImageData?.altText ||
+          "";
+        saveImageFetcher.submit(
+          {
+            saveImageToShopify: JSON.stringify({
+              ...initData,
+              value: initData.value?.[initData.index].src,
+              imageAfterUrl: translateImageFetcher.data.response,
+              languageCode: currentTranslatingImage.languageCode,
+              altText,
+              locale: defaultLanguageData.locale,
+              mediaId: currentTranslatingImage.mediaId,
+            }),
+          },
+          { method: "post" },
         );
-        replaceTranslateImageFetcher.submit(formData, {
-          method: "post",
-        });
-        if (TRANSLATABLE_TYPES.has(type as string)) {
-          saveImageFetcher.submit(
-            {
-              saveImageToShopify: JSON.stringify({
-                ...initData,
-                value: initData.value?.[initData.index].src,
-                imageAfterUrl: translateImageFetcher.data.response,
-                languageCode: currentTranslatingImage.languageCode,
-                altText: altTranslateFetcher.data.response.response,
-                locale: defaultLanguageData.locale,
-                mediaId: currentTranslatingImage.mediaId,
-              }),
-            },
-            { method: "post" },
+      }
+
+      dispatch(setChars({ chars: chars + 2000 }));
+    } else if (translateImageFetcher.data.errorMsg === "额度不够") {
+      shopify.toast.show(t("Image translation failed"));
+      setOpen(true);
+      fetcher.submit(
+        {
+          log: `${loader.shop} 翻译失败，额度不足`,
+        },
+        {
+          method: "POST",
+          action: "/app/log",
+        },
+      );
+    } else if (translateImageFetcher.data.errorMsg === "SCOPE_MISSING") {
+      shopify.toast.show(t("imageTranslate.scopeMissing"));
+    } else {
+      shopify.toast.show(t("Image translation failed"));
+      fetcher.submit(
+        {
+          log: `${loader.shop} 翻译失败 ${translateImageFetcher.data.errorMsg}`,
+        },
+        {
+          method: "POST",
+          action: "/app/log",
+        },
+      );
+    }
+  }, [translateImageFetcher.data]);
+
+  useEffect(() => {
+    if (!altTranslateFetcher.data) return;
+    const translatingKey = `${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`;
+    setTextareaLoading((pre) => ({
+      ...pre,
+      [translatingKey]: false,
+    }));
+
+    const altRes = altTranslateFetcher.data.response;
+    if (altRes?.success) {
+      const translatedAlt = altRes.response;
+      setImageDatas((prev: any[]) =>
+        prev.map((item: any) =>
+          item.languageCode === currentTranslatingImage.languageCode
+            ? { ...item, altAfterTranslation: translatedAlt }
+            : item,
+        ),
+      );
+      setConfirmData((prev: any) => {
+        const exists = prev?.find(
+          (i: any) => i.languageCode === currentTranslatingImage.languageCode,
+        );
+        const imageItem = imageDatas.find(
+          (i: any) => i.languageCode === currentTranslatingImage.languageCode,
+        );
+        const finalImageUrl =
+          imageItem?.imageAfterUrl || translateImageFetcher.data?.response || "";
+        if (exists) {
+          return prev.map((i: any) =>
+            i.languageCode === currentTranslatingImage.languageCode
+              ? {
+                  ...i,
+                  value: translatedAlt,
+                  imageAfterUrl: finalImageUrl,
+                }
+              : i,
           );
         }
-
-        dispatch(setChars({ chars: chars + 2000 }));
-      } else if (
-        !translateImageFetcher.data.success &&
-        translateImageFetcher.data.errorMsg === "额度不够"
-      ) {
-        shopify.toast.show(t("Image translation failed"));
-        setOpen(true);
-        fetcher.submit(
+        return [
+          ...prev,
           {
-            log: `${loader.shop} 翻译失败，额度不足`,
+            key: currentTranslatingImage.imageId,
+            imageId: currentTranslatingImage.imageId,
+            languageCode: currentTranslatingImage.languageCode,
+            value: translatedAlt,
+            imageUrl: currentTranslatingImage.imageBeforeUrl,
+            altText: currentTranslatingImage.altBeforeTranslation,
+            mediaId: currentTranslatingImage.mediaId,
+            imageAfterUrl: finalImageUrl,
+            type: "altAuto",
           },
+        ];
+      });
+      if (TRANSLATABLE_TYPES.has(type as string)) {
+        saveImageFetcher.submit(
           {
-            method: "POST",
-            action: "/app/log",
+            saveImageToShopify: JSON.stringify({
+              ...initData,
+              value: initData.value?.[initData.index].src,
+              imageAfterUrl:
+                translateImageFetcher.data?.response ||
+                currentTranslatingImage.imageAfterUrl ||
+                "",
+              languageCode: currentTranslatingImage.languageCode,
+              altText: translatedAlt,
+              locale: defaultLanguageData.locale,
+              mediaId: currentTranslatingImage.mediaId,
+            }),
           },
-        );
-      } else {
-        shopify.toast.show(t("Image translation failed"));
-        fetcher.submit(
-          {
-            log: `${loader.shop} 翻译失败 ${translateImageFetcher.data.errorMsg}`,
-          },
-          {
-            method: "POST",
-            action: "/app/log",
-          },
+          { method: "post" },
         );
       }
-      setTextareaLoading((pre) => ({
-        ...pre,
-        [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
-      }));
-
-      if (altTranslateFetcher.data.response.success) {
-        setConfirmData((prev: any) => {
-          const exists = prev?.find(
-            (i: any) => i.languageCode === currentTranslatingImage.languageCode,
-          );
-          const imageItem = imageDatas.find(
-            (i: any) => i.languageCode === currentTranslatingImage.languageCode,
-          );
-
-          const finalImageUrl = imageItem?.imageAfterUrl || "";
-          if (exists) {
-            // 更新现有项
-            return prev.map((i: any) =>
-              i.languageCode === currentTranslatingImage.languageCode
-                ? {
-                    ...i,
-                    value: altTranslateFetcher.data.response.response,
-                    imageAfterUrl: finalImageUrl,
-                  }
-                : i,
-            );
-          } else {
-            // 添加新的
-            return [
-              ...prev,
-              {
-                key: currentTranslatingImage.imageId,
-                imageId: currentTranslatingImage.imageId,
-                languageCode: currentTranslatingImage.languageCode,
-                value: altTranslateFetcher.data.response.response,
-                imageUrl: currentTranslatingImage.imageBeforeUrl,
-                altText: currentTranslatingImage.altBeforeTranslation,
-                mediaId: currentTranslatingImage.mediaId,
-                imageAfterUrl: "",
-                type: "altAuto",
-              },
-            ];
-          }
-        });
-
-        // dispatch(setChars({ chars: chars + 1000 }));
-      } else if (
-        !altTranslateFetcher.data.response.success &&
-        altTranslateFetcher.data.response.errorMsg === "额度不够"
-      ) {
-        // setOpen(true);
-      } else {
-        shopify.toast.show(t("Alt text translation failed"));
-      }
+    } else if (altRes?.errorMsg === "额度不够") {
+      shopify.toast.show(t("Alt text translation failed"));
+      setOpen(true);
+    } else {
+      shopify.toast.show(t("Alt text translation failed"));
     }
-  }, [translateImageFetcher.data, altTranslateFetcher.data]);
+  }, [altTranslateFetcher.data]);
   const handleSaveImage = () => {
     saveImageFetcher.submit(
       {
@@ -2471,23 +2299,6 @@ const ImageAltTextPage = () => {
             productId={productId}
             imageId={imageId}
           />
-          <Modal
-            title={t("Image Translation Not Supported")}
-            open={notTranslateModal}
-            onCancel={() => setNotTranslateModal(false)}
-            onOk={() => setNotTranslateModal(false)}
-            centered
-            okText={t("Got it")}
-            cancelButtonProps={{ style: { display: "none" } }}
-          >
-            <Typography>
-              <Paragraph>
-                {t(
-                  "If you need to add a new supported language, please contact the team support.",
-                )}
-              </Paragraph>
-            </Typography>
-          </Modal>
           <Modal
             title={t("Image Translation")}
             open={translatrImageactive}

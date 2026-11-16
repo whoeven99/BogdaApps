@@ -42,16 +42,20 @@ import {
 } from "~/store/modules/userConfig";
 import { mutationAppPurchaseOneTimeCreate } from "~/api/admin.server";
 import { ConfigProvider } from "antd";
+import { FilesAccessBanner } from "~/lib/FilesAccessBanner";
+import { useResumeFilesGrant } from "~/lib/filesAccess";
+import { hasWriteFilesScope } from "~/lib/writeFilesScope";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
-  const { shop } = adminAuthResult.session;
+  const { shop, scope } = adminAuthResult.session;
 
   return {
     shop,
     server: process.env.SERVER_URL,
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    canWriteFiles: hasWriteFilesScope(scope),
   };
 };
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -216,10 +220,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 export default function App() {
-  const { apiKey, shop, server } = useLoaderData<typeof loader>();
+  const { apiKey, shop, server, canWriteFiles } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const location = useLocation();
+  useResumeFilesGrant();
   const initFetcher = useFetcher<any>();
   const { plan, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
@@ -363,6 +368,11 @@ export default function App() {
           {/* <Link to="/app/management">{t("Managements")}</Link> */}
           <Link to="/app/pricing">{t("Pricing")}</Link>
         </NavMenu>
+        {!canWriteFiles ? (
+          <div style={{ padding: 16 }}>
+            <FilesAccessBanner apiKey={apiKey} shop={shop} />
+          </div>
+        ) : null}
         <Outlet />
       </ConfigProvider>
     </AppProvider>
