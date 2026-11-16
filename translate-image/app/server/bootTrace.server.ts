@@ -1,9 +1,22 @@
+import { isbot } from "isbot";
+
 const LOG = "[boot]";
+
+function refererHost(request: Request): string {
+  const referer = request.headers.get("referer");
+  if (!referer) return "no-referer";
+  try {
+    return new URL(referer).host || "no-referer";
+  } catch {
+    return "bad-referer";
+  }
+}
 
 /** 首屏阶段日志。不打印 token、hmac、id_token。 */
 export function bootRequestShape(request: Request): string {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
+  const ua = request.headers.get("user-agent") ?? "";
   return [
     url.pathname,
     shop ? `shop=${shop}` : "no-shop",
@@ -11,6 +24,9 @@ export function bootRequestShape(request: Request): string {
     url.searchParams.get("embedded") === "1" ? "embedded" : "no-embedded",
     url.searchParams.get("id_token") ? "id_token" : "no-id_token",
     request.headers.get("authorization") ? "auth-header" : "no-auth-header",
+    `dest=${request.headers.get("sec-fetch-dest") || "none"}`,
+    isbot(ua) ? "bot" : "browser",
+    refererHost(request),
   ].join(" ");
 }
 
