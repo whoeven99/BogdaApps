@@ -45,11 +45,13 @@ import { ConfigProvider } from "antd";
 import { FilesAccessBanner } from "~/lib/FilesAccessBanner";
 import { useResumeFilesGrant } from "~/lib/filesAccess";
 import { hasWriteFilesScope } from "~/lib/writeFilesScope";
+import { bootMark } from "~/server/bootTrace.server";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop, scope } = adminAuthResult.session;
+  bootMark("app loader", `shop=${shop}`);
 
   return {
     shop,

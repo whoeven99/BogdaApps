@@ -11,6 +11,7 @@ import {
   normalizeEnvValue,
 } from "./config/runtimeEnv.server";
 import { SHOPIFY_ADMIN_API_VERSION } from "./lib/shopifyAdminApiVersion";
+import { bootMark, bootStep } from "./server/bootTrace.server";
 import { getShopAdmin } from "./server/shop/shopAdminToken.server";
 
 ensureRuntimeEnv();
@@ -37,9 +38,15 @@ export default shopify;
 export const apiVersion = SHOPIFY_ADMIN_API_VERSION as ApiVersion;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 const authenticateAdmin = (async (request: Request) => {
-  const ctx = await shopify.authenticate.admin(request);
-  const admin = getShopAdmin({ shop: ctx.session.shop });
-  return { ...ctx, admin: admin as unknown as typeof ctx.admin };
+  return bootStep("auth", request, async () => {
+    const ctx = await shopify.authenticate.admin(request);
+    bootMark(
+      "auth session",
+      `shop=${ctx.session.shop} online=${ctx.session.isOnline}`,
+    );
+    const admin = getShopAdmin({ shop: ctx.session.shop });
+    return { ...ctx, admin: admin as unknown as typeof ctx.admin };
+  });
 }) as typeof shopify.authenticate.admin;
 
 /** `admin.graphql` always uses an application-only token. */

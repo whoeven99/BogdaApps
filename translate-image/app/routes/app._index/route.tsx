@@ -11,11 +11,13 @@ import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
 import ThemeModule from "./components/themeModule";
 import { FaqComponent } from "./components/faqComponent";
+import { bootMark } from "~/server/bootTrace.server";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop } = adminAuthResult.session;
+  bootMark("home loader", `shop=${shop}`);
   const language =
     request.headers.get("Accept-Language")?.split(",")[0] || "en";
   return {
