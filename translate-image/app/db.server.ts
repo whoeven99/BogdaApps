@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
+
+ensureRuntimeEnv();
 
 declare global {
   var prismaGlobal: PrismaClient;
