@@ -19,7 +19,6 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import {
-  GetUnTranslatedWords,
   GetUserSubscriptionPlan,
   GetUserWords,
   GoogleAnalyticClickReport,
@@ -27,8 +26,8 @@ import {
   IsInFreePlanTime,
   IsOpenFreePlan,
   storageTranslateImage,
-  UserAdd,
 } from "~/api/JavaServer";
+import { UserAdd } from "~/server/shop/userAdd.server";
 import { globalStore } from "~/globalStore";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -41,7 +40,7 @@ import {
   setUpdateTime,
   setUserConfigIsLoading,
 } from "~/store/modules/userConfig";
-import { mutationAppPurchaseOneTimeCreate } from "~/api/admin";
+import { mutationAppPurchaseOneTimeCreate } from "~/api/admin.server";
 import { ConfigProvider } from "antd";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -58,7 +57,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const adminAuthResult = await authenticate.admin(request);
-    const { shop, accessToken } = adminAuthResult.session;
+    const { shop } = adminAuthResult.session;
     const { admin } = adminAuthResult;
     const formData = await request.formData();
     const init = JSON.parse(formData.get("init") as string);
@@ -72,7 +71,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       try {
         const response = await UserAdd({
           shop,
-          accessToken: accessToken as string,
         });
         return json({ response });
       } catch (error) {
@@ -142,7 +140,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         const res = await mutationAppPurchaseOneTimeCreate({
           shop,
-          accessToken: accessToken as string,
           name: payInfo.name,
           price: payInfo.price,
           returnUrl,

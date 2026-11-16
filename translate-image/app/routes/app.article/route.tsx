@@ -34,7 +34,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
 
-  const { shop, accessToken } = adminAuthResult.session;
+  const { shop } = adminAuthResult.session;
   const formData = await request.formData();
   const loading = JSON.parse(formData.get("loading") as string);
   const articleStartCursor: any = JSON.parse(

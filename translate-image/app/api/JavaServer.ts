@@ -1,5 +1,4 @@
 import axios from "axios";
-import { queryShop } from "./admin";
 
 // 一次性购买成功后发送邮件
 export const SendOneTimeBuySuccessEmail = async ({
@@ -63,21 +62,17 @@ export const SendSubscribeSuccessEmail = async ({
 export const GetUnTranslatedWords = async ({
   shop,
   module,
-  accessToken,
   source,
 }: {
   shop: string;
   module: string;
-  accessToken: string;
   source: string;
 }) => {
   try {
     const response = await axios({
       method: "POST",
       url: `${process.env.SERVER_URL}/shopify/getUnTranslatedToken?shopName=${shop}&source=${source}&modelType=${module}`,
-      data: {
-        accessToken,
-      },
+      data: {},
     });
     console.log("unTranslated words data", response.data);
     return response.data;
@@ -284,19 +279,47 @@ export const UpdateProductImageAltData = async ({
 };
 
 // 获取图片翻译结果
+export const DeductPictureCredits = async ({
+  shop,
+  modelType,
+}: {
+  shop: string;
+  modelType: number;
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUserPic/deductPicPoints?shopName=${shop}`,
+      method: "POST",
+      timeout: 15000,
+      data: {
+        modelType,
+        count: 1,
+      },
+    });
+    console.log(`${shop} DeductPictureCredits`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} DeductPictureCredits failed`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
+
 export const TranslateImage = async ({
   shop,
   imageUrl,
   sourceCode,
   targetCode,
-  accessToken,
   modelType,
 }: {
   shop: string;
   imageUrl: string;
   sourceCode: string;
   targetCode: string;
-  accessToken: string;
   modelType: number;
 }) => {
   try {
@@ -307,7 +330,6 @@ export const TranslateImage = async ({
         imageUrl,
         sourceCode,
         targetCode,
-        accessToken,
         modelType,
       },
     });
@@ -618,41 +640,6 @@ export const getProductAllLanguageImagesData = async ({
   }
 };
 
-//用户数据初始化
-//添加用户
-export const UserAdd = async ({
-  shop,
-  accessToken,
-}: {
-  shop: string;
-  accessToken: string;
-}) => {
-  try {
-    const shopData = await queryShop({ shop, accessToken });
-    const shopOwnerName = shopData?.shopOwnerName;
-    const lastSpaceIndex = shopOwnerName.lastIndexOf(" ");
-    const firstName = shopOwnerName.substring(0, lastSpaceIndex);
-    const lastName = shopOwnerName.substring(lastSpaceIndex + 1);
-    const addUserInfoResponse = await axios({
-      url: `${process.env.SERVER_URL}/pcUsers/initUser?shopName=${shop}`,
-      method: "POST",
-      data: {
-        accessToken: accessToken,
-        email: shopData.email || "",
-        phone: "",
-        realAddress: "",
-        ipAddress: "",
-        firstName: firstName || "",
-        lastName: lastName || "",
-        userTag: shopOwnerName || "",
-      },
-    });
-    console.log(`${shop} addUserInfoResponse: `, addUserInfoResponse.data);
-  } catch (error) {
-    console.error(`${shop} Error UserAdd:`, error);
-  }
-};
-
 //更新订单数据
 export const InsertOrUpdateOrder = async ({
   shop,
@@ -725,12 +712,10 @@ export const AddCharsByShopName = async ({
 
 export const AltTranslate = async ({
   shop,
-  accessToken,
   alt,
   targetCode,
 }: {
   shop: string;
-  accessToken: string;
   alt: string;
   targetCode: string;
 }) => {
@@ -741,7 +726,6 @@ export const AltTranslate = async ({
       data: {
         alt,
         targetCode,
-        accessToken: accessToken,
       },
     });
     return response.data;
@@ -1200,12 +1184,10 @@ function getFileName(url: string) {
 // 删除存储在shopify的文件
 export const updateManageTranslation = async ({
   shop,
-  accessToken,
   updateData,
   admin,
 }: {
   shop: string;
-  accessToken: string;
   updateData: any;
   admin: any;
 }) => {
@@ -1469,27 +1451,33 @@ export const updateManageTranslation = async ({
 
     console.log("transferValue ===>", transferValue);
 
-    // 4. 调用你的服务器，更新 Shopify 数据
-    const response = await axios({
-      url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
-      method: "POST",
-      timeout: 10000,
-      data: {
-        shopName: shop,
-        accessToken,
-        locale: updateData.locale,
-        key: updateData.key,
-        value: transferValue,
-        translatableContentDigest: updateData.digest,
-        resourceId: updateData.resourceId,
-        target: updateData.languageCode,
+    const registerRes = await admin.graphql(
+      `#graphql
+      mutation translationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
+        translationsRegister(resourceId: $resourceId, translations: $translations) {
+          userErrors { message field }
+          translations { key value }
+        }
+      }`,
+      {
+        variables: {
+          resourceId: updateData.resourceId,
+          translations: [
+            {
+              locale: updateData.languageCode,
+              key: updateData.key,
+              value: transferValue,
+              translatableContentDigest: updateData.digest,
+            },
+          ],
+        },
       },
-    });
+    );
+    const registerJson = await registerRes.json();
     console.log("adsadas", imageId, updateData.mediaId);
-
-    console.log(`${shop} update translations: `, response.data);
+    console.log(`${shop} update translations: `, registerJson?.data);
     return {
-      res: response.data,
+      res: registerJson?.data,
       ...updateData,
       mediaId: imageId || updateData?.mediaId,
     };
@@ -1504,24 +1492,16 @@ export const updateManageTranslation = async ({
 
 export const deleteSaveInShopify = async ({
   shop,
-  accessToken,
   item,
+  admin,
 }: {
   shop: string;
-  accessToken: string;
   item: any;
+  admin: any;
 }) => {
   try {
-    const response = await axios({
-      url: `https://${shop}/admin/api/2024-10/graphql.json`,
-      method: "POST",
-      timeout: 10000, // 添加超时设置
-      headers: {
-        "X-Shopify-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
-      data: {
-        query: `mutation translationsRemove($resourceId: ID!, $translationKeys: [String!]!, $locales: [String!]!) {
+    const response = await admin.graphql(
+      `mutation translationsRemove($resourceId: ID!, $translationKeys: [String!]!, $locales: [String!]!) {
         translationsRemove(resourceId: $resourceId, translationKeys: $translationKeys, locales: $locales) {
           userErrors {
             message
@@ -1533,15 +1513,17 @@ export const deleteSaveInShopify = async ({
           }
         }
       }`,
+      {
         variables: {
           resourceId: item.resourceId,
           locales: [item?.languageCode],
           translationKeys: [item?.key],
         },
       },
-    });
-    console.log(`${shop}delete image file in shopify`, response.data);
-    return response;
+    );
+    const data = await response.json();
+    console.log(`${shop}delete image file in shopify`, data);
+    return { data };
   } catch (error) {
     console.log(`${shop}delete image file error`, error);
   }

@@ -61,7 +61,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const searchTerm = url.searchParams.get("language");
 
   const adminAuthResult = await authenticate.admin(request);
-  const { shop, accessToken } = adminAuthResult.session;
+  const { shop } = adminAuthResult.session;
   const { admin } = adminAuthResult;
   const formData = await request.formData();
   const startCursor: any = JSON.parse(formData.get("startCursor") as string);

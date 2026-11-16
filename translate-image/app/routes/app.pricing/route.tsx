@@ -39,7 +39,7 @@ import "./style.css";
 import {
   mutationAppPurchaseOneTimeCreate,
   mutationAppSubscriptionCreate,
-} from "~/api/admin";
+} from "~/api/admin.server";
 import { useDispatch, useSelector } from "react-redux";
 import { handleContactSupport } from "../app._index/route";
 import { setPlan, setUpdateTime } from "~/store/modules/userConfig";
@@ -59,7 +59,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
-  const { shop, accessToken } = adminAuthResult.session;
+  const { shop } = adminAuthResult.session;
   const { admin } = adminAuthResult;
 
   const formData = await request.formData();
@@ -73,7 +73,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         const res = await mutationAppSubscriptionCreate({
           shop,
-          accessToken: accessToken as string,
           name: payForPlan.title,
           yearly: payForPlan.yearly,
           price: {

@@ -31,7 +31,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
 
-  const { shop, accessToken } = adminAuthResult.session;
+  const { shop } = adminAuthResult.session;
   const formData = await request.formData();
   const articleLoading = JSON.parse(formData.get("articleLoading") as string);
   const articleImageFetcher = JSON.parse(

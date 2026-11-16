@@ -55,17 +55,16 @@ import {
   getProductAllLanguageImagesData,
   storageMediaId,
   storageTranslateImage,
-  TranslateImage,
   updateManageTranslation,
   UpdateProductImageAltData,
 } from "~/api/JavaServer";
+import { translateImageToFiles } from "~/server/picture/translateImage.server";
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
 import "./style.css";
 import { useDispatch, useSelector } from "react-redux";
 import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
 import { setChars, setTotalChars } from "~/store/modules/userConfig";
-import { CheckboxGroupProps } from "antd/es/checkbox";
 import useReport from "scripts/eventReport";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -78,7 +77,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
 
-  const { shop, accessToken } = adminAuthResult.session;
+  const { shop } = adminAuthResult.session;
   const formData = await request.formData();
   const imageLoading = JSON.parse(formData.get("imageLoading") as string);
   const articleImageLoading = JSON.parse(
@@ -222,17 +221,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!translateImage:
         try {
-          const { sourceLanguage, targetLanguage, imageUrl, translation_api } =
-            translateImage;
-          const response = (await TranslateImage({
+          const { targetLanguage, imageUrl, model, alt } = translateImage;
+          return await translateImageToFiles({
             shop,
+            admin,
+            session: adminAuthResult.session,
             imageUrl,
-            sourceCode: sourceLanguage,
-            targetCode: targetLanguage,
-            accessToken: accessToken as string,
-            modelType: translation_api,
-          })) as any;
-          return response.data;
+            targetLanguage,
+            model,
+            alt,
+          });
         } catch (error) {
           console.log("Error getImageTranslate", error);
           return {
@@ -265,7 +263,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const { alt, targetCode } = altTranslateFetcher;
           const response = await AltTranslate({
             shop: shop as string,
-            accessToken: accessToken as string,
             alt,
             targetCode,
           });
@@ -283,7 +280,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         try {
           const response = await updateManageTranslation({
             shop,
-            accessToken: accessToken as string,
             updateData: saveImageToShopify,
             admin,
           });
@@ -363,8 +359,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           // const { shop, accessToken } = adminAuthResult.session;
           const response = await deleteSaveInShopify({
             shop,
-            accessToken: accessToken as string,
             item: deleteImageInShopify,
+            admin,
           });
           // 删除创建的shopify文件以及清除当前图片的mediaId，解决因为数据库存储mediaId，导致shopify创建不了文件,仅限删除image和alt的删除操作
           if (deleteImageInShopify.type === "deleteImage_Alt") {
@@ -534,10 +530,9 @@ const ImageAltTextPage = () => {
   const dispatch = useDispatch();
   const fetcher = useFetcher();
   const [trialModal, setTrialModal] = useState<boolean>(false);
-  const options: CheckboxGroupProps<string>["options"] = [
-    { label: "标准版", value: "bassic" },
-    { label: "pro大模型", value: "pro" },
-  ];
+  const [merchantModel, setMerchantModel] = useState<"standard" | "advance">(
+    "standard",
+  );
 
   const allLanguageRenderCode = new Set([
     "ar",
@@ -1063,30 +1058,19 @@ const ImageAltTextPage = () => {
       },
       "manage_image_translate",
     );
-    // 判断图片的格式
-    const res = (await detectImageFormat(
-      currentTranslatingImage.imageBeforeUrl,
-    )) as string;
-    if (
-      !canAidgeTranslate(sourceLanguage, targetLanguage) &&
-      !canHuoshanTranslate(sourceLanguage, targetLanguage, res)
-    ) {
-      setNotTranslateModal(true);
-      return;
-    }
     setTranslateLoadingImages((pre) => ({
       ...pre,
       [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
     }));
-    //     aidge_standard   huoshan  aidge_pro
-    //            1           2          3
     translateImageFetcher.submit(
       {
         translateImage: JSON.stringify({
-          sourceLanguage,
           targetLanguage,
           imageUrl: currentTranslatingImage?.imageBeforeUrl,
-          translation_api: selectTranslationApi(res),
+          model: merchantModel,
+          alt:
+            currentTranslatingImage.altBeforeTranslation ||
+            productImageData?.altText,
         }),
       },
       { method: "post" },
@@ -2536,10 +2520,19 @@ const ImageAltTextPage = () => {
               />
               <span>{t("Target Language")}</span>
               <Select
-                style={{ width: "100%", marginTop: "10px" }}
+                style={{ width: "100%", marginTop: "10px", marginBottom: "20px" }}
                 value={targetLanguage}
                 onChange={setTargetLanguage}
                 options={targetLanguages}
+              />
+              <p style={{ marginBottom: "10px" }}>{t("Model")}</p>
+              <Radio.Group
+                value={merchantModel}
+                onChange={(e) => setMerchantModel(e.target.value)}
+                options={[
+                  { label: t("Standard"), value: "standard" },
+                  { label: t("Advance"), value: "advance" },
+                ]}
               />
             </div>
           </Modal>
