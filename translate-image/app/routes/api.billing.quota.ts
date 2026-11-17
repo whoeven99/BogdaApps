@@ -20,6 +20,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       planType: quota.planType,
       feeType: quota.feeType,
       currentPeriodEnd: quota.currentPeriodEnd,
+      hasUsedTrial: quota.hasUsedTrial,
+      isInFreePlanTime: quota.isInFreePlanTime,
+      trialEndsAt: quota.trialEndsAt,
     },
   });
 };
