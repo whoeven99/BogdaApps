@@ -60,7 +60,11 @@ import {
 import { merchantImageCredits } from "~/lib/imageTranslate";
 import { translateImageToFiles } from "~/server/picture/translateImage.server";
 import { listPicturesByImageId, persistImageAfterFileId } from "~/server/picture/picture.server";
-import { PRODUCT_MEDIA_FIELDS, productWithImages } from "~/server/picture/productMedia";
+import {
+  findImageLikeNode,
+  PRODUCT_MEDIA_FIELDS,
+  productWithImages,
+} from "~/server/picture/productMedia";
 import { translateAltText } from "~/server/picture/altTranslate.server";
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
@@ -119,34 +123,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
           const response = await loadData.json();
           const product = productWithImages(response?.data?.product);
-          let imageData = {};
-          if (product?.images?.edges.length > 0) {
-            product.images.edges.forEach((item: any) => {
-              if (item.node.id === imageLoading.imageId) {
-                imageData = {
-                  title: product?.title,
-                  altText: item?.node?.altText,
-                  key: item?.node?.id,
-                  productId: item?.node?.id,
-                  productTitle: item?.node?.title,
-                  imageId: item?.node?.id,
-                  imageUrl: item?.node?.url,
-                  targetImageUrl: "",
-                };
-              }
-            });
+          const node = findImageLikeNode(
+            product?.images?.edges,
+            String(imageLoading?.imageId || ""),
+          );
+          if (!node) {
             return json({
-              imageData,
-            });
-          } else {
-            return json({
-              imageData: [],
+              imageData: null,
+              errorMsg: "IMAGE_NOT_FOUND",
             });
           }
+          return json({
+            imageData: {
+              title: product?.title,
+              altText: node.altText,
+              key: node.id,
+              productId: product?.id,
+              productTitle: product?.title,
+              imageId: node.id,
+              imageUrl: node.url,
+              targetImageUrl: "",
+            },
+          });
         } catch (error) {
           console.error("Error action imageStartCursor productImage:", error);
           return json({
-            imageData: [],
+            imageData: null,
+            errorMsg: "IMAGE_NOT_FOUND",
           });
         }
       case !!articleImageLoading:
@@ -404,6 +407,7 @@ const ImageAltTextPage = () => {
   const { type, productId, imageId } = useParams();
   const [initData, setInitData] = useState<any>({});
   const [localRecord, setLocalRecord] = useState<any>({}); // 先空对象
+  const [productImageData, setProductImageData] = useState<any>({});
   useEffect(() => {
     const record = JSON.parse(sessionStorage.getItem("record") || "{}");
     setInitData(record);
@@ -423,7 +427,9 @@ const ImageAltTextPage = () => {
       case "articles":
         return `gid://shopify/ArticleImage/${imageId}`;
       case "products":
-        return `gid://shopify/ProductImage/${imageId}`;
+        return typeof productImageData?.imageId === "string"
+          ? productImageData.imageId
+          : "";
       default:
         const val = localRecord?.value;
         const idx = localRecord?.index;
@@ -439,7 +445,7 @@ const ImageAltTextPage = () => {
         }
         return "";
     }
-  }, [type, imageId, localRecord]);
+  }, [type, imageId, localRecord, productImageData]);
 
   const currentResourceId = useMemo(() => {
     if (!localRecord) return "";
@@ -465,7 +471,6 @@ const ImageAltTextPage = () => {
 
   const [languageList, setLanguageList] = useState<any[]>([]);
   const [languageLoading, setLanguageLoading] = useState<boolean>(true);
-  const [productImageData, setProductImageData] = useState<any>([]);
   const [defaultLanguageData, setDefaultLanguageData] = useState<any>();
   const languageFetcher = useFetcher<any>();
   const [currentTranslatingImage, setCurrentTranslatingImage] =
@@ -1582,7 +1587,7 @@ const ImageAltTextPage = () => {
         {
           imageLoading: JSON.stringify({
             productId: `gid://shopify/Product/${productId}`,
-            imageId: `gid://shopify/ProductImage/${imageId}`,
+            imageId: String(imageId || ""),
           }),
         },
         {
@@ -1609,10 +1614,19 @@ const ImageAltTextPage = () => {
   }, [localRecord]);
   useEffect(() => {
     if (imageLoadingFetcher.data) {
-      // console.log(imageLoadingFetcher.data);
-
-      setProductImageData(imageLoadingFetcher.data.imageData);
+      const loaded = imageLoadingFetcher.data.imageData;
+      const resolved =
+        loaded &&
+        typeof loaded === "object" &&
+        !Array.isArray(loaded) &&
+        typeof loaded.imageId === "string"
+          ? loaded
+          : {};
+      setProductImageData(resolved);
       setPageLoading(false);
+      if (!resolved.imageId) {
+        setImageFetcherLoading(false);
+      }
     }
   }, [imageLoadingFetcher.data]);
   useEffect(() => {

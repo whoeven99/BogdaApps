@@ -16,7 +16,7 @@
     "turso:migrate": "node scripts/turso-migrate.mjs",
     "credits:import": "node scripts/import-java-credits.mjs",
     "pictures:migrate-cos": "node scripts/migrate-cos-pictures-to-files.mjs",
-    "test": "node --test scripts/picture-urlkeys.test.mjs scripts/billing-state.test.mjs",
+    "test": "node --test scripts/picture-urlkeys.test.mjs scripts/billing-state.test.mjs scripts/product-media.test.mjs",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "shopify": "shopify",
     "prisma": "prisma",
