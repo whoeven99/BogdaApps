@@ -1,5 +1,6 @@
 import prisma from "~/db.server";
-import { ensureAccount, JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./quota.server";
+import { JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./billingState";
+import { ensureAccount } from "./quota.server";
 
 const PACK_CREDITS: Record<string, number> = {
   "50 extra times": 100000,
@@ -18,6 +19,16 @@ const PLAN_BY_NAME: Record<string, { plan: number; planType: string; monthlyCred
   Premium: { plan: 4, planType: "Premium", monthlyCredits: 1600000 },
 };
 
+export type GrantPlanFields = {
+  plan: number;
+  planType: string;
+  feeType: number;
+  subscriptionGid?: string;
+  currentPeriodEnd?: Date | null;
+  hasUsedTrial?: boolean;
+  trialEndsAt?: Date | null;
+};
+
 export function packCreditsForName(name: string): number | null {
   return PACK_CREDITS[name] ?? null;
 }
@@ -31,13 +42,25 @@ export function planGrantForName(name: string, yearly: boolean) {
   };
 }
 
+function accountPlanData(plan: GrantPlanFields) {
+  return {
+    plan: plan.plan,
+    planType: plan.planType,
+    feeType: plan.feeType,
+    ...(plan.subscriptionGid !== undefined ? { subscriptionGid: plan.subscriptionGid } : {}),
+    ...(plan.currentPeriodEnd !== undefined ? { currentPeriodEnd: plan.currentPeriodEnd } : {}),
+    ...(plan.hasUsedTrial ? { hasUsedTrial: true } : {}),
+    ...(plan.trialEndsAt !== undefined ? { trialEndsAt: plan.trialEndsAt } : {}),
+  };
+}
+
 export async function grantCreditsOnce(args: {
   shop: string;
   gid: string;
   periodKey: string;
   kind: string;
   credits: number;
-  plan?: { plan: number; planType: string; feeType: number; subscriptionGid?: string; currentPeriodEnd?: Date | null };
+  plan?: GrantPlanFields;
 }): Promise<boolean> {
   if (args.credits <= 0) return false;
   await ensureAccount(args.shop);
@@ -56,22 +79,22 @@ export async function grantCreditsOnce(args: {
     });
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
-    if (code === "P2002") return false;
+    if (code === "P2002") {
+      if (args.plan && args.kind === "subscription") {
+        await prisma.account.update({
+          where: { shop: args.shop },
+          data: accountPlanData(args.plan),
+        });
+      }
+      return false;
+    }
     throw err;
   }
   await prisma.account.update({
     where: { shop: args.shop },
     data: {
       purchasePoints: { increment: skipAdd ? 0 : args.credits },
-      ...(args.plan
-        ? {
-            plan: args.plan.plan,
-            planType: args.plan.planType,
-            feeType: args.plan.feeType,
-            subscriptionGid: args.plan.subscriptionGid,
-            currentPeriodEnd: args.plan.currentPeriodEnd,
-          }
-        : {}),
+      ...(args.plan ? accountPlanData(args.plan) : {}),
     },
   });
   return !skipAdd;
