@@ -126,6 +126,12 @@ function logTursoEnvStatus(): void {
   console.info(
     `[env] TURSO_AUTH_TOKEN=${process.env.TURSO_AUTH_TOKEN ? "(set)" : "缺失"}`,
   );
+  console.info(
+    `[env] TSF_TURSO_DATABASE_URL=${process.env.TSF_TURSO_DATABASE_URL ? "(set)" : "缺失"}`,
+  );
+  console.info(
+    `[env] TSF_TURSO_AUTH_TOKEN=${process.env.TSF_TURSO_AUTH_TOKEN ? "(set)" : "缺失"}`,
+  );
   if (tursoKeys.length > 0) {
     console.info(`[env] TURSO_* 键: ${tursoKeys.join(", ")}`);
   }
@@ -133,7 +139,7 @@ function logTursoEnvStatus(): void {
 
 /**
  * 启动时加载本地 .env 与 Render Secret File（/etc/secrets/.env 等）。
- * 在 db.server / redis.server 最早 import 时调用，无需 Docker NODE_OPTIONS。
+ * 在 db.server / currencyRates.server 最早 import 时调用，无需 Docker NODE_OPTIONS。
  */
 export function ensureRuntimeEnv(): void {
   if (runtimeEnvLoaded) return;

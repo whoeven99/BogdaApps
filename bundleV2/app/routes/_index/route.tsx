@@ -21,7 +21,7 @@ import { OfferTypeSelection } from "../component/CreateNewOffer/OfferTypeSelecti
 import { sanitizeEnvLikeValue } from "../../utils/env";
 import { fetchThemeEditorTargets, getCurrentThemeExtensionEnabled } from "../../server/shopify/theme.server";
 import { useStripRouterSearchParams } from "../../hooks/useStripRouterSearchParams";
-import { buildAppSearchString } from "../../utils/appSearchParams";
+import { buildAppSearchString, buildIndexActionPath } from "../../utils/appSearchParams";
 import { getCachedShopOffers } from "../../shopOffersCache.server";
 import { syncShopOffersMetafieldIfStale } from "../../server/offers/offerSync.server";
 import { handleLoadOffers } from "./actions/loadOffers.server";
@@ -247,6 +247,7 @@ export default function Index() {
     | undefined;
 
   const [searchParams] = useSearchParams();
+  const indexAction = buildIndexActionPath(searchParams);
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
@@ -272,15 +273,14 @@ export default function Index() {
   const postBuilderIntent = useCallback(
     async <T,>(formData: FormData, fallback: T): Promise<T> => {
       try {
-        const url = window.location.pathname + window.location.search;
-        const res = await fetch(url, { method: "POST", body: formData });
+        const res = await fetch(indexAction, { method: "POST", body: formData });
         if (!res.ok) return fallback;
         return (await res.json()) as T;
       } catch {
         return fallback;
       }
     },
-    [],
+    [indexAction],
   );
 
   const handleExpandCollections = useCallback(
@@ -312,7 +312,7 @@ export default function Index() {
     setShowCreateOffer(false);
     setCreateOfferType(null);
     setEditingOfferId(null);
-    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post", action: indexAction });
   };
 
   // Handle toast and post-save navigation
@@ -363,8 +363,8 @@ export default function Index() {
   useEffect(() => {
     if (offersFetcher.data?.offers) return;
     if (offersFetcher.state !== "idle") return;
-    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
-  }, [offersFetcher, offersFetcher.data, offersFetcher.state]);
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post", action: indexAction });
+  }, [indexAction, offersFetcher, offersFetcher.data, offersFetcher.state]);
 
   // Refresh offers after mutations
   useEffect(() => {
@@ -380,16 +380,19 @@ export default function Index() {
     if (lastOffersRefreshToastRef.current === toast) return;
     if (offersFetcher.state !== "idle") return;
     lastOffersRefreshToastRef.current = toast || null;
-    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
-  }, [toast, offersFetcher, offersFetcher.state]);
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post", action: indexAction });
+  }, [indexAction, toast, offersFetcher, offersFetcher.state]);
 
   // Load store products when offer builder opens
   useEffect(() => {
     if (!shouldShowOfferBuilder) return;
     if (storeProductsFetcher.data?.storeProducts) return;
     if (storeProductsFetcher.state !== "idle") return;
-    storeProductsFetcher.submit({ intent: "load-store-products" }, { method: "post" });
-  }, [shouldShowOfferBuilder, storeProductsFetcher, storeProductsFetcher.data, storeProductsFetcher.state]);
+    storeProductsFetcher.submit(
+      { intent: "load-store-products" },
+      { method: "post", action: indexAction },
+    );
+  }, [indexAction, shouldShowOfferBuilder, storeProductsFetcher, storeProductsFetcher.data, storeProductsFetcher.state]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>

@@ -22,6 +22,16 @@ export function buildAppSearchString(input: URLSearchParams | string): string {
   return qs ? `?${qs}` : "";
 }
 
+/** POST 到 `/` 的 index action：保留 shop/host，并带上 `?index`（不用于地址栏展示）。 */
+export function buildIndexActionPath(
+  input: URLSearchParams | string,
+  pathname = "/",
+): string {
+  const params = stripInternalSearchParams(input);
+  params.set("index", "");
+  return `${pathname}?${params.toString()}`;
+}
+
 export function hasInternalSearchParams(searchParams: URLSearchParams): boolean {
   return INTERNAL_SEARCH_PARAM_KEYS.some((key) => searchParams.has(key));
 }

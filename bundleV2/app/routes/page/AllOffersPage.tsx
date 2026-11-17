@@ -10,7 +10,7 @@ import {
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
 import { openThemeEditor } from "../../utils/themeEditor";
-import { buildAppSearchString } from "../../utils/appSearchParams";
+import { buildAppSearchString, buildIndexActionPath } from "../../utils/appSearchParams";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -119,6 +119,7 @@ export function AllOffersPage({
   });
 
   const [searchParams] = useSearchParams();
+  const indexAction = buildIndexActionPath(searchParams);
   const navigate = useNavigate();
   const actionData = useActionData() as
     | { toast?: string }
@@ -541,7 +542,7 @@ export function AllOffersPage({
                       {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#eef1f4]">
-                      <Form method="post">
+                      <Form method="post" action={indexAction}>
                         <input type="hidden" name="intent" value="toggle-offer-status" />
                         <input type="hidden" name="offerId" value={offer.id} />
                         <input
@@ -658,7 +659,7 @@ export function AllOffersPage({
               >
                 Cancel
               </button>
-              <deleteFetcher.Form method="post">
+              <deleteFetcher.Form method="post" action={indexAction}>
                 <input type="hidden" name="intent" value="delete-offer" />
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button

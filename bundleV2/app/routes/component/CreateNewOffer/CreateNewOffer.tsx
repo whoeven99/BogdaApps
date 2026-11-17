@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo, type ReactNode } from "react";
-import { buildAppSearchString } from "../../../utils/appSearchParams";
+import { buildAppSearchString, buildIndexActionPath } from "../../../utils/appSearchParams";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
@@ -747,6 +747,7 @@ export function CreateNewOffer({
   }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const indexAction = buildIndexActionPath(searchParams);
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
   const [isSavingOffer, setIsSavingOffer] = useState(false);
   const confirmedHighDiscountRef = useRef(false);
@@ -1103,8 +1104,8 @@ export function CreateNewOffer({
     saveSeenActiveRef.current = false;
     setSubmitErrorToast(null);
     setIsSavingOffer(true);
-    offerSaveFetcher.submit(new FormData(form), { method: "post" });
-  }, [isSavingOffer, offerSaveFetcher]);
+    offerSaveFetcher.submit(new FormData(form), { method: "post", action: indexAction });
+  }, [indexAction, isSavingOffer, offerSaveFetcher]);
 
   useEffect(() => {
     if (!awaitingSaveResultRef.current) return;
@@ -2557,10 +2558,11 @@ export function CreateNewOffer({
         intent: "get-product-subscription-status",
         productId: previewProductId,
       },
-      { method: "post" },
+      { method: "post", action: indexAction },
     );
   }, [
     effectiveSubscriptionEnabled,
+    indexAction,
     selectedProductsData,
     subscriptionPreviewSnapshot,
     subscriptionStatusFetcher,
@@ -3605,6 +3607,7 @@ export function CreateNewOffer({
       ref={offerFormRef}
       className="relative max-w-[1280px] mx-auto pb-6 px-6"
       method="post"
+      action={indexAction}
       onSubmit={(e) => {
         const key = normalizeOfferNameKey(offerName);
         const taken = existingOffers.some(

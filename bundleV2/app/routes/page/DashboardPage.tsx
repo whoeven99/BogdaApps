@@ -24,6 +24,7 @@ import {
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
 import { openThemeEditor } from "../../utils/themeEditor";
+import { buildIndexActionPath } from "../../utils/appSearchParams";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -155,6 +156,7 @@ export function DashboardPage({
   themeExtensionMatchedThemeId,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
+  const indexAction = buildIndexActionPath(searchParams);
   const actionData = useActionData() as
     | { toast?: string }
     | { _offerActionError: true; message: string }
@@ -750,7 +752,7 @@ export function DashboardPage({
                       {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
-                      <Form method="post">
+                      <Form method="post" action={indexAction}>
                         <input
                           type="hidden"
                           name="intent"
@@ -888,7 +890,7 @@ export function DashboardPage({
                       </span>
                     </div>
                   </div>
-                  <Form method="post">
+                  <Form method="post" action={indexAction}>
                     <input
                       type="hidden"
                       name="intent"
@@ -1300,7 +1302,7 @@ export function DashboardPage({
               >
                 Cancel
               </button>
-              <Form method="post">
+              <Form method="post" action={indexAction}>
                 <input type="hidden" name="intent" value="delete-offer" />
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button
