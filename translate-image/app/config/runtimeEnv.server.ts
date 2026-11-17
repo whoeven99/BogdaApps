@@ -178,8 +178,7 @@ function logCriticalEnvStatus(): void {
     ["SHOPIFY_CIWI_SWITCHER_THEME_ID", process.env.SHOPIFY_CIWI_SWITCHER_THEME_ID],
   ]);
 
-  logEnvCheck("Backend", Boolean(process.env.SERVER_URL?.trim()), [
-    ["SERVER_URL", process.env.SERVER_URL],
+  logEnvCheck("App handle", Boolean(process.env.HANDLE?.trim()), [
     ["HANDLE", process.env.HANDLE],
   ]);
 
