@@ -26,6 +26,7 @@ test("同一 media 节点：MediaImage / ImageSource / 旧 ProductImage 末段�
   assert.equal(mediaNodeMatches(node, "111"), true);
   assert.equal(mediaNodeMatches(node, "222"), true);
   assert.equal(mediaNodeMatches(node, "gid://shopify/ProductImage/222"), true);
+  assert.equal(mediaNodeMatches(node, "gid://shopify/ArticleImage/222"), true);
   assert.equal(mediaNodeMatches(node, "999"), false);
 });
 
@@ -56,6 +57,8 @@ test("productImageLookupIds 含 MediaImage / ImageSource / 旧 ProductImage", ()
     sourceId,
     "gid://shopify/ProductImage/111",
     "gid://shopify/ProductImage/222",
+    "gid://shopify/ArticleImage/111",
+    "gid://shopify/ArticleImage/222",
   ]) {
     assert.equal(ids.includes(id), true, id);
   }

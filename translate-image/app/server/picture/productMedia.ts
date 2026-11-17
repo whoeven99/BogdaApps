@@ -85,6 +85,7 @@ export function productImageLookupIds(input: {
     add(`gid://shopify/MediaImage/${tail}`);
     add(`gid://shopify/ImageSource/${tail}`);
     add(`gid://shopify/ProductImage/${tail}`);
+    add(`gid://shopify/ArticleImage/${tail}`);
   }
   return ids;
 }

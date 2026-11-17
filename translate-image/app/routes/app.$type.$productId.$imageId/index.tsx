@@ -62,6 +62,7 @@ import { translateImageToFiles } from "~/server/picture/translateImage.server";
 import { listPicturesForProductMedia, persistImageAfterFileId } from "~/server/picture/picture.server";
 import {
   findImageLikeNode,
+  mediaNodeMatches,
   PRODUCT_MEDIA_FIELDS,
   productWithImages,
 } from "~/server/picture/productMedia";
@@ -203,23 +204,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             },
           );
           const response = await loadData.json();
-          let imageData = {
-            title: response?.data?.article?.title,
-            altText: response?.data?.article?.image?.altText,
-            key: response?.data?.article?.id,
-            productId: response?.data?.article?.id,
-            productTitle: response?.data?.article?.title,
-            imageId: response?.data?.article?.image?.id,
-            imageUrl: response?.data?.article?.image?.url,
-            targetImageUrl: "",
-          };
+          const article = response?.data?.article;
+          const image = article?.image;
+          const requested = String(articleImageLoading?.imageId || "");
+          const imageId = String(image?.id || "");
+          const imageUrl = String(image?.url || "");
+          const idMatches =
+            !requested ||
+            !imageId ||
+            mediaNodeMatches({ id: imageId }, requested);
+          if (!imageUrl || !idMatches) {
+            return json({
+              imageData: null,
+              errorMsg: "IMAGE_NOT_FOUND",
+            });
+          }
           return json({
-            imageData,
+            imageData: {
+              title: article?.title,
+              altText: image?.altText,
+              key: article?.id,
+              productId: article?.id,
+              productTitle: article?.title,
+              imageId: imageId || imageUrl,
+              imageSourceId: imageId,
+              imageUrl,
+              targetImageUrl: "",
+            },
           });
         } catch (error) {
           console.error("Error action imageStartCursor productImage:", error);
           return json({
-            imageData: [],
+            imageData: null,
+            errorMsg: "IMAGE_NOT_FOUND",
           });
         }
       case !!imagesFetcher:
@@ -454,7 +471,6 @@ const ImageAltTextPage = () => {
     if (!localRecord) return "";
     switch (type) {
       case "articles":
-        return `gid://shopify/ArticleImage/${imageId}`;
       case "products":
         return typeof productImageData?.imageId === "string"
           ? productImageData.imageId
@@ -1620,7 +1636,7 @@ const ImageAltTextPage = () => {
         {
           articleImageLoading: JSON.stringify({
             productId: `gid://shopify/Article/${productId}`,
-            imageId: `gid://shopify/ArticleImage/${imageId}`,
+            imageId: String(imageId || ""),
           }),
         },
         {
@@ -1851,15 +1867,23 @@ const ImageAltTextPage = () => {
                         padding: 0,
                       }}
                     >
-                      <img
-                        src={productImageData?.imageUrl}
-                        alt={productImageData?.altText}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                        }}
-                      />
+                      {productImageData?.imageUrl ? (
+                        <img
+                          src={productImageData.imageUrl}
+                          alt={productImageData?.altText}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      ) : (
+                        <Empty
+                          image={Empty.PRESENTED_IMAGE_SIMPLE}
+                          description={t("imageTranslate.sourceNotLoaded")}
+                          style={{ margin: "auto" }}
+                        />
+                      )}
                     </div>
                     {/* <Button onClick={() => console.log(productImageData)}>
                       输出
