@@ -194,6 +194,10 @@ function logCriticalEnvStatus(): void {
     ],
   );
 
+  logEnvCheck("Redis", Boolean(process.env.RENDER_KV?.trim()), [
+    ["RENDER_KV", process.env.RENDER_KV?.trim() ? "(已设置)" : ""],
+  ]);
+
   logEnvCheck(
     "Google",
     Boolean(

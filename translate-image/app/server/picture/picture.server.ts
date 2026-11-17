@@ -1,5 +1,6 @@
 import prisma from "~/db.server";
 import { IMAGE_TRANSLATE_SCOPE_MISSING } from "~/lib/imageTranslate";
+import { invalidateStorefrontCache } from "~/server/storefront/cache.server";
 import {
   deleteShopifyFiles,
   imageTranslateErrorCode,
@@ -203,6 +204,7 @@ export async function persistImageAfterFileId(input: {
       where: { id: existing.id },
       data: { imageAfterFileId: input.imageAfterFileId },
     });
+    await invalidateStorefrontCache("picture", input.shop);
     return ok(toPayload(row));
   } catch (err) {
     console.error(`[picture] persist file id failed shop=${input.shop}`, err);
@@ -262,6 +264,7 @@ export async function upsertUserPicture(
       },
       update: data,
     });
+    await invalidateStorefrontCache("picture", input.shop);
     return ok(toPayload(row));
   } catch (err) {
     console.error(`[picture] upsert failed shop=${input.shop}`, err);
@@ -309,6 +312,7 @@ export async function clearUserPicture(
       where: { id: existing.id },
       data: { isDelete: true, ...(deleted ? { imageAfterFileId: null } : {}) },
     });
+    await invalidateStorefrontCache("picture", key.shop);
     return ok(toPayload(updated));
   } catch (err) {
     console.error(`[picture] delete failed shop=${key.shop}:`, err);

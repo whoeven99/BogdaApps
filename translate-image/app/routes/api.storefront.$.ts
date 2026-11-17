@@ -1,6 +1,8 @@
 import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { verifyAppProxyHmac } from "~/server/storefront/auth.server";
+import { readThroughStorefrontCache } from "~/server/storefront/cache.server";
 import { fail } from "~/server/storefront/response.server";
+import { normalizeUrlKeys } from "~/server/picture/picture.server";
 import {
   getStorefrontPicturesByUrlKeys,
   getStorefrontProductPictures,
@@ -66,29 +68,48 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           : typeof body.imageId === "string"
             ? body.imageId
             : "";
-      const result = await getStorefrontProductPictures({
-        shop: auth.shop,
-        productId,
-        languageCode,
-      });
+      const result = await readThroughStorefrontCache(
+        "picture",
+        auth.shop,
+        ["product", productId, languageCode],
+        () =>
+          getStorefrontProductPictures({
+            shop: auth.shop,
+            productId,
+            languageCode,
+          }),
+      );
       return json(result, { headers: CORS_HEADERS });
     }
     if (
       path === "picture/selectPicturesByShopNameAndLanguageCode" ||
       path === "picture/getPictureDataByShopNameAndLanguageCode"
     ) {
-      const result = await getStorefrontShopPictures({
-        shop: auth.shop,
-        languageCode,
-      });
+      const result = await readThroughStorefrontCache(
+        "picture",
+        auth.shop,
+        ["shop", languageCode],
+        () =>
+          getStorefrontShopPictures({
+            shop: auth.shop,
+            languageCode,
+          }),
+      );
       return json(result, { headers: CORS_HEADERS });
     }
     if (path === "picture/getPictureDataByUrlKeys") {
-      const result = await getStorefrontPicturesByUrlKeys({
-        shop: auth.shop,
-        languageCode,
-        urlKeys: body.urlKeys,
-      });
+      const urlKeys = normalizeUrlKeys(body.urlKeys);
+      const result = await readThroughStorefrontCache(
+        "picture",
+        auth.shop,
+        ["urlKeys", languageCode, [...urlKeys].sort().join(",")],
+        () =>
+          getStorefrontPicturesByUrlKeys({
+            shop: auth.shop,
+            languageCode,
+            urlKeys,
+          }),
+      );
       return json(result, { headers: CORS_HEADERS });
     }
   } catch (err) {
