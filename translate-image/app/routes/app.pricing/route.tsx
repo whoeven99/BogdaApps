@@ -24,11 +24,9 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import ScrollNotice from "~/components/ScrollNotice";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import {
-  GetLatestActiveSubscribeId,
-  InsertOrUpdateFreePlan,
-} from "~/api/JavaServer";
 import { authenticate } from "~/shopify.server";
+import { reconcileShopBilling } from "~/server/billing/reconcile.server";
+import { resolveCancelSubscriptionGid } from "~/server/billing/resolveSubscriptionGid.server";
 import { useFetcher, useLoaderData } from "@remix-run/react";
 import {
   AddCreaditsModal,
@@ -52,6 +50,11 @@ const { Title, Text, Paragraph } = Typography;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop } = adminAuthResult.session;
+  try {
+    await reconcileShopBilling(shop, adminAuthResult.admin);
+  } catch (err) {
+    console.warn(`[pricing.loader] reconcile failed shop=${shop}`, err);
+  }
   return {
     shop: shop,
   };
@@ -64,6 +67,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const formData = await request.formData();
   const payForPlan = JSON.parse(formData.get("payForPlan") as string);
+  const cancelPlan = JSON.parse(formData.get("cancelPlan") as string);
   const cancelId = JSON.parse(formData.get("cancelId") as string);
   switch (true) {
     case !!payForPlan:
@@ -114,6 +118,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           response: undefined,
         };
       }
+    case !!cancelPlan: {
+      try {
+        const gid = await resolveCancelSubscriptionGid(shop, admin);
+        if (!gid) {
+          return {
+            success: false,
+            errorCode: 10002,
+            errorMsg: "NO_ACTIVE_SUBSCRIPTION",
+            response: null,
+          };
+        }
+        const response = await admin.graphql(
+          `#graphql
+          mutation AppSubscriptionCancel($id: ID!, $prorate: Boolean) {
+            appSubscriptionCancel(id: $id, prorate: $prorate) {
+              userErrors {
+                field
+                message
+              }
+              appSubscription {
+                id
+                status
+              }
+            }
+          }`,
+          {
+            variables: {
+              id: gid,
+            },
+          },
+        );
+        const data = await response.json();
+        console.log(`应用日志: ${shop} 取消计划: `, data);
+        return data;
+      } catch (error) {
+        console.error("Error cancelPlan action:", error);
+      }
+      break;
+    }
     case !!cancelId:
       try {
         const response = await admin.graphql(
@@ -563,22 +606,10 @@ const Index = () => {
   };
 
   const handleCancelPlan = async () => {
-    const data = await GetLatestActiveSubscribeId({
-      shop: globalStore?.shop as string,
-      server: globalStore?.server as string,
-    });
-    if (data.success) {
-      // InsertOrUpdateFreePlan({
-      //   shop: globalStore?.shop as string,
-      //   server: globalStore?.server as string,
-      // });
-      planCancelFetcher.submit(
-        {
-          cancelId: JSON.stringify(data.response),
-        },
-        { method: "POST" },
-      );
-    }
+    planCancelFetcher.submit(
+      { cancelPlan: JSON.stringify(true) },
+      { method: "POST" },
+    );
   };
   useEffect(() => {
     if (planCancelFetcher.data) {
@@ -587,15 +618,13 @@ const Index = () => {
       const subscription =
         planCancelFetcher.data.data?.appSubscriptionCancel?.appSubscription;
       if (userErrors.length === 0 && subscription) {
-        // 取消成功
-        InsertOrUpdateFreePlan({
-          shop: globalStore?.shop as string,
-          server: globalStore?.server as string,
-        });
-      } else {
-        // 取消失败
-        console.error("取消失败:", userErrors);
+        return;
       }
+      if (planCancelFetcher.data.errorMsg === "NO_ACTIVE_SUBSCRIPTION") {
+        console.error("取消失败: 没有可取消的订阅");
+        return;
+      }
+      console.error("取消失败:", userErrors);
     }
   }, [planCancelFetcher.data]);
 

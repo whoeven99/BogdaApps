@@ -8,7 +8,6 @@ import {
   json,
   Link,
   Outlet,
-  useFetcher,
   useLoaderData,
   useLocation,
   useRouteError,
@@ -18,15 +17,10 @@ import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
-import {
-  GoogleAnalyticClickReport,
-  InsertOrUpdateOrder,
-  IsInFreePlanTime,
-  IsOpenFreePlan,
-} from "~/api/JavaServer";
+import { GoogleAnalyticClickReport } from "~/api/JavaServer";
 import { fetchLocalQuota } from "~/api/pictureClient";
-import { UserAdd } from "~/server/shop/userAdd.server";
 import { ensureAccount } from "~/server/billing/quota.server";
+import { reconcileShopBilling } from "~/server/billing/reconcile.server";
 import { globalStore } from "~/globalStore";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -53,13 +47,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   bootMark("app loader", `shop=${shop}`);
   try {
     await ensureAccount(shop);
+    await reconcileShopBilling(shop, adminAuthResult.admin);
   } catch (err) {
-    console.warn(`[app.loader] ensureAccount failed shop=${shop}`, err);
+    console.warn(`[app.loader] billing bootstrap failed shop=${shop}`, err);
   }
 
   return {
     shop,
-    server: process.env.SERVER_URL,
     apiKey: process.env.SHOPIFY_API_KEY || "",
     canWriteFiles: hasWriteFilesScope(scope),
   };
@@ -70,27 +64,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const { shop } = adminAuthResult.session;
     const { admin } = adminAuthResult;
     const formData = await request.formData();
-    const init = JSON.parse(formData.get("init") as string);
     const theme = JSON.parse(formData.get("theme") as string);
     const payInfo = JSON.parse(formData.get("payInfo") as string);
     const orderInfo = JSON.parse(formData.get("orderInfo") as string);
     const googleAnalytics = JSON.parse(
       formData.get("googleAnalytics") as string,
     );
-    if (init) {
-      try {
-        const response = await UserAdd({
-          shop,
-        });
-        return json({ response });
-      } catch (error) {
-        console.error("Error loading app:", error);
-        return json({
-          success: false,
-          response: null,
-        });
-      }
-    }
     if (theme) {
       try {
         const response = await admin.graphql(
@@ -175,21 +154,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (orderInfo) {
-      try {
-        const orderData = await InsertOrUpdateOrder({
-          shop,
-          id: orderInfo.id,
-          amount: orderInfo.amount,
-          name: orderInfo.name,
-          createdAt: orderInfo.createdAt,
-          status: orderInfo.status,
-          confirmationUrl: orderInfo.confirmationUrl,
-        });
-        return json({ data: orderData });
-      } catch (error) {
-        console.error("Error orderInfo app:", error);
-        return json({ error: "Error orderInfo app" }, { status: 500 });
-      }
+      return json({ data: { skipped: true } });
     }
 
     if (googleAnalytics) {
@@ -226,108 +191,57 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 export default function App() {
-  const { apiKey, shop, server, canWriteFiles } = useLoaderData<typeof loader>();
+  const { apiKey, shop, canWriteFiles } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const location = useLocation();
   useResumeFilesGrant();
-  const initFetcher = useFetcher<any>();
   const { plan, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
 
-  useEffect(() => {
-    initFetcher.submit(
-      { init: JSON.stringify(true) },
-      {
-        method: "post",
-        action: "/app",
-      },
-    );
-    globalStore.shop = shop as string;
-    globalStore.server = server as string;
-  }, []);
-  useEffect(() => {
-    if (initFetcher.data) {
-      getWords();
-    }
-  }, [initFetcher.data]);
-  useEffect(() => {
-    if (!plan?.id) {
-      getPlan();
-    }
-    if (!chars || !totalChars) {
-      getWords();
-    }
-    if (isNew === null) {
-      checkFreeUsed();
-    }
-  }, [location]); // 监听 URL 的变化
-  const getPlan = async () => {
+  const applyQuota = async () => {
     const quota = await fetchLocalQuota();
-    const isInFreePlanTime = await IsInFreePlanTime({
-      shop: shop,
-      server: server as string,
-    });
-    let data: any = {
-      id: 1,
-      type: "Free",
-      feeType: 0,
-      isInFreePlanTime: false,
-    };
-
-    if (quota?.success) {
-      data = {
-        ...data,
-        id: quota?.response?.plan || 1,
-        type: quota?.response?.planType || "Free",
-        feeType: quota?.response?.feeType || 0,
-      };
-
-      if (quota?.response?.currentPeriodEnd) {
-        const updateTime = new Date(quota.response.currentPeriodEnd)
-          .toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          })
-          .replace(/\//g, "-");
-        dispatch(setUpdateTime({ updateTime: updateTime }));
-      }
-    }
-    if (isInFreePlanTime?.success) {
-      data = { ...data, isInFreePlanTime: isInFreePlanTime?.response || false };
-    }
+    if (!quota?.success) return;
     dispatch(
       setPlan({
-        plan: data,
+        plan: {
+          id: quota?.response?.plan || 1,
+          type: quota?.response?.planType || "Free",
+          feeType: quota?.response?.feeType || 0,
+          isInFreePlanTime: Boolean(quota?.response?.isInFreePlanTime),
+        },
       }),
     );
-  };
-  const getWords = async () => {
-    const data = await fetchLocalQuota();
-
-    if (data?.success) {
-      dispatch(setChars({ chars: data?.response?.usedPoints }));
-      dispatch(
-        setTotalChars({
-          totalChars: data?.response?.purchasePoints,
-        }),
-      );
-      dispatch(setUserConfigIsLoading({ isLoading: false }));
+    if (quota?.response?.currentPeriodEnd) {
+      const updateTime = new Date(quota.response.currentPeriodEnd)
+        .toLocaleDateString("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .replace(/\//g, "-");
+      dispatch(setUpdateTime({ updateTime }));
     }
+    dispatch(setChars({ chars: quota?.response?.usedPoints }));
+    dispatch(
+      setTotalChars({
+        totalChars: quota?.response?.purchasePoints,
+      }),
+    );
+    dispatch(setIsNew({ isNew: !quota?.response?.hasUsedTrial }));
+    dispatch(setUserConfigIsLoading({ isLoading: false }));
   };
 
-  const checkFreeUsed = async () => {
-    // true 开过 / false 没开过 有订单记录就返回true
-    const data = await IsOpenFreePlan({
-      shop,
-      server: server as string,
-    });
-    if (data?.success) {
-      dispatch(setIsNew({ isNew: !data?.response }));
+  useEffect(() => {
+    globalStore.shop = shop as string;
+    void applyQuota();
+  }, []);
+  useEffect(() => {
+    if (!plan?.id || !chars || !totalChars || isNew === null) {
+      void applyQuota();
     }
-  };
+  }, [location]);
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
       <ConfigProvider

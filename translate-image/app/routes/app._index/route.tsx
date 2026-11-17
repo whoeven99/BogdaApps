@@ -24,13 +24,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     language,
     ciwiSwitcherId: process.env.SHOPIFY_CIWI_SWITCHER_ID as string,
     ciwiSwitcherBlocksId: process.env.SHOPIFY_CIWI_SWITCHER_THEME_ID as string,
-    server: process.env.SERVER_URL,
     shop: shop,
   };
 };
 
 const Index = () => {
-  const { language, server, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
+  const { language, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
     useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
