@@ -1,44 +1,30 @@
 /**
  * Apply prisma/migrations/*.sql to Turso.
  * Usage: node scripts/turso-migrate.mjs
- * Prod write: node scripts/turso-migrate.mjs --confirm-prod
+ * Prod write: node scripts/turso-migrate.mjs --env=.env.prod --confirm-prod
  */
 import { createClient } from "@libsql/client";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import {
+  assertProdWriteAllowed,
+  loadStackedEnv,
+  REPO_ROOT,
+  resolveTurso,
+} from "./lib/loadEnv.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const envPath = path.join(root, ".env");
-if (existsSync(envPath)) {
-  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
-
-const url = (process.env.TURSO_DATABASE_URL || "").trim();
-const authToken = (process.env.TURSO_AUTH_TOKEN || "").trim();
+const argv = process.argv.slice(2);
+const { overlay } = loadStackedEnv({ argv });
+const { url, authToken } = resolveTurso();
 if (!url.startsWith("libsql://") || !authToken) {
   console.error("Need TURSO_DATABASE_URL and TURSO_AUTH_TOKEN");
   process.exit(1);
 }
 
-const isProd = /prod/i.test(url);
-const confirmProd = process.argv.includes("--confirm-prod");
-if (isProd && !confirmProd) {
-  console.error("Refusing prod Turso without --confirm-prod");
+try {
+  assertProdWriteAllowed(argv, overlay, url);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 }
 
@@ -51,7 +37,7 @@ await client.execute(`
 `);
 const appliedRows = await client.execute("SELECT name FROM _ti_migrations");
 const applied = new Set(appliedRows.rows.map((row) => String(row.name)));
-const dir = path.join(root, "prisma", "migrations");
+const dir = path.join(REPO_ROOT, "prisma", "migrations");
 const folders = readdirSync(dir, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)

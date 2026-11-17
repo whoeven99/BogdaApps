@@ -1,5 +1,5 @@
 import prisma from "~/db.server";
-import { ensureAccount } from "./quota.server";
+import { ensureAccount, JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./quota.server";
 
 const PACK_CREDITS: Record<string, number> = {
   "50 extra times": 100000,
@@ -43,7 +43,7 @@ export async function grantCreditsOnce(args: {
   await ensureAccount(args.shop);
   const account = await prisma.account.findUnique({ where: { shop: args.shop } });
   const skipAdd =
-    args.kind === "subscription" && account?.subscriptionGid === "java-snapshot";
+    args.kind === "subscription" && account?.subscriptionGid === JAVA_SNAPSHOT_SUBSCRIPTION_GID;
   try {
     await prisma.creditGrant.create({
       data: {

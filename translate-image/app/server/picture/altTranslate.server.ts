@@ -1,4 +1,5 @@
-import { DeductAltCredits } from "~/api/JavaServer";
+import { IMAGE_TRANSLATE_INSUFFICIENT_CREDITS } from "~/lib/imageTranslate";
+import { precheckCredits } from "~/server/billing/quota.server";
 import { getGoogleCloudAccessToken } from "./geminiImage";
 import { ImageTranslateError } from "./imageTranslateError";
 
@@ -53,17 +54,18 @@ export async function translateAltText(args: {
   if (!targetCode) {
     return { success: false, errorCode: 400, errorMsg: "targetCode required", response: "" };
   }
+  // Java 已把 alt 并进 2000 图费（APP_ALT_FEE 注释掉了）；本地只预检 remaining，不再另扣、不打 Java。
+  const quota = await precheckCredits(args.shop, 1);
+  if (!quota) {
+    return {
+      success: false,
+      errorCode: 403,
+      errorMsg: IMAGE_TRANSLATE_INSUFFICIENT_CREDITS,
+      response: "",
+    };
+  }
   try {
     const translated = await googleTranslateText(alt, targetCode);
-    const deduct = await DeductAltCredits({ shop: args.shop });
-    if (deduct?.errorMsg === "额度不够") {
-      return { success: false, errorCode: 403, errorMsg: "额度不够", response: "" };
-    }
-    if (deduct && deduct.success === false) {
-      console.error(
-        `[alt.translate] shop=${args.shop} deduct failed errorMsg=${deduct.errorMsg ?? "unknown"}`,
-      );
-    }
     return { success: true, errorCode: 0, errorMsg: "", response: translated };
   } catch (err) {
     console.error(

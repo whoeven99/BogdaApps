@@ -309,29 +309,6 @@ export const DeductPictureCredits = async ({
   }
 };
 
-export const DeductAltCredits = async ({ shop }: { shop: string }) => {
-  try {
-    const response = await axios({
-      url: `${process.env.SERVER_URL}/pcUserPic/deductAltPoints?shopName=${shop}`,
-      method: "POST",
-      timeout: 15000,
-      data: {
-        count: 1,
-      },
-    });
-    console.log(`${shop} DeductAltCredits`, response.data);
-    return response.data;
-  } catch (error) {
-    console.error(`${shop} DeductAltCredits failed`, error);
-    return {
-      success: false,
-      errorCode: 10001,
-      errorMsg: "SERVER_ERROR",
-      response: undefined,
-    };
-  }
-};
-
 export const TranslateImage = async ({
   shop,
   imageUrl,
