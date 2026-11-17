@@ -1,6 +1,6 @@
 import Client from "@alicloud/log";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { getBogdaRate } from "../redis.server";
+import { getBogdaRate } from "../currencyRates.server";
 
 /** 勿在模块顶层 new Client：无凭证时 @alicloud/log 会抛错，导致整条路由 SSR 加载失败。 */
 function createSlsClient(): Client | null {

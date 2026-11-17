@@ -10,6 +10,9 @@ declare namespace NodeJS {
     TURSO_DATABASE_URL?: string;
     /** Turso CLI: turso db tokens create <database-name> */
     TURSO_AUTH_TOKEN?: string;
+    /** 只读 TSF Turso，用于 Dashboard GMV 汇率（CurrencyRate） */
+    TSF_TURSO_DATABASE_URL?: string;
+    TSF_TURSO_AUTH_TOKEN?: string;
     SHOPIFY_API_KEY?: string;
     PROD_SHOPIFY_API_KEY?: string;
     TEST_SHOPIFY_API_KEY?: string;

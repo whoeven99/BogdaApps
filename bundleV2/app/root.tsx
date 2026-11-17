@@ -1,4 +1,14 @@
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useRouteError } from "react-router";
+import {
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  isRouteErrorResponse,
+  useRouteError,
+  type HeadersFunction,
+} from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import "antd/dist/reset.css";
 
 export default function App() {
@@ -26,28 +36,12 @@ export default function App() {
 
 export function ErrorBoundary() {
   const error = useRouteError();
-  console.error("Root boundary error:", error);
-
-  return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <Meta />
-        <Links />
-      </head>
-      <body>
-        <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
-          <h1>App Error</h1>
-          <p>Sorry, an unexpected error occurred.</p>
-          <pre style={{ backgroundColor: "#f4f4f4", padding: "15px", overflow: "auto" }}>
-            {isRouteErrorResponse(error) 
-              ? `${error.status} ${error.statusText}`
-              : error instanceof Error ? error.message : JSON.stringify(error)}
-          </pre>
-        </div>
-        <Scripts />
-      </body>
-    </html>
-  );
+  if (!isRouteErrorResponse(error) || error.status !== 410) {
+    console.error("Root boundary error:", error);
+  }
+  return boundary.error(error);
 }
+
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
