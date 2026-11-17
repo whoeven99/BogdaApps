@@ -184,6 +184,17 @@ function logCriticalEnvStatus(): void {
   ]);
 
   logEnvCheck(
+    "Turso",
+    Boolean(
+      process.env.TURSO_DATABASE_URL?.trim() && process.env.TURSO_AUTH_TOKEN?.trim(),
+    ),
+    [
+      ["TURSO_DATABASE_URL", process.env.TURSO_DATABASE_URL],
+      ["TURSO_AUTH_TOKEN", process.env.TURSO_AUTH_TOKEN],
+    ],
+  );
+
+  logEnvCheck(
     "Google",
     Boolean(
       process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim() ||

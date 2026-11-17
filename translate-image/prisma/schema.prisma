@@ -30,3 +30,67 @@ model Session {
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
 }
+
+/// 薄账本：remaining = purchasePoints - usedPoints，对齐现有 Java 口径。
+model Account {
+  shop              String    @id
+  plan              Int       @default(1)
+  planType          String    @default("Free")
+  feeType           Int       @default(0)
+  purchasePoints    Int       @default(0)
+  usedPoints        Int       @default(0)
+  subscriptionGid   String?
+  currentPeriodEnd  DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  grants            CreditGrant[]
+  usages            CreditUsage[]
+}
+
+/// Shopify 购包 / 订阅入账幂等。订阅续费用 periodKey 区分周期。
+model CreditGrant {
+  id         String   @id @default(cuid())
+  shop       String
+  gid        String
+  periodKey  String
+  kind       String
+  credits    Int
+  createdAt  DateTime @default(now())
+  account    Account  @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  @@unique([gid, periodKey])
+  @@index([shop])
+}
+
+model CreditUsage {
+  id           String   @id @default(cuid())
+  shop         String
+  credits      Int
+  source       String
+  model        String?
+  languageCode String?
+  createdAt    DateTime @default(now())
+  account      Account  @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  @@index([shop])
+}
+
+model UserPicture {
+  id                   Int      @id @default(autoincrement())
+  shop                 String
+  imageId              String
+  imageBeforeUrl       String
+  imageAfterUrl        String?
+  altBeforeTranslation String?
+  altAfterTranslation  String?
+  languageCode         String
+  urlKey               String?
+  imageAfterFileId     String?
+  isDelete             Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([shop, imageId, imageBeforeUrl, languageCode])
+  @@index([shop, imageId, languageCode, isDelete])
+  @@index([shop, languageCode, urlKey])
+}

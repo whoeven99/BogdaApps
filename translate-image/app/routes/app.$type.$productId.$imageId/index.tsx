@@ -48,16 +48,20 @@ import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import { globalStore } from "~/globalStore";
 import {
-  DeleteProductImageData,
   deleteSaveInShopify,
-  DeleteSingleImage,
   getProductAllLanguageImagesData,
   storageMediaId,
-  storageTranslateImage,
   updateManageTranslation,
   UpdateProductImageAltData,
 } from "~/api/JavaServer";
+import {
+  DeleteProductImageLocal,
+  fetchLocalQuota,
+  UploadProductImage,
+} from "~/api/pictureClient";
+import { merchantImageCredits } from "~/lib/imageTranslate";
 import { translateImageToFiles } from "~/server/picture/translateImage.server";
+import { listPicturesByImageId, mergePictureLists } from "~/server/picture/picture.server";
 import { translateAltText } from "~/server/picture/altTranslate.server";
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
@@ -85,9 +89,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   );
   const imagesFetcher = JSON.parse(formData.get("imagesFetcher") as string);
   const translateImage = JSON.parse(formData.get("translateImage") as string);
-  const replaceTranslateImage = JSON.parse(
-    formData.get("replaceTranslateImage") as string,
-  );
   const altTranslateFetcher = JSON.parse(
     formData.get("altTranslateFetcher") as string,
   );
@@ -107,8 +108,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       case !!imageLoading:
         try {
           const loadData = await admin.graphql(
-            `query {
-              product(id: "${imageLoading?.productId}") { 
+            `#graphql
+            query ProductImage($id: ID!) {
+              product(id: $id) {
                 id
                 title
                 images(first: 20) {
@@ -128,6 +130,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
               }
             }`,
+            { variables: { id: imageLoading?.productId } },
           );
           const response = await loadData.json();
           let imageData = {};
@@ -208,11 +211,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!imagesFetcher:
         try {
-          const response = await getProductAllLanguageImagesData({
+          const java = await getProductAllLanguageImagesData({
             shop,
             imageId: imagesFetcher.imageId,
           });
-          return response;
+          const local = await listPicturesByImageId(shop, imagesFetcher.imageId);
+          const javaList = Array.isArray(java?.response) ? java.response : [];
+          return {
+            success: true,
+            errorCode: 0,
+            errorMsg: "",
+            response: mergePictureLists(javaList, local),
+          };
         } catch (error) {
           console.error("Error action imagesFetcher productImage:", error);
           return json({
@@ -221,11 +231,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!translateImage:
         try {
-          const { targetLanguage, imageUrl, model, alt } = translateImage;
+          const { targetLanguage, imageUrl, model, alt, imageId } = translateImage;
           return await translateImageToFiles({
             shop,
             admin,
             session: adminAuthResult.session,
+            imageId,
             imageUrl,
             targetLanguage,
             model,
@@ -240,24 +251,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             response: [],
           };
         }
-
-      case !!replaceTranslateImage: {
-        try {
-          const response = await storageTranslateImage({
-            shop,
-            replaceTranslateImage,
-          });
-          return response;
-        } catch (error) {
-          console.log("error storageImage", error);
-          return {
-            success: false,
-            errorCode: 10001,
-            errorMsg: "SERVER_ERROR",
-            response: [],
-          };
-        }
-      }
       case !!altTranslateFetcher:
         try {
           const { alt, targetCode } = altTranslateFetcher;
@@ -495,7 +488,6 @@ const ImageAltTextPage = () => {
   const [currentTranslatingImage, setCurrentTranslatingImage] =
     useState<any>("");
   const translateImageFetcher = useFetcher<any>();
-  const replaceTranslateImageFetcher = useFetcher<any>();
   const saveMediaIDFetcher = useFetcher<any>();
   const imageLoadingFetcher = useFetcher<any>();
   const saveImageFetcher = useFetcher<any>();
@@ -834,7 +826,7 @@ const ImageAltTextPage = () => {
       shopify.toast.show("Translation tasks are in progress.");
       return;
     }
-    if (totalChars - chars < 2000) {
+    if (totalChars - chars < merchantImageCredits(merchantModel)) {
       if (isNew) {
         setTrialModal(true);
         return;
@@ -873,6 +865,7 @@ const ImageAltTextPage = () => {
         translateImage: JSON.stringify({
           targetLanguage,
           imageUrl: currentTranslatingImage?.imageBeforeUrl,
+          imageId: currentTranslatingImage?.imageId,
           model: merchantModel,
           alt:
             currentTranslatingImage.altBeforeTranslation ||
@@ -943,21 +936,10 @@ const ImageAltTextPage = () => {
           return item;
         }),
       );
-
-      const replaceTranslateImage = {
-        productId: currentResourceId,
-        imageAfterUrl: translateImageFetcher.data.response,
-        imageId: currentTranslatingImage?.imageId,
-        imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
-        languageCode: currentTranslatingImage.languageCode,
-      };
-      const formData = new FormData();
-      formData.append(
-        "replaceTranslateImage",
-        JSON.stringify(replaceTranslateImage),
-      );
-      replaceTranslateImageFetcher.submit(formData, {
-        method: "post",
+      void fetchLocalQuota().then((quota) => {
+        if (!quota?.success) return;
+        dispatch(setChars({ chars: quota.response.usedPoints }));
+        dispatch(setTotalChars({ totalChars: quota.response.purchasePoints }));
       });
       if (TRANSLATABLE_TYPES.has(type as string)) {
         const altText =
@@ -981,8 +963,6 @@ const ImageAltTextPage = () => {
           { method: "post" },
         );
       }
-
-      dispatch(setChars({ chars: chars + 2000 }));
     } else if (translateImageFetcher.data.errorMsg === "额度不够") {
       shopify.toast.show(t("Image translation failed"));
       setOpen(true);
@@ -1217,9 +1197,8 @@ const ImageAltTextPage = () => {
         },
         "manage_delete_image",
       );
-      const res = await DeleteProductImageData({
-        server: globalStore?.server || "",
-        shopName: globalStore?.shop || "",
+      const res = await DeleteProductImageLocal({
+        shopName: globalStore?.shop || loader.shop,
         imageId: imageId,
         imageUrl: imageUrl,
         languageCode: languageCode,
@@ -1307,9 +1286,8 @@ const ImageAltTextPage = () => {
         },
         "manage_delete_image",
       );
-      const res = await DeleteSingleImage({
-        server: globalStore?.server || "",
-        shopName: globalStore?.shop || "",
+      const res = await DeleteProductImageLocal({
+        shopName: globalStore?.shop || loader.shop,
         imageId: imageId,
         imageUrl: imageUrl,
         languageCode: languageCode,
@@ -1400,6 +1378,21 @@ const ImageAltTextPage = () => {
       }
     });
   };
+  const uploadToShopifyFiles = (img: any) => async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    const data = await UploadProductImage({
+      shopName: loader.shop,
+      imageId: img.imageId,
+      imageUrl: img.imageBeforeUrl,
+      languageCode: img.languageCode,
+      file,
+      altBeforeTranslation: img.altBeforeTranslation,
+      altAfterTranslation: img.altAfterTranslation,
+    });
+    if (data?.success) onSuccess?.(data);
+    else onError?.(data);
+  };
+
   // 上传或删除图片时更新 fileList
   const handleChangeImage = (info: any, img: any) => {
     setFileLists((prev) => ({
@@ -1909,7 +1902,7 @@ const ImageAltTextPage = () => {
                             name="file"
                             accept="image/*"
                             style={{ margin: "auto" }}
-                            action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
+                            customRequest={uploadToShopifyFiles(img)}
                             listType="picture-card"
                             // className="custom-upload"
                             className={`upload-box ${
@@ -1942,19 +1935,6 @@ const ImageAltTextPage = () => {
                               }
                               return isImage;
                             }}
-                            data={(file) => ({
-                              shopName: globalStore?.shop,
-                              file,
-                              userPicturesDoJson: JSON.stringify({
-                                shopName: globalStore?.shop,
-                                imageId: img.imageId,
-                                productId: currentResourceId,
-                                imageBeforeUrl: img.imageBeforeUrl,
-                                altBeforeTranslation: img.altBeforeTranslation,
-                                altAfterTranslation: img.altAfterTranslation,
-                                languageCode: img.languageCode,
-                              }),
-                            })}
                             showUploadList={{
                               showPreviewIcon: true,
                               showRemoveIcon: true,
@@ -2044,7 +2024,7 @@ const ImageAltTextPage = () => {
                               maxCount={1}
                               accept="image/*"
                               name="file"
-                              action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
+                              customRequest={uploadToShopifyFiles(img)}
                               beforeUpload={(file) => {
                                 reportClick("manage_image_upload");
                                 const isImage = file.type.startsWith("image/");
@@ -2080,20 +2060,6 @@ const ImageAltTextPage = () => {
                                 }
                                 return true;
                               }}
-                              data={(file) => ({
-                                shopName: globalStore?.shop,
-                                file,
-                                userPicturesDoJson: JSON.stringify({
-                                  shopName: globalStore?.shop,
-                                  imageId: img.imageId,
-                                  productId: currentResourceId,
-                                  imageBeforeUrl: img.imageBeforeUrl,
-                                  altBeforeTranslation:
-                                    img.altBeforeTranslation,
-                                  altAfterTranslation: img.altAfterTranslation,
-                                  languageCode: img.languageCode,
-                                }),
-                              })}
                               onChange={(info) => {
                                 setFileLists((prev) => ({
                                   ...prev,

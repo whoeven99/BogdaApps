@@ -26,12 +26,11 @@ export function readInstallationScopeHandles(body: unknown): string[] | null {
     .filter(Boolean);
 }
 
-/** Confirm write_files, stamp Session.scope, drop app-only cache. Do not delete the session. */
-export async function refreshFilesScopeIfGranted(deps: {
+/** Shopify 已授予 write_files 时删 offline session，下一次 token exchange 才会带上新权限。 */
+export async function dropOfflineSessionIfFilesGranted(deps: {
   shop: string;
   graphql: Graphql;
-  persistScope: (shop: string, scope: string) => Promise<void>;
-  invalidateToken: (shop: string) => void;
+  deleteOfflineSessions: (shop: string) => Promise<void>;
 }): Promise<FilesScopeRefreshResult> {
   let body: unknown;
   try {
@@ -43,7 +42,6 @@ export async function refreshFilesScopeIfGranted(deps: {
   const handles = readInstallationScopeHandles(body);
   if (!handles) return "unavailable";
   if (!hasWriteFilesScope(handles.join(","))) return "missing";
-  await deps.persistScope(deps.shop, handles.join(","));
-  deps.invalidateToken(deps.shop);
+  await deps.deleteOfflineSessions(deps.shop);
   return "refreshed";
 }

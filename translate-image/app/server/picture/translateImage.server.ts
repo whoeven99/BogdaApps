@@ -1,18 +1,20 @@
-import { DeductPictureCredits, GetUserWords } from "~/api/JavaServer";
+import {
+  IMAGE_TRANSLATE_INSUFFICIENT_CREDITS,
+  IMAGE_TRANSLATE_SCOPE_MISSING,
+} from "~/lib/imageTranslate";
+import { deductCredits, precheckCredits } from "~/server/billing/quota.server";
 import {
   DEFAULT_IMAGE_TRANSLATE_MODEL,
   IMAGE_TRANSLATE_ADVANCE_MODEL,
   formatImageTranslateErrorLog,
+  imageTranslateCredits,
+  imageTranslateErrorCode,
   imageTranslateFailMessage,
+  pictureUrlKey,
   translateImageToShopifyFiles,
 } from "./imageTranslate";
+import { upsertUserPictureFile } from "./picture.server";
 import { adminFilesGraphql, sessionCanWriteFiles } from "./shopifyFilesAdmin.server";
-
-export const IMAGE_TRANSLATE_INSUFFICIENT_CREDITS = "额度不够";
-export const IMAGE_TRANSLATE_SCOPE_MISSING = "SCOPE_MISSING";
-
-const JAVA_MODEL_TYPE = { standard: 1, advance: 3 } as const;
-const MIN_CREDITS = 2000;
 
 type AdminGraphqlClient = {
   graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
@@ -32,6 +34,7 @@ export async function translateImageToFiles(args: {
   shop: string;
   admin: AdminGraphqlClient;
   session: { scope?: string | null };
+  imageId: string;
   imageUrl: string;
   targetLanguage: string;
   model?: unknown;
@@ -39,47 +42,59 @@ export async function translateImageToFiles(args: {
 }) {
   const imageUrl = String(args.imageUrl ?? "").trim();
   const targetLanguage = String(args.targetLanguage ?? "").trim();
-  if (!imageUrl || !targetLanguage) {
-    return fail("imageUrl and targetLanguage required", 400);
+  const imageId = String(args.imageId ?? "").trim();
+  if (!imageUrl || !targetLanguage || !imageId) {
+    return fail("imageUrl, imageId and targetLanguage required", 400);
   }
-  if (!sessionCanWriteFiles(args.session)) {
-    return fail(IMAGE_TRANSLATE_SCOPE_MISSING, 403);
-  }
-
-  const quota = await GetUserWords({ shop: args.shop });
-  const used = Number(quota?.response?.usedPoints ?? 0);
-  const total = Number(quota?.response?.purchasePoints ?? 0);
-  if (!quota?.success || total - used < MIN_CREDITS) {
-    return fail(IMAGE_TRANSLATE_INSUFFICIENT_CREDITS, 403);
-  }
+  if (!pictureUrlKey(imageUrl)) return fail("INVALID_IMAGE_URL", 400);
+  if (!sessionCanWriteFiles(args.session)) return fail(IMAGE_TRANSLATE_SCOPE_MISSING, 403);
 
   const merchantModel = resolveMerchantModel(args.model);
   const model =
     merchantModel === "advance" ? IMAGE_TRANSLATE_ADVANCE_MODEL : DEFAULT_IMAGE_TRANSLATE_MODEL;
+  const credits = imageTranslateCredits(model);
+  const quota = await precheckCredits(args.shop, credits);
+  if (!quota) return fail(IMAGE_TRANSLATE_INSUFFICIENT_CREDITS, 403);
 
+  const graphql = adminFilesGraphql(args.admin);
   try {
     const uploaded = await translateImageToShopifyFiles({
-      graphql: adminFilesGraphql(args.admin),
+      graphql,
       imageUrl,
       targetLanguage,
       model,
       alt: args.alt,
     });
-    const deduct = await DeductPictureCredits({
-      shop: args.shop,
-      modelType: JAVA_MODEL_TYPE[merchantModel],
+    const saved = await upsertUserPictureFile({
+      graphql,
+      input: {
+        shop: args.shop,
+        imageId,
+        imageBeforeUrl: imageUrl,
+        languageCode: targetLanguage,
+        imageAfterUrl: uploaded.url,
+        imageAfterFileId: uploaded.fileId,
+        altBeforeTranslation: args.alt,
+      },
     });
-    if (deduct?.errorMsg === IMAGE_TRANSLATE_INSUFFICIENT_CREDITS) {
-      return fail(IMAGE_TRANSLATE_INSUFFICIENT_CREDITS, 403);
-    }
-    if (deduct && deduct.success === false) {
+    if (!saved.success) return fail(saved.errorMsg || "SAVE_FAILED");
+    try {
+      await deductCredits(args.shop, credits, {
+        source: "image",
+        model,
+        languageCode: targetLanguage,
+      });
+    } catch (err) {
       console.error(
-        `[picture.deduct] shop=${args.shop} failed after Files upload errorMsg=${deduct.errorMsg ?? "unknown"}`,
+        `[picture.deduct] shop=${args.shop} failed after Files save ${formatImageTranslateErrorLog(err)}`,
       );
     }
     return { success: true, errorCode: 0, errorMsg: "", response: uploaded.url };
   } catch (err) {
     console.error(`[picture.translate] shop=${args.shop} ${formatImageTranslateErrorLog(err)}`);
+    if (imageTranslateErrorCode(err) === "SHOPIFY_SCOPE_MISSING") {
+      return fail(IMAGE_TRANSLATE_SCOPE_MISSING, 403);
+    }
     return fail(imageTranslateFailMessage(err));
   }
 }

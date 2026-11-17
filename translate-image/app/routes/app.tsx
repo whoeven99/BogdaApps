@@ -19,15 +19,14 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import {
-  GetUserSubscriptionPlan,
-  GetUserWords,
   GoogleAnalyticClickReport,
   InsertOrUpdateOrder,
   IsInFreePlanTime,
   IsOpenFreePlan,
-  storageTranslateImage,
 } from "~/api/JavaServer";
+import { fetchLocalQuota } from "~/api/pictureClient";
 import { UserAdd } from "~/server/shop/userAdd.server";
+import { ensureAccount } from "~/server/billing/quota.server";
 import { globalStore } from "~/globalStore";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -52,6 +51,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop, scope } = adminAuthResult.session;
   bootMark("app loader", `shop=${shop}`);
+  try {
+    await ensureAccount(shop);
+  } catch (err) {
+    console.warn(`[app.loader] ensureAccount failed shop=${shop}`, err);
+  }
 
   return {
     shop,
@@ -260,10 +264,7 @@ export default function App() {
     }
   }, [location]); // 监听 URL 的变化
   const getPlan = async () => {
-    const getUserSubscriptionPlan = await GetUserSubscriptionPlan({
-      shop: shop,
-      server: server as string,
-    });
+    const quota = await fetchLocalQuota();
     const isInFreePlanTime = await IsInFreePlanTime({
       shop: shop,
       server: server as string,
@@ -275,18 +276,16 @@ export default function App() {
       isInFreePlanTime: false,
     };
 
-    if (getUserSubscriptionPlan?.success) {
+    if (quota?.success) {
       data = {
         ...data,
-        id: getUserSubscriptionPlan?.response?.userSubscriptionPlan || 1,
-        type: getUserSubscriptionPlan?.response?.planType || "Free",
-        feeType: getUserSubscriptionPlan?.response?.feeType || 0,
+        id: quota?.response?.plan || 1,
+        type: quota?.response?.planType || "Free",
+        feeType: quota?.response?.feeType || 0,
       };
 
-      if (getUserSubscriptionPlan?.response?.currentPeriodEnd) {
-        const updateTime = new Date(
-          getUserSubscriptionPlan?.response?.currentPeriodEnd,
-        )
+      if (quota?.response?.currentPeriodEnd) {
+        const updateTime = new Date(quota.response.currentPeriodEnd)
           .toLocaleDateString("zh-CN", {
             year: "numeric",
             month: "2-digit",
@@ -306,10 +305,7 @@ export default function App() {
     );
   };
   const getWords = async () => {
-    const data = await GetUserWords({
-      shop,
-      server: server as string,
-    });
+    const data = await fetchLocalQuota();
 
     if (data?.success) {
       dispatch(setChars({ chars: data?.response?.usedPoints }));

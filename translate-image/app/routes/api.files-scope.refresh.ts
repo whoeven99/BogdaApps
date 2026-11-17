@@ -1,21 +1,18 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import prisma from "~/db.server";
-import { refreshFilesScopeIfGranted } from "~/server/picture/refreshFilesScope.server";
-import { invalidateAppOnlyTokenCache } from "~/server/shop/offlineSessionToken.server";
+import { dropOfflineSessionIfFilesGranted } from "~/server/picture/refreshFilesScope.server";
+import { getAppOnlyTokenProvider } from "~/server/shop/offlineSessionToken.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
-  const result = await refreshFilesScopeIfGranted({
+  const result = await dropOfflineSessionIfFilesGranted({
     shop: session.shop,
     graphql: (query) => admin.graphql(query),
-    persistScope: async (shop, scope) => {
-      await prisma.session.updateMany({
-        where: { shop, isOnline: false },
-        data: { scope },
-      });
+    deleteOfflineSessions: async (shop) => {
+      await prisma.session.deleteMany({ where: { shop, isOnline: false } });
+      getAppOnlyTokenProvider().invalidate(shop);
     },
-    invalidateToken: invalidateAppOnlyTokenCache,
   });
   if (result === "unavailable") {
     return json({ ok: false, refreshed: false }, { status: 502 });
