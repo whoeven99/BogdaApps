@@ -10,6 +10,7 @@ import {
   type ShopifyFilesGraphql,
 } from "./imageTranslate";
 import { normalizeUrlKeys } from "./imageUrlKey";
+import { pickPicturesByLanguage, productImageLookupIds } from "./productMedia";
 
 export { URL_KEY_LOOKUP_MAX, normalizeUrlKeys } from "./imageUrlKey";
 
@@ -103,6 +104,33 @@ export async function listPicturesByImageId(shop: string, imageId: string): Prom
     where: { shop, imageId, isDelete: false },
   });
   return rows.map(toPayload);
+}
+
+/** 商品图详情：按 MediaImage / ImageSource / 旧 ProductImage / urlKey 读未删除译图。 */
+export async function listPicturesForProductMedia(args: {
+  shop: string;
+  imageId?: string | null;
+  imageSourceId?: string | null;
+  imageBeforeUrl?: string | null;
+}): Promise<UserPicturePayload[]> {
+  const imageIds = productImageLookupIds({
+    mediaId: args.imageId,
+    imageSourceId: args.imageSourceId,
+  });
+  const urlKey = pictureUrlKey(args.imageBeforeUrl);
+  if (imageIds.length === 0 && !urlKey) return [];
+  const rows = await prisma.userPicture.findMany({
+    where: {
+      shop: args.shop,
+      isDelete: false,
+      OR: [
+        ...(imageIds.length > 0 ? [{ imageId: { in: imageIds } }] : []),
+        ...(urlKey ? [{ urlKey }] : []),
+      ],
+    },
+    orderBy: { id: "desc" },
+  });
+  return pickPicturesByLanguage(rows.map(toPayload), imageIds[0]);
 }
 
 export async function listPicturesByShopLanguage(

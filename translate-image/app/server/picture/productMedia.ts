@@ -65,6 +65,67 @@ export function findImageLikeNode(
   return null;
 }
 
+/** 读旧 UserPicture 时：MediaImage / ImageSource / 历史 ProductImage 都查。 */
+export function productImageLookupIds(input: {
+  mediaId?: string | null;
+  imageSourceId?: string | null;
+}): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const add = (id?: string | null) => {
+    const value = String(id || "").trim();
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    ids.push(value);
+  };
+  add(input.mediaId);
+  add(input.imageSourceId);
+  for (const tail of [gidTail(input.mediaId || ""), gidTail(input.imageSourceId || "")]) {
+    if (!tail) continue;
+    add(`gid://shopify/MediaImage/${tail}`);
+    add(`gid://shopify/ImageSource/${tail}`);
+    add(`gid://shopify/ProductImage/${tail}`);
+  }
+  return ids;
+}
+
+type PictureLanguageRow = {
+  id: number;
+  imageId: string;
+  languageCode: string;
+  imageAfterUrl?: string | null;
+  altAfterTranslation?: string | null;
+};
+
+function pictureLanguageScore(row: PictureLanguageRow, preferredImageId?: string): number {
+  let score = 0;
+  if (row.imageAfterUrl) score += 4;
+  if (row.altAfterTranslation) score += 2;
+  if (preferredImageId && row.imageId === preferredImageId) score += 1;
+  return score;
+}
+
+/** 同一语言多行时：有译图/alt 优先，其次规范 MediaImage id，再比更大的 id。 */
+export function pickPicturesByLanguage<T extends PictureLanguageRow>(
+  rows: T[],
+  preferredImageId?: string,
+): T[] {
+  const byLang = new Map<string, T>();
+  for (const row of rows) {
+    const current = byLang.get(row.languageCode);
+    if (!current) {
+      byLang.set(row.languageCode, row);
+      continue;
+    }
+    const nextScore = pictureLanguageScore(row, preferredImageId);
+    const currentScore = pictureLanguageScore(current, preferredImageId);
+    if (nextScore > currentScore || (nextScore === currentScore && row.id > current.id)) {
+      byLang.set(row.languageCode, row);
+    }
+  }
+  return [...byLang.values()];
+}
+
 export function mediaToImageConnection(media: unknown): ImageLikeConnection {
   const record = (media ?? {}) as {
     edges?: Array<{

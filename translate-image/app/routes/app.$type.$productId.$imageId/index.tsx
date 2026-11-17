@@ -59,7 +59,7 @@ import {
 } from "~/api/pictureClient";
 import { merchantImageCredits } from "~/lib/imageTranslate";
 import { translateImageToFiles } from "~/server/picture/translateImage.server";
-import { listPicturesByImageId, persistImageAfterFileId } from "~/server/picture/picture.server";
+import { listPicturesForProductMedia, persistImageAfterFileId } from "~/server/picture/picture.server";
 import {
   findImageLikeNode,
   PRODUCT_MEDIA_FIELDS,
@@ -75,6 +75,29 @@ import { setChars, setTotalChars } from "~/store/modules/userConfig";
 import useReport from "scripts/eventReport";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
+
+function readUploadErrorMsg(error: unknown): string {
+  if (!error) return "";
+  if (typeof error === "string") return error.trim();
+  if (typeof error === "object") {
+    const rec = error as { errorMsg?: unknown; message?: unknown };
+    if (typeof rec.errorMsg === "string" && rec.errorMsg.trim()) return rec.errorMsg.trim();
+    if (typeof rec.message === "string" && rec.message.trim() && rec.message !== "Error") {
+      return rec.message.trim();
+    }
+  }
+  return "";
+}
+
+function uploadFailToastText(
+  t: (key: string) => string,
+  fileName: string,
+  error?: unknown,
+): string {
+  const msg = readUploadErrorMsg(error);
+  const fail = t("Upload Failed");
+  return msg ? `${fileName} ${fail}: ${msg}` : `${fileName} ${fail}`;
+}
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop } = adminAuthResult.session;
@@ -141,6 +164,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               productId: product?.id,
               productTitle: product?.title,
               imageId: node.id,
+              imageSourceId: node.imageSourceId || "",
               imageUrl: node.url,
               targetImageUrl: "",
             },
@@ -200,7 +224,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!imagesFetcher:
         try {
-          const local = await listPicturesByImageId(shop, imagesFetcher.imageId);
+          const local = await listPicturesForProductMedia({
+            shop,
+            imageId: imagesFetcher.imageId,
+            imageSourceId: imagesFetcher.imageSourceId,
+            imageBeforeUrl: imagesFetcher.imageBeforeUrl,
+          });
           return {
             success: true,
             errorCode: 0,
@@ -673,7 +702,13 @@ const ImageAltTextPage = () => {
     if (!currentImageId) return; // currentImageId 为空时不请求
 
     imageFetcher.submit(
-      { imagesFetcher: JSON.stringify({ imageId: currentImageId }) },
+      {
+        imagesFetcher: JSON.stringify({
+          imageId: currentImageId,
+          imageSourceId: productImageData?.imageSourceId || "",
+          imageBeforeUrl: productImageData?.imageUrl || "",
+        }),
+      },
       { method: "POST" },
     );
   }, [currentImageId]);
@@ -1374,6 +1409,10 @@ const ImageAltTextPage = () => {
   };
   const uploadToShopifyFiles = (img: any) => async (options: any) => {
     const { file, onSuccess, onError } = options;
+    if (!img.imageId || !img.imageBeforeUrl) {
+      onError?.({ errorMsg: t("imageTranslate.sourceNotLoaded") });
+      return;
+    }
     const data = await UploadProductImage({
       shopName: loader.shop,
       imageId: img.imageId,
@@ -1450,14 +1489,20 @@ const ImageAltTextPage = () => {
 
         shopify.toast.show(`${info.file.name} ${t("Upload Success")}`);
       } else {
-        shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
+        shopify.toast.show(
+          uploadFailToastText(t, info.file.name, response),
+          { isError: true },
+        );
       }
     } else if (info.file.status === "error") {
       setFileLists((prev) => ({
         ...prev,
         [img.languageCode]: [], // ✅ 更新对应语言
       }));
-      shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
+      shopify.toast.show(
+        uploadFailToastText(t, info.file.name, info.file.error || info.file.response),
+        { isError: true },
+      );
       fetcher.submit(
         {
           log: `${loader.shop} 上传图片失败`,
@@ -2135,12 +2180,18 @@ const ImageAltTextPage = () => {
                                     );
                                   } else {
                                     shopify.toast.show(
-                                      `${info.file.name} ${t("Upload Failed")}`,
+                                      uploadFailToastText(t, info.file.name, response),
+                                      { isError: true },
                                     );
                                   }
                                 } else if (info.file.status === "error") {
                                   shopify.toast.show(
-                                    `${info.file.name} ${t("Upload Failed")}`,
+                                    uploadFailToastText(
+                                      t,
+                                      info.file.name,
+                                      info.file.error || info.file.response,
+                                    ),
+                                    { isError: true },
                                   );
                                 }
                               }}

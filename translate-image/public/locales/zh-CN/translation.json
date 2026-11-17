@@ -261,6 +261,7 @@
   "Standard": "标准",
   "Advance": "进阶",
   "imageTranslate": {
+    "sourceNotLoaded": "原图未加载，请返回列表重进",
     "scopeMissing": "需要 Files 权限才能保存译图。请授权后继续。",
     "grantAccess": "去授权",
     "grantAccessFailed": "未能更新 Files 权限，请重试。",

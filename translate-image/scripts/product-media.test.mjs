@@ -5,6 +5,8 @@ import {
   gidTail,
   mediaNodeMatches,
   mediaToImageConnection,
+  pickPicturesByLanguage,
+  productImageLookupIds,
 } from "../app/server/picture/productMedia.ts";
 
 const mediaId = "gid://shopify/MediaImage/111";
@@ -45,4 +47,42 @@ test("mediaToImageConnection 用 MediaImage.id，并保留 ImageSource id", () =
   assert.equal(findImageLikeNode(mapped.edges, "gid://shopify/ProductImage/111")?.url, "https://cdn/a.jpg");
   assert.equal(findImageLikeNode(mapped.edges, "222")?.id, mediaId);
   assert.equal(findImageLikeNode(mapped.edges, "999"), null);
+});
+
+test("productImageLookupIds 含 MediaImage / ImageSource / 旧 ProductImage", () => {
+  const ids = productImageLookupIds({ mediaId, imageSourceId: sourceId });
+  for (const id of [
+    mediaId,
+    sourceId,
+    "gid://shopify/ProductImage/111",
+    "gid://shopify/ProductImage/222",
+  ]) {
+    assert.equal(ids.includes(id), true, id);
+  }
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test("pickPicturesByLanguage 同一语言优先有译图的旧 ProductImage 行", () => {
+  const preferred = mediaId;
+  const picked = pickPicturesByLanguage(
+    [
+      {
+        id: 2,
+        imageId: preferred,
+        languageCode: "de",
+        imageAfterUrl: null,
+        altAfterTranslation: null,
+      },
+      {
+        id: 1,
+        imageId: "gid://shopify/ProductImage/555",
+        languageCode: "de",
+        imageAfterUrl: "https://cdn/translated.jpg",
+        altAfterTranslation: null,
+      },
+    ],
+    preferred,
+  );
+  assert.equal(picked.length, 1);
+  assert.equal(picked[0].imageId, "gid://shopify/ProductImage/555");
 });
