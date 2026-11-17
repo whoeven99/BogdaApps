@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSQL } from "@prisma/adapter-libsql";
+import { PrismaLibSQL } from "@prisma/adapter-libsql/web";
 import { libsqlFetch } from "./config/libsqlFetch.server";
 import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
 import { describeTursoEnvKeys, hasTursoCredentials, readTursoCredentials } from "./config/tursoTarget.server";
