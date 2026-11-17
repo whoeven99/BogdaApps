@@ -12,13 +12,29 @@ import { grantCreditsOnce, markPlanCancelled, packCreditsForName, planGrantForNa
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, admin, shop, session, payload } = await authenticate.webhook(request);
 
-  if (!admin && topic !== "SHOP_REDACT") {
+  if (!admin && topic !== "SHOP_REDACT" && topic !== "APP_SCOPES_UPDATE") {
     throw new Response();
   }
 
   console.log(`${shop} ${topic} webhooks: ${payload}`);
 
   switch (topic) {
+    case "APP_SCOPES_UPDATE":
+      try {
+        const current = String(
+          (payload as { current?: unknown } | null)?.current ?? "",
+        );
+        if (current) {
+          await db.session.updateMany({
+            where: { shop },
+            data: { scope: current },
+          });
+        }
+        return new Response("OK", { status: 200 });
+      } catch (error) {
+        console.error("Error APP_SCOPES_UPDATE:", error);
+        return new Response(null, { status: 200 });
+      }
     case "APP_UNINSTALLED":
       try {
         await Uninstall({ shop });

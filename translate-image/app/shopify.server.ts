@@ -11,6 +11,7 @@ import {
   normalizeEnvValue,
 } from "./config/runtimeEnv.server";
 import { SHOPIFY_ADMIN_API_VERSION } from "./lib/shopifyAdminApiVersion";
+import { omitWriteFilesScope } from "./lib/writeFilesScope";
 import { bootMark, bootStep } from "./server/bootTrace.server";
 import { getShopAdmin } from "./server/shop/shopAdminToken.server";
 
@@ -20,7 +21,7 @@ const shopify = shopifyApp({
   apiKey: normalizeEnvValue(process.env.SHOPIFY_API_KEY),
   apiSecretKey: normalizeEnvValue(process.env.SHOPIFY_API_SECRET),
   apiVersion: SHOPIFY_ADMIN_API_VERSION as ApiVersion,
-  scopes: process.env.SCOPES?.split(","),
+  scopes: omitWriteFilesScope(normalizeEnvValue(process.env.SCOPES)),
   appUrl: normalizeEnvValue(process.env.SHOPIFY_APP_URL),
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),

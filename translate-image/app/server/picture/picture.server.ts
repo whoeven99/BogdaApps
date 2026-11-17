@@ -101,6 +101,37 @@ export async function listPicturesByImageId(shop: string, imageId: string): Prom
   return rows.map(toPayload);
 }
 
+export async function listPicturesByShopLanguage(
+  shop: string,
+  languageCode: string,
+): Promise<UserPicturePayload[]> {
+  const rows = await prisma.userPicture.findMany({
+    where: { shop, languageCode, isDelete: false },
+  });
+  return rows.map(toPayload);
+}
+
+function storefrontPictureKey(row: Partial<UserPicturePayload>): string {
+  const lang = String(row.languageCode || "");
+  const urlKey = row.urlKey || pictureUrlKey(String(row.imageBeforeUrl || ""));
+  return `${lang}::${urlKey || row.imageBeforeUrl || row.imageId || ""}`;
+}
+
+export function mergeStorefrontPictures(
+  javaList: Array<Partial<UserPicturePayload>>,
+  localList: UserPicturePayload[],
+): Array<Partial<UserPicturePayload>> {
+  const byKey = new Map<string, Partial<UserPicturePayload>>();
+  for (const row of javaList) {
+    if (row && (row as { isDelete?: boolean }).isDelete) continue;
+    byKey.set(storefrontPictureKey(row), row);
+  }
+  for (const row of localList) byKey.set(storefrontPictureKey(row), row);
+  return [...byKey.values()].filter(
+    (row) => Boolean(row.imageAfterUrl) || Boolean(row.altAfterTranslation),
+  );
+}
+
 export function mergePictureLists(
   javaList: Array<Partial<UserPicturePayload> & { languageCode: string }>,
   localList: UserPicturePayload[],

@@ -609,6 +609,59 @@ export const GetUserWords = async ({
 };
 
 // 获取商店配置语言的图片的翻译信息
+export const javaSelectPicturesByProduct = async ({
+  shop,
+  productId,
+  languageCode,
+}: {
+  shop: string;
+  productId: string;
+  languageCode: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUserPic/selectPictureDataByShopNameAndProductIdAndLanguageCode?shopName=${shop}`,
+      method: "POST",
+      timeout: 15000,
+      data: { productId, languageCode },
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} javaSelectPicturesByProduct failed`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: [],
+    };
+  }
+};
+
+export const javaSelectPicturesByLanguage = async ({
+  shop,
+  languageCode,
+}: {
+  shop: string;
+  languageCode: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUserPic/selectPicturesByShopNameAndLanguageCode?shopName=${shop}&languageCode=${languageCode}`,
+      method: "POST",
+      timeout: 15000,
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} javaSelectPicturesByLanguage failed`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: [],
+    };
+  }
+};
+
 export const getProductAllLanguageImagesData = async ({
   shop,
   imageId,

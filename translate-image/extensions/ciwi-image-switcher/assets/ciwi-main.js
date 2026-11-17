@@ -117,7 +117,6 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
 
   // 请求最新数据
   const data = await GetProductImageData({
-    blockId,
     shopName: shop.value,
     id: articleId
       ? `gid://shopify/Article/${articleId}`
@@ -177,7 +176,6 @@ async function HomeImageTranslate(blockId, ciwiBlock) {
 
   const data = await GetShopImageData({
     shopName: shop,
-    blockId,
     languageCode: language,
   });
   console.log("GetShopImageData: ", data);

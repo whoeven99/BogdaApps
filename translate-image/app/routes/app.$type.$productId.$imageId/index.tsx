@@ -62,6 +62,7 @@ import {
 import { merchantImageCredits } from "~/lib/imageTranslate";
 import { translateImageToFiles } from "~/server/picture/translateImage.server";
 import { listPicturesByImageId, mergePictureLists } from "~/server/picture/picture.server";
+import { PRODUCT_MEDIA_FIELDS, productWithImages } from "~/server/picture/productMedia";
 import { translateAltText } from "~/server/picture/altTranslate.server";
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
@@ -113,32 +114,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               product(id: $id) {
                 id
                 title
-                images(first: 20) {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
-                }
+                ${PRODUCT_MEDIA_FIELDS}
               }
             }`,
             { variables: { id: imageLoading?.productId } },
           );
           const response = await loadData.json();
+          const product = productWithImages(response?.data?.product);
           let imageData = {};
-          if (response?.data?.product?.images?.edges.length > 0) {
-            response?.data?.product?.images?.edges.forEach((item: any) => {
+          if (product?.images?.edges.length > 0) {
+            product.images.edges.forEach((item: any) => {
               if (item.node.id === imageLoading.imageId) {
                 imageData = {
-                  title: response?.data?.product?.title,
+                  title: product?.title,
                   altText: item?.node?.altText,
                   key: item?.node?.id,
                   productId: item?.node?.id,

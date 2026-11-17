@@ -1,5 +1,13 @@
 export const WRITE_FILES_SCOPE = "write_files";
 
+/** 从 `SCOPES` 去掉 `write_files`，避免 SDK 把缺 Files 权限当成整应用未授权。 */
+export function omitWriteFilesScope(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((scope) => scope.trim())
+    .filter((scope) => scope.length > 0 && scope !== WRITE_FILES_SCOPE);
+}
+
 export function hasWriteFilesScope(scope: string | null | undefined): boolean {
   return String(scope ?? "")
     .split(/[\s,]+/)
@@ -9,7 +17,7 @@ export function hasWriteFilesScope(scope: string | null | undefined): boolean {
 
 export function filesGrantInstallUrl(apiKey: string, shop: string): string {
   const store = String(shop).replace(/\.myshopify\.com$/i, "").split(".")[0];
-  return `https://admin.shopify.com/store/${store}/oauth/install?client_id=${encodeURIComponent(apiKey)}`;
+  return `https://admin.shopify.com/store/${store}/oauth/install?client_id=${encodeURIComponent(apiKey)}&optional_scopes=${WRITE_FILES_SCOPE}`;
 }
 
 export function filesGrantRequestOutcome(

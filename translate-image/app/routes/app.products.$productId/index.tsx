@@ -21,6 +21,27 @@ import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
+import { productWithImages } from "~/server/picture/productMedia";
+
+const PRODUCT_MEDIA_QUERY = `#graphql
+  query ProductMedia($id: ID!, $first: Int, $last: Int, $after: String, $before: String) {
+    product(id: $id) {
+      id
+      title
+      media(first: $first, last: $last, after: $after, before: $before) {
+        edges {
+          node {
+            ... on MediaImage {
+              id
+              image { id url altText }
+            }
+          }
+        }
+        pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
+      }
+    }
+  }
+`;
 import ScrollNotice from "~/components/ScrollNotice";
 const { Text, Title } = Typography;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -62,57 +83,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!productLoading:
         try {
-          const loadData = await admin.graphql(
-            `query {
-              product(id: "${productLoading?.productId}") { 
-                id
-                title
-                images(first: 8) {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
-                }
-              }
-            }`,
-          );
+          const loadData = await admin.graphql(PRODUCT_MEDIA_QUERY, {
+            variables: { id: productLoading?.productId, first: 8 },
+          });
 
           const response = await loadData.json();
+          const product = productWithImages(response?.data?.product);
           console.log("dassada: ", response);
 
           console.log(
             "productLoading: ",
-            response?.data?.product?.images?.edges,
+            product?.images?.edges,
           );
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
+          if (product?.images?.edges.length > 0) {
+            const imageData = product.images.edges.map(
               (item: any) => {
                 return {
-                  title: response?.data?.product?.title,
+                  title: product?.title,
                   altText: item?.node?.altText,
                   key: item?.node?.id,
-                  productId: response?.data?.product?.id,
+                  productId: product?.id,
                   productTitle: item?.node?.title,
                   imageId: item?.node?.id,
                   imageUrl: item?.node?.url,
                   targetImageUrl: "",
                   imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
+                    product?.images?.pageInfo?.startCursor,
                   imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
+                    product?.images?.pageInfo?.endCursor,
                   imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
+                    product?.images?.pageInfo?.hasNextPage,
                   imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
+                    product?.images?.pageInfo?.hasPreviousPage,
                 };
               },
             );
@@ -133,38 +135,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       case !!imageStartCursor:
         try {
-          const loadData = await admin.graphql(
-            `query {
-              product(id: "${imageStartCursor?.productId}") {
-                id
-                title
-                images(last: 8, before: "${imageStartCursor?.imageStartCursor}") {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
-                }
-              }
-            }`,
-          );
+          const loadData = await admin.graphql(PRODUCT_MEDIA_QUERY, {
+            variables: {
+              id: imageStartCursor?.productId,
+              last: 8,
+              before: imageStartCursor?.imageStartCursor,
+            },
+          });
 
           const response = await loadData.json();
+          const product = productWithImages(response?.data?.product);
 
           console.log(
             "imageStartCursor",
-            response?.data?.product?.images?.edges,
+            product?.images?.edges,
           );
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
+          if (product?.images?.edges.length > 0) {
+            const imageData = product.images.edges.map(
               (item: any) => {
                 return {
                   key: item?.node?.id,
@@ -174,13 +161,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   imageUrl: item?.node?.url,
                   targetImageUrl: "",
                   imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
+                    product?.images?.pageInfo?.startCursor,
                   imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
+                    product?.images?.pageInfo?.endCursor,
                   imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
+                    product?.images?.pageInfo?.hasNextPage,
                   imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
+                    product?.images?.pageInfo?.hasPreviousPage,
                 };
               },
             );
@@ -200,35 +187,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!imageEndCursor:
         try {
-          const loadData = await admin.graphql(
-            `query {
-              product(id: "${imageEndCursor?.productId}") {
-                id
-                title
-                images(first: 8, after: "${imageEndCursor?.imageEndCursor}") {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
-                }
-              }
-            }`,
-          );
+          const loadData = await admin.graphql(PRODUCT_MEDIA_QUERY, {
+            variables: {
+              id: imageEndCursor?.productId,
+              first: 8,
+              after: imageEndCursor?.imageEndCursor,
+            },
+          });
 
           const response = await loadData.json();
+          const product = productWithImages(response?.data?.product);
 
-          console.log("imageEndCursor", response?.data?.product?.images);
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
+          console.log("imageEndCursor", product?.images);
+          if (product?.images?.edges.length > 0) {
+            const imageData = product.images.edges.map(
               (item: any) => {
                 return {
                   key: item?.node?.id,
@@ -238,13 +210,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   imageUrl: item?.node?.url,
                   targetImageUrl: "",
                   imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
+                    product?.images?.pageInfo?.startCursor,
                   imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
+                    product?.images?.pageInfo?.endCursor,
                   imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
+                    product?.images?.pageInfo?.hasNextPage,
                   imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
+                    product?.images?.pageInfo?.hasPreviousPage,
                 };
               },
             );

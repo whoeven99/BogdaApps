@@ -7,6 +7,8 @@
 <input type="hidden" name="image_product_id" value="{{ product.id }}">
 <input type="hidden" name="image_article_id" value="{{ article.id }}">
 <input type="hidden" name="image_block_id" value="{{ block.id }}">
+{% comment %} 空则 ciwi-api.js 按扩展 CDN handle 推断；测试 /apps/ciwi-image-test，正式 /apps/ciwi-image {% endcomment %}
+<input type="hidden" name="ciwi_app_proxy_base" value="">
 
 <script type="module" src="{{ 'ciwi-main.js' | asset_url }}"></script>
 {% schema %}

@@ -21,6 +21,7 @@ import { ColumnsType } from "antd/es/table";
 import useReport from "scripts/eventReport";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
+import { PRODUCT_MEDIA_FIELDS, productWithImages } from "~/server/picture/productMedia";
 import SortPopover from "~/components/SortPopover";
 import ScrollNotice from "~/components/ScrollNotice";
 const { Text, Title } = Typography;
@@ -197,21 +198,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     id
                     title
                     status
-                    images(first: 20) {
-                      edges {
-                        node {
-                          id
-                          url
-                          altText
-                        }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        hasPreviousPage
-                        startCursor
-                        endCursor
-                      }
-                    }
+                    ${PRODUCT_MEDIA_FIELDS}
                   }
                 }
                 pageInfo {
@@ -237,8 +224,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await loadData.json();
 
           console.log("productStartCursor", response?.data?.products?.edges);
-          if (response?.data?.products?.edges.length > 0) {
-            const menuData = response?.data?.products?.edges.map(
+          const startEdges = (response?.data?.products?.edges ?? []).map((item: any) => ({
+            ...item,
+            node: productWithImages(item.node),
+          }));
+          if (startEdges.length > 0) {
+            const menuData = startEdges.map(
               (item: any) => {
                 return {
                   key: item?.node?.id,
@@ -248,7 +239,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 };
               },
             );
-            const imageData = response?.data?.products?.edges.map(
+            const imageData = startEdges.map(
               (item: any) => {
                 return item?.node?.images?.edges.map((image: any) => {
                   return {
@@ -313,21 +304,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     id
                     title
                     status
-                    images(first: 20) {
-                      edges {
-                        node {
-                          id
-                          url
-                          altText
-                        }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        hasPreviousPage
-                        startCursor
-                        endCursor
-                      }
-                    }
+                    ${PRODUCT_MEDIA_FIELDS}
                   }
                 }
                 pageInfo {
@@ -354,8 +331,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           console.log("sdasdasda: ", response);
 
           console.log("productEndCursor11", response?.data?.products?.edges);
-          if (response?.data?.products?.edges.length > 0) {
-            const menuData = response?.data?.products?.edges.map(
+          const endEdges = (response?.data?.products?.edges ?? []).map((item: any) => ({
+            ...item,
+            node: productWithImages(item.node),
+          }));
+          if (endEdges.length > 0) {
+            const menuData = endEdges.map(
               (item: any) => {
                 return {
                   key: item?.node?.id,
@@ -365,7 +346,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 };
               },
             );
-            const imageData = response?.data?.products?.edges.map(
+            const imageData = endEdges.map(
               (item: any) => {
                 return item?.node?.images?.edges.map((image: any) => {
                   return {
