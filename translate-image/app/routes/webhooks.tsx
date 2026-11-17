@@ -1,13 +1,10 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import {
-  InsertOrUpdateOrder,
-  SendOneTimeBuySuccessEmail,
-  SendSubscribeSuccessEmail,
-  Uninstall,
-} from "~/api/JavaServer";
 import { grantCreditsOnce, markPlanCancelled, packCreditsForName, planGrantForName } from "~/server/billing/grants.server";
+import { handleAppUninstalled, handleShopRedact } from "~/server/billing/uninstall.server";
+import { loadSubscriptionTrial } from "~/server/billing/subscriptionNode.server";
+import { getShopAdmin } from "~/server/shop/shopAdminToken.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, admin, shop, session, payload } = await authenticate.webhook(request);
@@ -37,8 +34,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     case "APP_UNINSTALLED":
       try {
-        await Uninstall({ shop });
-        if (session) await db.session.deleteMany({ where: { shop } });
+        await handleAppUninstalled(shop);
         return new Response("OK", { status: 200 });
       } catch (error) {
         console.error("Error APP_UNINSTALLED:", error);
@@ -47,24 +43,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "APP_PURCHASES_ONE_TIME_UPDATE": {
       try {
         const purchase = payload?.app_purchase_one_time;
-        if (purchase) {
-          InsertOrUpdateOrder({
-            shop,
-            id: purchase.admin_graphql_api_id,
-            status: purchase.status,
-          });
+        if (purchase?.status === "ACTIVE") {
           const credits = packCreditsForName(purchase.name);
-          if (credits && purchase.status === "ACTIVE") {
-            const granted = await grantCreditsOnce({
+          if (credits) {
+            await grantCreditsOnce({
               shop,
               gid: purchase.admin_graphql_api_id,
               periodKey: "once",
               kind: "pack",
               credits,
             });
-            if (granted) {
-              SendOneTimeBuySuccessEmail({ shop, JSONData: JSON.stringify(payload) });
-            }
           }
         }
         return new Response("OK", { status: 200 });
@@ -78,11 +66,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const purchase = payload.app_subscription;
         const status = purchase.status;
         const yearly = purchase.interval !== "every_30_days";
-        InsertOrUpdateOrder({
-          shop,
-          id: purchase.admin_graphql_api_id,
-          status: purchase.status,
-        });
+        const gid = purchase.admin_graphql_api_id;
         if (status === "ACTIVE") {
           const plan = planGrantForName(purchase.name, yearly);
           if (plan) {
@@ -92,9 +76,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               : yearly
                 ? `y-${stamp.getUTCFullYear()}`
                 : `m-${stamp.toISOString().slice(0, 7)}`;
-            const granted = await grantCreditsOnce({
+            let trialEndsAt: Date | null = null;
+            let currentPeriodEnd: Date | null = null;
+            try {
+              const shopAdmin = getShopAdmin({ shop, path: "billing.subscriptionNode" });
+              const trial = await loadSubscriptionTrial(shopAdmin, gid);
+              trialEndsAt = trial.trialEndsAt;
+              currentPeriodEnd = trial.currentPeriodEnd;
+            } catch (error) {
+              console.warn(`${shop} load subscription trial skipped`, error);
+            }
+            await grantCreditsOnce({
               shop,
-              gid: purchase.admin_graphql_api_id,
+              gid,
               periodKey,
               kind: "subscription",
               credits: plan.credits,
@@ -102,15 +96,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 plan: plan.plan,
                 planType: plan.planType,
                 feeType: yearly ? 1 : 0,
-                subscriptionGid: purchase.admin_graphql_api_id,
+                subscriptionGid: gid,
+                currentPeriodEnd,
+                hasUsedTrial: true,
+                trialEndsAt,
               },
             });
-            if (granted) {
-              SendSubscribeSuccessEmail({ shop, JSONData: JSON.stringify(payload) });
-            }
           }
         }
-        if (status === "CANCELLED") {
+        if (status === "CANCELLED" || status === "EXPIRED") {
           await markPlanCancelled(shop, yearly ? 1 : 0);
         }
         return new Response("OK", { status: 200 });
@@ -120,8 +114,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     case "SHOP_REDACT":
       try {
-        await Uninstall({ shop });
-        if (session) await db.session.deleteMany({ where: { shop } });
+        await handleShopRedact(shop);
         return new Response("OK", { status: 200 });
       } catch (error) {
         console.error("Error SHOP_REDACT:", error);
