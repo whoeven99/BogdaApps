@@ -1,0 +1,2 @@
+ALTER TABLE "Account" ADD COLUMN "hasUsedTrial" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Account" ADD COLUMN "trialEndsAt" DATETIME;
