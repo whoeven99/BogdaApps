@@ -9,6 +9,9 @@ import {
   uploadImageToShopifyFiles,
   type ShopifyFilesGraphql,
 } from "./imageTranslate";
+import { normalizeUrlKeys } from "./imageUrlKey";
+
+export { URL_KEY_LOOKUP_MAX, normalizeUrlKeys } from "./imageUrlKey";
 
 export type UserPicturePayload = {
   id: number;
@@ -123,22 +126,11 @@ export async function listPicturesByProductLanguage(
   return rows.map(toPayload);
 }
 
-/** 店面一次最多查的 urlKey 数，对齐 TSF。 */
-export const URL_KEY_LOOKUP_MAX = 200;
-
 export type StorefrontUrlKeyPicture = {
   urlKey: string;
   imageAfterUrl: string | null;
   altAfterTranslation: string | null;
 };
-
-export function normalizeUrlKeys(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const keys = raw
-    .filter((k): k is string => typeof k === "string" && k.length > 0 && k.length <= 512)
-    .slice(0, URL_KEY_LOOKUP_MAX);
-  return [...new Set(keys)];
-}
 
 function toStorefrontUrlKeyItem(row: UserPicturePayload): StorefrontUrlKeyPicture | null {
   if (!row.urlKey) return null;

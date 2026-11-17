@@ -40,6 +40,19 @@ export function stripShopifyImageSizeSuffix(pathOrKey: string): string {
   return dir + decodeFileName(file).replace(SHOPIFY_SIZE_SUFFIX, "");
 }
 
+/** 店面一次最多查的 urlKey 数，对齐 TSF。 */
+export const URL_KEY_LOOKUP_MAX = 200;
+
+/** 查询侧归一：剥 `_720x` / `_{width}`，`ext:` 原样保留。 */
+export function normalizeUrlKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const keys = raw
+    .filter((k): k is string => typeof k === "string" && k.length > 0 && k.length <= 512)
+    .map((k) => (k.startsWith("ext:") ? k : stripShopifyImageSizeSuffix(k)))
+    .filter((k) => k.length > 0);
+  return [...new Set(keys)].slice(0, URL_KEY_LOOKUP_MAX);
+}
+
 function parseUrl(raw: string): URL | null {
   const trimmed = String(raw ?? "").trim();
   if (!trimmed) return null;

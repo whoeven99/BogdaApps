@@ -14,7 +14,7 @@ export type StorefrontCacheKind = "picture";
 const KEY_PREFIX = "img:sf";
 const TTL_SECONDS = 300;
 const VERSION_TTL_SECONDS = 30 * 24 * 60 * 60;
-const MAX_KEY_PART_LENGTH = 96;
+export const STOREFRONT_CACHE_MAX_KEY_PART_LENGTH = 96;
 
 function tryGetRedis() {
   try {
@@ -25,9 +25,10 @@ function tryGetRedis() {
   }
 }
 
-function normalizeKeyPart(part: string): string {
+/** extra 超长则 sha1，避免 urlKeys 把 Redis key 撑爆。 */
+export function normalizeStorefrontCacheKeyPart(part: string): string {
   const safe = part.replace(/\s+/g, "_");
-  if (safe.length <= MAX_KEY_PART_LENGTH) return safe;
+  if (safe.length <= STOREFRONT_CACHE_MAX_KEY_PART_LENGTH) return safe;
   return createHash("sha1").update(safe).digest("base64url");
 }
 
@@ -41,7 +42,7 @@ function dataKey(
   version: string,
   extra: string[],
 ): string {
-  const tail = extra.map(normalizeKeyPart).join(":");
+  const tail = extra.map(normalizeStorefrontCacheKeyPart).join(":");
   const base = `${KEY_PREFIX}:${kind}:${shop}:v${version}`;
   return tail ? `${base}:${tail}` : base;
 }
