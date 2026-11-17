@@ -89,7 +89,13 @@ export async function translateImageToFiles(args: {
         `[picture.deduct] shop=${args.shop} failed after Files save ${formatImageTranslateErrorLog(err)}`,
       );
     }
-    return { success: true, errorCode: 0, errorMsg: "", response: uploaded.url };
+    return {
+      success: true,
+      errorCode: 0,
+      errorMsg: "",
+      response: uploaded.url,
+      imageAfterFileId: uploaded.fileId,
+    };
   } catch (err) {
     console.error(`[picture.translate] shop=${args.shop} ${formatImageTranslateErrorLog(err)}`);
     if (imageTranslateErrorCode(err) === "SHOPIFY_SCOPE_MISSING") {

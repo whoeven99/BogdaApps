@@ -42,6 +42,46 @@ export async function UploadProductImage(args: {
   }
 }
 
+export async function SaveProductImageAlt(args: {
+  shopName: string;
+  imageId: string;
+  imageUrl: string;
+  languageCode: string;
+  altBeforeTranslation?: string;
+  altAfterTranslation?: string;
+}) {
+  try {
+    const form = new FormData();
+    form.append("shopName", args.shopName);
+    form.append(
+      "userPicturesDoJson",
+      JSON.stringify({
+        shopName: args.shopName,
+        imageId: args.imageId,
+        imageBeforeUrl: args.imageUrl,
+        altBeforeTranslation: args.altBeforeTranslation ?? "",
+        altAfterTranslation: args.altAfterTranslation ?? "",
+        languageCode: args.languageCode,
+      }),
+    );
+    const res = await fetch("/api/picture/upload", {
+      method: "POST",
+      body: form,
+      redirect: "manual",
+    });
+    if (res.status >= 300 && res.status < 400) {
+      return { success: false, errorCode: res.status, errorMsg: "AUTH_REDIRECT", response: undefined };
+    }
+    if (!res.ok) {
+      return { success: false, errorCode: res.status, errorMsg: "SERVER_ERROR", response: undefined };
+    }
+    return await res.json();
+  } catch (error) {
+    console.error("Error SaveProductImageAlt:", error);
+    return { success: false, errorCode: 10001, errorMsg: "SERVER_ERROR", response: undefined };
+  }
+}
+
 export async function DeleteProductImageLocal(args: {
   shopName: string;
   imageId: string;

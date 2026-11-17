@@ -2,6 +2,7 @@ import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-r
 import { verifyAppProxyHmac } from "~/server/storefront/auth.server";
 import { fail } from "~/server/storefront/response.server";
 import {
+  getStorefrontPicturesByUrlKeys,
   getStorefrontProductPictures,
   getStorefrontShopPictures,
 } from "~/server/picture/storefrontPictures.server";
@@ -79,6 +80,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       const result = await getStorefrontShopPictures({
         shop: auth.shop,
         languageCode,
+      });
+      return json(result, { headers: CORS_HEADERS });
+    }
+    if (path === "picture/getPictureDataByUrlKeys") {
+      const result = await getStorefrontPicturesByUrlKeys({
+        shop: auth.shop,
+        languageCode,
+        urlKeys: body.urlKeys,
       });
       return json(result, { headers: CORS_HEADERS });
     }

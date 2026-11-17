@@ -91,6 +91,22 @@ export async function GetShopImageData({ shopName, languageCode }) {
   }
 }
 
+export async function GetContentImageData({ shopName, urlKeys, languageCode }) {
+  try {
+    const base = resolveStorefrontApiBase();
+    const { data } = await fetchJson(
+      `${base}/picture/getPictureDataByUrlKeys?shopName=${encodeURIComponent(shopName)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ shopName, urlKeys, languageCode }),
+      },
+    );
+    return data;
+  } catch (err) {
+    console.error("Error GetContentImageData:", err);
+  }
+}
+
 export async function CrawlerDDetectionReport({ shop, blockId, ua, reason }) {
   try {
     const { data } = await fetchJson(`${switchUrl(blockId)}/frontEndPrinting`, {

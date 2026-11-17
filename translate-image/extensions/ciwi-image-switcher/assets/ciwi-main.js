@@ -1,5 +1,5 @@
 import * as API from "./ciwi-api.js";
-import { GetShopImageData, GetProductImageData } from "./ciwi-api.js";
+import { GetContentImageData } from "./ciwi-api.js";
 
 function isLikelyBotByUA() {
   const ua = navigator.userAgent.toLowerCase();
@@ -17,208 +17,375 @@ function isLikelyBotByUA() {
     "python-requests",
   ];
   const matched = botKeywords.filter((k) => ua.includes(k));
-  if (matched.length) return `ua 包含: ${matched.join(", ")}`;
+  if (matched.length) return `ua 包含: ${matched.join(",")}`;
   const error = [];
   if (navigator.webdriver) error.push("webdriver");
-  if (!(navigator.languages && navigator.languages.length > 0))
-    error.push("without languages");
-  if (window.outerWidth === 0 || window.outerHeight === 0)
-    error.push("window undefined");
+  if (!(navigator.languages && navigator.languages.length > 0)) error.push("without languages");
+  if (window.outerWidth === 0 || window.outerHeight === 0) error.push("window undefined");
   if (!window.__JS_EXECUTED__) error.push("js not executed");
   return error.length >= 2 ? error.join(",") : undefined;
 }
 
-// =============================
-// 缓存工具（按图片URL存储）
-// =============================
-function getCache(key) {
+const CDN_FILES_PATH = /^\/s\/files\/1\/(?:\d+\/){2,3}(.+)$/;
+const STOREFRONT_CDN_PATH = /\/cdn\/shop\/(.+)$/;
+const THEME_ID_PREFIX = /^t\/\d+\//;
+const SHOPIFY_SIZE_SUFFIX =
+  /_(?:(?:\d+x\d*)|(?:x\d+)|(?:\{width\}(?:x(?:\{height\}|\d+)?)?))(?:_crop_(?:top|center|bottom|left|right))?(?:@[23]x)?(?=\.[a-z0-9]+$)/i;
+const CONTENT_IMAGE_KEY_LIMIT = 200;
+const TRANSLATABLE_MEDIA_SELECTOR = "img, video, model-viewer, iframe";
+
+function decodeFileName(file) {
   try {
-    const cached = JSON.parse(localStorage.getItem(key));
-    if (cached && Date.now() - cached.timestamp < 60 * 60 * 1000) {
-      return cached.data;
+    return decodeURIComponent(file);
+  } catch {
+    return file;
+  }
+}
+
+function stripShopifyImageSizeSuffix(pathOrKey) {
+  const trimmed = String(pathOrKey || "").trim();
+  if (!trimmed) return trimmed;
+  const slash = trimmed.lastIndexOf("/");
+  const dir = slash >= 0 ? trimmed.slice(0, slash + 1) : "";
+  const file = slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+  return dir + decodeFileName(file).replace(SHOPIFY_SIZE_SUFFIX, "");
+}
+
+function parseContentImageUrl(raw) {
+  const candidate = String(raw || "").trim().split(",")[0]?.trim().split(/\s+/)[0];
+  if (!candidate) return null;
+  try {
+    return new URL(
+      candidate.startsWith("//") ? `https:${candidate}` : candidate,
+      window.location.origin,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function shopifyContentImageUrlKey(raw) {
+  const parsed = parseContentImageUrl(raw);
+  if (!parsed) return null;
+  const cdn =
+    parsed.hostname === "cdn.shopify.com" ? CDN_FILES_PATH.exec(parsed.pathname) : null;
+  const key = (cdn?.[1] ?? STOREFRONT_CDN_PATH.exec(parsed.pathname)?.[1] ?? "").trim();
+  if (!key) return null;
+  return stripShopifyImageSizeSuffix(key.replace(THEME_ID_PREFIX, "")) || null;
+}
+
+function externalContentImageUrlKey(raw) {
+  const candidate = String(raw || "").trim().split(",")[0]?.trim().split(/\s+/)[0];
+  if (!candidate || /^(data:|blob:)/i.test(candidate)) return null;
+  if (shopifyContentImageUrlKey(raw)) return null;
+  const parsed = parseContentImageUrl(raw);
+  if (!parsed || parsed.protocol !== "https:") return null;
+  const host = parsed.hostname.trim().toLowerCase().replace(/\.$/, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) {
+    return null;
+  }
+  if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host)) return null;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return null;
+  const key = `ext:${host}${parsed.pathname || "/"}`;
+  if (key.length > 512) return null;
+  return key;
+}
+
+function contentImageUrlKey(raw) {
+  return shopifyContentImageUrlKey(raw) || externalContentImageUrlKey(raw);
+}
+
+function getImageMatchCandidates(img) {
+  if (!(img instanceof HTMLImageElement)) return [];
+  const candidates = [
+    img.dataset.ciwiOriginalSrc,
+    img.currentSrc,
+    img.src,
+    img.getAttribute("src"),
+    img.srcset,
+    img.getAttribute("srcset"),
+    img.getAttribute("data-src"),
+    img.getAttribute("data-srcset"),
+  ].filter(Boolean);
+  return [...new Set(candidates)];
+}
+
+function getMediaUrlCandidates(el) {
+  if (el instanceof HTMLImageElement) return getImageMatchCandidates(el);
+  if (el instanceof HTMLVideoElement) {
+    const fromSources = Array.from(el.querySelectorAll("source")).map(
+      (source) => source.src || source.getAttribute("src"),
+    );
+    return [
+      ...new Set(
+        [
+          el.poster,
+          el.getAttribute("poster"),
+          el.currentSrc,
+          el.src,
+          el.getAttribute("src"),
+          ...fromSources,
+        ].filter(Boolean),
+      ),
+    ];
+  }
+  if (el?.tagName === "MODEL-VIEWER") {
+    return [el.getAttribute("poster"), el.getAttribute("src")].filter(Boolean);
+  }
+  if (el instanceof HTMLIFrameElement) {
+    return [el.src, el.getAttribute("src"), el.getAttribute("data-src")].filter(Boolean);
+  }
+  return [];
+}
+
+function contentImageKeyOf(el) {
+  if (el instanceof HTMLImageElement) {
+    const original = el.dataset.ciwiOriginalSrc;
+    if (original) {
+      const key = contentImageUrlKey(original);
+      if (key) return key;
     }
-  } catch {}
+  }
+  for (const candidate of getMediaUrlCandidates(el)) {
+    const key = contentImageUrlKey(candidate);
+    if (key) return key;
+  }
   return null;
 }
 
-function setCache(key, data) {
-  localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-}
-
-// =============================
-// 图片预加载
-// =============================
-function preloadImages(items) {
-  items.forEach((item) => {
-    if (item.imageAfterUrl) {
-      const img = new Image();
-      img.src = item.imageAfterUrl;
-    }
-  });
-}
-
-// =============================
-// 图片替换逻辑（Map 优化）
-// =============================
-function observeVisibleImages(map, language) {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        const img = entry.target;
-        for (const [key, item] of map.entries()) {
-          if (img.src.includes(key) || img.srcset.includes(key)) {
-            if (item.imageAfterUrl) {
-              img.src = item.imageAfterUrl;
-              img.srcset = item.imageAfterUrl;
-            }
-            if (item.altAfterTranslation && item.languageCode === language) {
-              img.alt = item.altAfterTranslation;
-            }
-            observer.unobserve(img);
-            break;
-          }
+function collectScanRoots() {
+  const roots = [];
+  const seen = new Set();
+  const add = (root) => {
+    if (!root || seen.has(root)) return;
+    seen.add(root);
+    roots.push(root);
+  };
+  add(document.body);
+  const walk = (root) => {
+    if (!root) return;
+    try {
+      root.querySelectorAll?.("*")?.forEach((el) => {
+        if (el.shadowRoot) {
+          add(el.shadowRoot);
+          walk(el.shadowRoot);
         }
-      }
-    });
-  });
-
-  document.querySelectorAll("img").forEach((img) => observer.observe(img));
-}
-
-// =============================
-// 产品图片翻译逻辑
-// =============================
-async function ProductImgTranslate(blockId, shop, ciwiBlock) {
-  const articleId = ciwiBlock.querySelector(
-    'input[name="image_article_id"]',
-  ).value;
-  const productId = ciwiBlock.querySelector(
-    'input[name="image_product_id"]',
-  ).value;
-  if (!productId && !articleId) return;
-
-  const language = ciwiBlock.querySelector(
-    'input[name="image_language_code"]',
-  ).value;
-  const cachePrefix = `ciwi_product_img_`;
-  console.log("查询产品详情数据");
-
-  // 先检查缓存中是否存在该产品的图片信息
-  const cacheKeys = Object.keys(localStorage).filter((k) =>
-    k.startsWith(
-      `${cachePrefix}${shop.value}_${productId || articleId}_${language}_`,
-    ),
-  );
-  let cacheMap = new Map();
-  cacheKeys.forEach((key) => {
-    const cached = getCache(key);
-    if (cached) cacheMap.set(key, cached);
-  });
-
-  // 请求最新数据
-  const data = await GetProductImageData({
-    shopName: shop.value,
-    id: articleId
-      ? `gid://shopify/Article/${articleId}`
-      : `gid://shopify/Product/${productId}`,
-    languageCode: language,
-  });
-  console.log("GetProductImageData", data);
-
-  const response = data?.response || [];
-
-  const map = new Map();
-
-  for (const item of response) {
-    const key = productId
-      ? item.imageBeforeUrl?.split("/files/")[2]
-      : item.imageBeforeUrl?.split("/articles/")[1];
-
-    if (!key) continue;
-    const cacheKey = `${cachePrefix}${shop.value}_${productId}_${language}_${key}`;
-    const cachedItem = getCache(cacheKey);
-
-    // 如果服务器返回了新的 URL 或更新时间不同 → 更新缓存
-    if (
-      !cachedItem ||
-      cachedItem.imageAfterUrl !== item.imageAfterUrl ||
-      cachedItem.updatedAt !== item.updatedAt
-    ) {
-      setCache(cacheKey, item);
-      cacheMap.set(cacheKey, item);
+      });
+    } catch {
+      /* ignore */
     }
-
-    map.set(key, item);
-  }
-
-  preloadImages([...map.values()]);
-  observeVisibleImages(map, language);
+    try {
+      root.querySelectorAll?.("iframe")?.forEach((frame) => {
+        try {
+          const doc = frame.contentDocument;
+          if (doc?.body) {
+            add(doc.body);
+            walk(doc.body);
+          }
+        } catch {
+          /* cross-origin */
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+  };
+  walk(document.body);
+  return roots;
 }
 
-// =============================
-// 店铺主页图片翻译逻辑
-// =============================
-async function HomeImageTranslate(blockId, ciwiBlock) {
-  const productId = ciwiBlock.querySelector(
-    'input[name="image_product_id"]',
-  ).value;
-  // console.log("productId", productId);
-  if (!productId) {
+function collectTranslatableMediaByKey(roots) {
+  const imagesByKey = new Map();
+  const add = (el) => {
+    const key = contentImageKeyOf(el);
+    if (!key) return;
+    if (!imagesByKey.has(key)) {
+      if (imagesByKey.size >= CONTENT_IMAGE_KEY_LIMIT) return;
+      imagesByKey.set(key, []);
+    }
+    const list = imagesByKey.get(key);
+    if (!list.includes(el)) list.push(el);
+  };
+  for (const root of roots) {
+    try {
+      if (root.matches?.(TRANSLATABLE_MEDIA_SELECTOR)) add(root);
+      root.querySelectorAll?.(TRANSLATABLE_MEDIA_SELECTOR).forEach(add);
+    } catch {
+      /* ignore */
+    }
+  }
+  return imagesByKey;
+}
+
+function collectTranslatableMediaInNode(node, out) {
+  if (!node) return;
+  try {
+    if (node.matches?.(TRANSLATABLE_MEDIA_SELECTOR)) out.push(node);
+    node.querySelectorAll?.(TRANSLATABLE_MEDIA_SELECTOR)?.forEach((el) => out.push(el));
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (node.shadowRoot) collectTranslatableMediaInNode(node.shadowRoot, out);
+    node.querySelectorAll?.("*")?.forEach((el) => {
+      if (el.shadowRoot) collectTranslatableMediaInNode(el.shadowRoot, out);
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+function rememberOriginalAttr(el, datasetKey, attrName) {
+  if (!(datasetKey in el.dataset)) {
+    el.dataset[datasetKey] = el.getAttribute(attrName) || "";
+  }
+}
+
+function rememberOriginalPictureSources(img) {
+  const picture = img.closest?.("picture");
+  picture?.querySelectorAll("source").forEach((source, index) => {
+    const key = `ciwiOriginalSource${index}`;
+    if (!(key in img.dataset)) {
+      img.dataset[key] = source.getAttribute("srcset") || source.srcset || "";
+    }
+  });
+}
+
+function rememberOriginalImageState(img) {
+  if (!(img instanceof HTMLImageElement)) return;
+  if (!("ciwiOriginalSrc" in img.dataset)) {
+    img.dataset.ciwiOriginalSrc = img.getAttribute("src") || img.currentSrc || img.src || "";
+  }
+  if (!("ciwiOriginalSrcset" in img.dataset)) {
+    img.dataset.ciwiOriginalSrcset = img.getAttribute("srcset") || img.srcset || "";
+  }
+  if (!("ciwiOriginalAlt" in img.dataset)) {
+    img.dataset.ciwiOriginalAlt = img.getAttribute("alt") || img.alt || "";
+  }
+  rememberOriginalPictureSources(img);
+}
+
+function syncPictureSources(img, afterUrl) {
+  if (!(img instanceof HTMLImageElement) || !afterUrl) return;
+  const picture = img.closest("picture");
+  picture?.querySelectorAll("source").forEach((source) => {
+    source.srcset = afterUrl;
+    source.setAttribute("srcset", afterUrl);
+  });
+}
+
+function applyTranslatedImage(img, item) {
+  if (!(img instanceof HTMLImageElement) || !item) return;
+  rememberOriginalImageState(img);
+  if (item.imageAfterUrl) {
+    img.src = item.imageAfterUrl;
+    img.setAttribute("src", item.imageAfterUrl);
+    img.srcset = item.imageAfterUrl;
+    img.setAttribute("srcset", item.imageAfterUrl);
+    syncPictureSources(img, item.imageAfterUrl);
+  }
+  if (item.altAfterTranslation) {
+    img.alt = item.altAfterTranslation;
+    img.setAttribute("alt", item.altAfterTranslation);
+  }
+}
+
+function applyTranslatedMedia(el, item) {
+  if (!(el instanceof Element) || !item) return;
+  if (el instanceof HTMLImageElement) {
+    applyTranslatedImage(el, item);
     return;
   }
-  const shop = document.querySelector("#image_queryCiwiId")?.value;
-  const language = document.querySelector(
-    'input[name="image_language_code"]',
-  )?.value;
-  if (!shop || !language) return;
-
-  const cachePrefix = `ciwi_shop_img_`;
-
-  const data = await GetShopImageData({
-    shopName: shop,
-    languageCode: language,
-  });
-  console.log("GetShopImageData: ", data);
-
-  const response = data?.response || [];
-
-  const map = new Map();
-
-  for (const item of response) {
-    const key = item.imageBeforeUrl?.split("/files/")[2];
-    if (!key) continue;
-    const cacheKey = `${cachePrefix}${shop}_${language}_${key}`;
-    const cachedItem = getCache(cacheKey);
-
-    if (
-      !cachedItem ||
-      cachedItem.imageAfterUrl !== item.imageAfterUrl ||
-      cachedItem.updatedAt !== item.updatedAt
-    ) {
-      setCache(cacheKey, item);
-    }
-
-    map.set(key, item);
+  const alt = item.altAfterTranslation;
+  if (!alt) return;
+  if (el instanceof HTMLVideoElement) {
+    rememberOriginalAttr(el, "ciwiOriginalAriaLabel", "aria-label");
+    rememberOriginalAttr(el, "ciwiOriginalTitle", "title");
+    el.setAttribute("aria-label", alt);
+    el.setAttribute("title", alt);
+    return;
   }
-
-  preloadImages([...map.values()]);
-  observeVisibleImages(map, language);
+  if (el.tagName === "MODEL-VIEWER") {
+    rememberOriginalAttr(el, "ciwiOriginalAlt", "alt");
+    el.setAttribute("alt", alt);
+    return;
+  }
+  if (el instanceof HTMLIFrameElement) {
+    rememberOriginalAttr(el, "ciwiOriginalTitle", "title");
+    el.setAttribute("title", alt);
+  }
 }
 
-// =============================
-// 启动逻辑 + 性能测量
-// =============================
-window.onload = async () => {
-  const startTime = performance.now();
-  console.log("🚀 Ciwi_Image_Switcher 启动（带缓存校验）");
+function isStorefrontPictureItem(item) {
+  return Boolean(item?.urlKey && (item.imageAfterUrl || item.altAfterTranslation));
+}
 
+let _contentImageObserver = null;
+
+function observeContentImages(translatedByKey) {
+  _contentImageObserver?.disconnect();
+  if (translatedByKey.size === 0) return;
+  const applyTo = (el) => {
+    const item = translatedByKey.get(contentImageKeyOf(el));
+    if (item) applyTranslatedMedia(el, item);
+  };
+  const applyNode = (node) => {
+    const media = [];
+    collectTranslatableMediaInNode(node, media);
+    media.forEach(applyTo);
+  };
+  _contentImageObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element) && node?.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
+          return;
+        }
+        applyNode(node);
+      });
+    }
+  });
+  _contentImageObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+async function ContentImageTranslate() {
+  const blockId = document.querySelector('input[name="image_block_id"]')?.value;
+  const ciwiBlock = blockId
+    ? document.querySelector(`#shopify-block-${blockId}`)
+    : document.querySelector("#image_queryCiwiId")?.closest("[id]");
+  const shop =
+    ciwiBlock?.querySelector?.("#image_queryCiwiId")?.value ||
+    document.querySelector("#image_queryCiwiId")?.value;
+  const language =
+    ciwiBlock?.querySelector?.('input[name="image_language_code"]')?.value ||
+    document.querySelector('input[name="image_language_code"]')?.value;
+  if (!shop || !language) return;
+
+  const imagesByKey = collectTranslatableMediaByKey(collectScanRoots());
+  if (imagesByKey.size === 0) return;
+
+  const translated = await GetContentImageData({
+    shopName: shop,
+    urlKeys: [...imagesByKey.keys()],
+    languageCode: language,
+  });
+  if (!Array.isArray(translated?.response)) return;
+
+  const translatedByKey = new Map();
+  translated.response.forEach((item) => {
+    if (!isStorefrontPictureItem(item)) return;
+    translatedByKey.set(item.urlKey, item);
+    imagesByKey.get(item.urlKey)?.forEach((el) => applyTranslatedMedia(el, item));
+  });
+  observeContentImages(translatedByKey);
+}
+
+window.onload = async () => {
   const blockId = document.querySelector('input[name="image_block_id"]')?.value;
   if (!blockId) return console.warn("blockId not found");
   const ciwiBlock = document.querySelector(`#shopify-block-${blockId}`);
   if (!ciwiBlock) return console.warn("ciwiBlock not found");
   const shop = ciwiBlock.querySelector("#image_queryCiwiId");
 
-  // 爬虫检测
   const reason = isLikelyBotByUA();
   if (reason) {
     console.warn("⚠️ 疑似爬虫访问", reason);
@@ -231,14 +398,5 @@ window.onload = async () => {
     return;
   }
 
-  await Promise.all([
-    ProductImgTranslate(blockId, shop, ciwiBlock),
-    HomeImageTranslate(blockId, ciwiBlock),
-  ]);
-
-  const endTime = performance.now();
-  const duration = (endTime - startTime).toFixed(2);
-  console.log(
-    `✅ 图片替换+加载完成，用时 ${duration} ms (${(duration / 1000).toFixed(2)} 秒)`,
-  );
+  await ContentImageTranslate();
 };

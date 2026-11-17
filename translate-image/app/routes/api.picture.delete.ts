@@ -1,6 +1,5 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
-import { DeleteProductImageData } from "~/api/JavaServer";
 import { clearUserPicture, type UserPicturePayload } from "~/server/picture/picture.server";
 import { adminFilesGraphql } from "~/server/picture/shopifyFilesAdmin.server";
 
@@ -37,17 +36,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     imageBeforeUrl,
     languageCode,
   });
-  try {
-    await DeleteProductImageData({
-      server: process.env.SERVER_URL || "",
-      shopName,
-      imageId,
-      imageUrl: imageBeforeUrl,
-      languageCode,
-    });
-  } catch (err) {
-    console.warn(`[picture.delete] java fallback failed shop=${shopName}`, err);
-  }
   if (!cleared.success && cleared.errorMsg === "NOT_FOUND") {
     return json({ success: true, errorCode: 0, errorMsg: "", response: null });
   }

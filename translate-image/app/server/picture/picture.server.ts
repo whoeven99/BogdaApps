@@ -111,6 +111,105 @@ export async function listPicturesByShopLanguage(
   return rows.map(toPayload);
 }
 
+export async function listPicturesByProductLanguage(
+  shop: string,
+  imageId: string,
+  languageCode: string,
+): Promise<UserPicturePayload[]> {
+  const rows = await prisma.userPicture.findMany({
+    where: { shop, imageId, languageCode, isDelete: false },
+  });
+  return rows.map(toPayload);
+}
+
+/** 店面一次最多查的 urlKey 数，对齐 TSF。 */
+export const URL_KEY_LOOKUP_MAX = 200;
+
+export type StorefrontUrlKeyPicture = {
+  urlKey: string;
+  imageAfterUrl: string | null;
+  altAfterTranslation: string | null;
+};
+
+export function normalizeUrlKeys(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const keys = raw
+    .filter((k): k is string => typeof k === "string" && k.length > 0 && k.length <= 512)
+    .slice(0, URL_KEY_LOOKUP_MAX);
+  return [...new Set(keys)];
+}
+
+function toStorefrontUrlKeyItem(row: UserPicturePayload): StorefrontUrlKeyPicture | null {
+  if (!row.urlKey) return null;
+  const imageAfterUrl = row.imageAfterUrl ?? null;
+  const altAfterTranslation = (row.altAfterTranslation ?? "").trim() || null;
+  if (!imageAfterUrl && !altAfterTranslation) return null;
+  return { urlKey: row.urlKey, imageAfterUrl, altAfterTranslation };
+}
+
+/** 按 urlKey 查译图 / alt；同 key 取 id 最新一行。 */
+export async function getPicturesByUrlKeys(args: {
+  shop: string;
+  languageCode: string;
+  urlKeys: string[];
+}): Promise<StorefrontUrlKeyPicture[]> {
+  const keys = normalizeUrlKeys(args.urlKeys);
+  const languageCode = String(args.languageCode ?? "").trim();
+  if (!languageCode || keys.length === 0) return [];
+  const rows = await prisma.userPicture.findMany({
+    where: {
+      shop: args.shop,
+      languageCode,
+      urlKey: { in: keys },
+      isDelete: false,
+    },
+    orderBy: { id: "desc" },
+  });
+  const latest = new Map<string, UserPicturePayload>();
+  for (const row of rows) {
+    const payload = toPayload(row);
+    if (payload.urlKey && !latest.has(payload.urlKey)) latest.set(payload.urlKey, payload);
+  }
+  return [...latest.values()].flatMap((row) => {
+    const item = toStorefrontUrlKeyItem(row);
+    return item ? [item] : [];
+  });
+}
+
+export async function persistImageAfterFileId(input: {
+  shop: string;
+  imageId: string;
+  imageBeforeUrl: string;
+  languageCode: string;
+  imageAfterFileId: string | null;
+}) {
+  const existing = await findUserPicture({
+    shop: input.shop,
+    imageId: input.imageId,
+    imageBeforeUrl: input.imageBeforeUrl,
+    languageCode: input.languageCode,
+  });
+  if (!existing) {
+    return upsertUserPicture({
+      shop: input.shop,
+      imageId: input.imageId,
+      imageBeforeUrl: input.imageBeforeUrl,
+      languageCode: input.languageCode,
+      imageAfterFileId: input.imageAfterFileId,
+    });
+  }
+  try {
+    const row = await prisma.userPicture.update({
+      where: { id: existing.id },
+      data: { imageAfterFileId: input.imageAfterFileId },
+    });
+    return ok(toPayload(row));
+  } catch (err) {
+    console.error(`[picture] persist file id failed shop=${input.shop}`, err);
+    return fail(null, "SAVE_FAILED");
+  }
+}
+
 function storefrontPictureKey(row: Partial<UserPicturePayload>): string {
   const lang = String(row.languageCode || "");
   const urlKey = row.urlKey || pictureUrlKey(String(row.imageBeforeUrl || ""));
@@ -130,16 +229,6 @@ export function mergeStorefrontPictures(
   return [...byKey.values()].filter(
     (row) => Boolean(row.imageAfterUrl) || Boolean(row.altAfterTranslation),
   );
-}
-
-export function mergePictureLists(
-  javaList: Array<Partial<UserPicturePayload> & { languageCode: string }>,
-  localList: UserPicturePayload[],
-): Array<Partial<UserPicturePayload> & { languageCode: string }> {
-  const byLang = new Map<string, Partial<UserPicturePayload> & { languageCode: string }>();
-  for (const row of javaList) byLang.set(row.languageCode, row);
-  for (const row of localList) byLang.set(row.languageCode, row);
-  return [...byLang.values()];
 }
 
 export async function upsertUserPicture(

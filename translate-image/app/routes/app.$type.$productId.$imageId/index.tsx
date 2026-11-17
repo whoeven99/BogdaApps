@@ -49,19 +49,17 @@ import { authenticate } from "~/shopify.server";
 import { globalStore } from "~/globalStore";
 import {
   deleteSaveInShopify,
-  getProductAllLanguageImagesData,
-  storageMediaId,
   updateManageTranslation,
-  UpdateProductImageAltData,
 } from "~/api/JavaServer";
 import {
   DeleteProductImageLocal,
   fetchLocalQuota,
+  SaveProductImageAlt,
   UploadProductImage,
 } from "~/api/pictureClient";
 import { merchantImageCredits } from "~/lib/imageTranslate";
 import { translateImageToFiles } from "~/server/picture/translateImage.server";
-import { listPicturesByImageId, mergePictureLists } from "~/server/picture/picture.server";
+import { listPicturesByImageId, persistImageAfterFileId } from "~/server/picture/picture.server";
 import { PRODUCT_MEDIA_FIELDS, productWithImages } from "~/server/picture/productMedia";
 import { translateAltText } from "~/server/picture/altTranslate.server";
 import ScrollNotice from "~/components/ScrollNotice";
@@ -199,17 +197,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!imagesFetcher:
         try {
-          const java = await getProductAllLanguageImagesData({
-            shop,
-            imageId: imagesFetcher.imageId,
-          });
           const local = await listPicturesByImageId(shop, imagesFetcher.imageId);
-          const javaList = Array.isArray(java?.response) ? java.response : [];
           return {
             success: true,
             errorCode: 0,
             errorMsg: "",
-            response: mergePictureLists(javaList, local),
+            response: local.map((row) => ({
+              ...row,
+              mediaId: row.imageAfterFileId || "",
+            })),
           };
         } catch (error) {
           console.error("Error action imagesFetcher productImage:", error);
@@ -278,9 +274,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!saveMediaId: {
         try {
-          const response = await storageMediaId({
+          const response = await persistImageAfterFileId({
             shop,
-            saveMediaId,
+            imageId: String(saveMediaId.imageId || ""),
+            imageBeforeUrl: String(saveMediaId.imageBeforeUrl || ""),
+            languageCode: String(saveMediaId.languageCode || ""),
+            imageAfterFileId: String(saveMediaId.mediaId || "").trim() || null,
           });
           return response;
         } catch (error) {
@@ -346,7 +345,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             admin,
           });
           // 删除创建的shopify文件以及清除当前图片的mediaId，解决因为数据库存储mediaId，导致shopify创建不了文件,仅限删除image和alt的删除操作
-          if (deleteImageInShopify.type === "deleteImage_Alt") {
+          if (deleteImageInShopify.type === "deleteImage_Alt" && deleteImageInShopify.mediaId) {
             const resDeleteFile = await admin.graphql(
               `#graphql
               mutation fileDelete($fileIds: [ID!]!) {
@@ -365,17 +364,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 },
               },
             );
-            const parse = await resDeleteFile.json();
-            // 删除mediaId
-            const resDeleteMediaId = await storageMediaId({
+            await resDeleteFile.json();
+            await persistImageAfterFileId({
               shop,
-              saveMediaId: {
-                productId: deleteImageInShopify.productId,
-                imageId: deleteImageInShopify.imageId,
-                languageCode: deleteImageInShopify.languageCode,
-                mediaId: "",
-                imageBeforeUrl: deleteImageInShopify.imageBeforeUrl,
-              },
+              imageId: String(deleteImageInShopify.imageId || ""),
+              imageBeforeUrl: String(deleteImageInShopify.imageBeforeUrl || ""),
+              languageCode: String(deleteImageInShopify.languageCode || ""),
+              imageAfterFileId: null,
             });
           }
 
@@ -699,6 +694,7 @@ const ImageAltTextPage = () => {
               ...existing,
               language: lang.label,
               published: lang.published,
+              mediaId: existing.mediaId || existing.imageAfterFileId || "",
             };
           } else {
             return {
@@ -729,6 +725,7 @@ const ImageAltTextPage = () => {
               ...existing,
               language: lang.label,
               published: lang.published,
+              mediaId: existing.mediaId || existing.imageAfterFileId || "",
             };
           } else {
             return {
@@ -919,6 +916,8 @@ const ImageAltTextPage = () => {
             return {
               ...item,
               imageAfterUrl: translateImageFetcher.data.response,
+              mediaId:
+                translateImageFetcher.data.imageAfterFileId || item.mediaId || "",
             };
           }
           return item;
@@ -945,7 +944,9 @@ const ImageAltTextPage = () => {
               languageCode: currentTranslatingImage.languageCode,
               altText,
               locale: defaultLanguageData.locale,
-              mediaId: currentTranslatingImage.mediaId,
+              mediaId:
+                translateImageFetcher.data.imageAfterFileId ||
+                currentTranslatingImage.mediaId,
             }),
           },
           { method: "post" },
@@ -1474,14 +1475,12 @@ const ImageAltTextPage = () => {
 
     setSaveLoading(true);
     const promises = confirmData.map((item: any) =>
-      UpdateProductImageAltData({
-        server: globalStore?.server || "",
-        shopName: globalStore?.shop || "",
-        productId: currentResourceId,
+      SaveProductImageAlt({
+        shopName: globalStore?.shop || loader.shop,
         imageId: item.imageId,
         imageUrl: item.imageUrl,
-        altText: item.altText,
-        targetAltText: item.value,
+        altBeforeTranslation: item.altText,
+        altAfterTranslation: item.value,
         languageCode: item.languageCode,
       }),
     );
