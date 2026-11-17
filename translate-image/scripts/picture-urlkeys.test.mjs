@@ -1,35 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import {
+  normalizeUrlKeys,
+  pictureUrlKey,
+  stripShopifyImageSizeSuffix,
+} from "./lib/pictureUrlKey.mjs";
 
-const URL_KEY_LOOKUP_MAX = 200;
 const STOREFRONT_CACHE_MAX_KEY_PART_LENGTH = 96;
-const SHOPIFY_SIZE_SUFFIX =
-  /_(?:(?:\d+x\d*)|(?:x\d+)|(?:\{width\}(?:x(?:\{height\}|\d+)?)?))(?:_crop_(?:top|center|bottom|left|right))?(?:@[23]x)?(?=\.[a-z0-9]+$)/i;
-
-function stripShopifyImageSizeSuffix(pathOrKey) {
-  const trimmed = String(pathOrKey ?? "").trim();
-  if (!trimmed) return trimmed;
-  const slash = trimmed.lastIndexOf("/");
-  const dir = slash >= 0 ? trimmed.slice(0, slash + 1) : "";
-  const file = slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
-  let decoded = file;
-  try {
-    decoded = decodeURIComponent(file);
-  } catch {
-    decoded = file;
-  }
-  return dir + decoded.replace(SHOPIFY_SIZE_SUFFIX, "");
-}
-
-function normalizeUrlKeys(raw) {
-  if (!Array.isArray(raw)) return [];
-  const keys = raw
-    .filter((k) => typeof k === "string" && k.length > 0 && k.length <= 512)
-    .map((k) => (k.startsWith("ext:") ? k : stripShopifyImageSizeSuffix(k)))
-    .filter((k) => k.length > 0);
-  return [...new Set(keys)].slice(0, URL_KEY_LOOKUP_MAX);
-}
 
 function normalizeStorefrontCacheKeyPart(part) {
   const safe = part.replace(/\s+/g, "_");
@@ -73,6 +51,34 @@ test("normalizeUrlKeys 不剥 ext: 外部 key", () => {
   assert.deepEqual(normalizeUrlKeys(["ext:cdn.example.com/hero_720x.jpg"]), [
     "ext:cdn.example.com/hero_720x.jpg",
   ]);
+});
+
+test("pictureUrlKey Shopify CDN 剥尺寸并丢掉店铺 id 前缀", () => {
+  assert.equal(
+    pictureUrlKey("https://cdn.shopify.com/s/files/1/0610/1234/5678/files/a_720x.jpg?v=1"),
+    "files/a.jpg",
+  );
+  assert.equal(
+    pictureUrlKey("//shop.com/cdn/shop/files/a.jpg?v=1&width=600"),
+    "files/a.jpg",
+  );
+  assert.equal(
+    pictureUrlKey("https://cdn.shopify.com/s/files/1/0264/0391/products/a_1024x1024@2x.jpg"),
+    "products/a.jpg",
+  );
+  assert.equal(
+    pictureUrlKey(
+      "https://cdn.shopify.com/s/files/1/0610/1234/5678/t/88421/assets/banner_{width}.jpg",
+    ),
+    "assets/banner.jpg",
+  );
+});
+
+test("pictureUrlKey 外部 https 走 ext:，不剥文件名尺寸", () => {
+  assert.equal(
+    pictureUrlKey("https://cdn.example.com/hero_720x.jpg?w=1"),
+    "ext:cdn.example.com/hero_720x.jpg",
+  );
 });
 
 test("normalizeStorefrontCacheKeyPart 短 extra 原样保留", () => {

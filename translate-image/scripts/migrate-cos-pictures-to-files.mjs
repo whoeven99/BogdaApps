@@ -2,7 +2,7 @@
  * 清点 / 导入 Java COS 旧译图到 Turso。不重译、不扣费。
  *
  * 默认 dry-run。必须 --shop=。
- * --write 把 COS 行写入 Turso（urlKey 补齐），店面 App Proxy 本地可读。
+ * --write 把 COS 行写入 Turso（urlKey 与 App 同口径：剥 _720x / 主题 t/{id}/ / ext:）。
  * 字节迁 Shopify Files 仍走 Admin 替换/重译（本脚本不上传）。
  *
  *   node scripts/migrate-cos-pictures-to-files.mjs --shop=xxx.myshopify.com --language=fr

@@ -28,14 +28,4 @@ export function classifyPictureRow(row) {
   return "migrate";
 }
 
-export function pictureUrlKey(url) {
-  const raw = String(url || "").trim();
-  if (!raw) return "";
-  try {
-    const path = new URL(raw).pathname.replace(/^\/+/, "");
-    const idx = path.indexOf("files/");
-    return idx >= 0 ? path.slice(idx) : path;
-  } catch {
-    return "";
-  }
-}
+export { pictureUrlKey } from "./pictureUrlKey.mjs";
