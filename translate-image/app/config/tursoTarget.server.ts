@@ -26,6 +26,10 @@ export function hasTursoCredentials(): boolean {
   return isUsableLibsqlUrl(url) && Boolean(authToken);
 }
 
+export function mustUseTurso(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.RENDER) || env.NODE_ENV === "production";
+}
+
 export function describeTursoEnvKeys(): string {
   return `需要 ${PRIMARY_URL_KEY} / ${PRIMARY_TOKEN_KEY}`;
 }

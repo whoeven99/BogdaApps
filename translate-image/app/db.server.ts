@@ -2,7 +2,12 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql/web";
 import { libsqlFetch } from "./config/libsqlFetch.server";
 import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
-import { describeTursoEnvKeys, hasTursoCredentials, readTursoCredentials } from "./config/tursoTarget.server";
+import {
+  describeTursoEnvKeys,
+  hasTursoCredentials,
+  mustUseTurso,
+  readTursoCredentials,
+} from "./config/tursoTarget.server";
 
 ensureRuntimeEnv();
 
@@ -23,6 +28,9 @@ function createPrismaClient(): PrismaClient {
     const { url, authToken, urlKey } = readTursoCredentials();
     console.info(`[Turso] Prisma host=${tursoUrlHost(url)} key=${urlKey}`);
     return new PrismaClient({ adapter: new PrismaLibSQL({ url, authToken, fetch: libsqlFetch }) });
+  }
+  if (mustUseTurso()) {
+    throw new Error(`[Turso] ${describeTursoEnvKeys()}；生产禁止回退本地 SQLite`);
   }
   console.warn(`[Turso] ${describeTursoEnvKeys()}；当前回退本地 SQLite`);
   return new PrismaClient();
