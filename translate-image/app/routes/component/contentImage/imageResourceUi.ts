@@ -2,7 +2,7 @@ import type { ImageResourceType } from "~/lib/imageResourcePaths";
 
 /** L1 每行即一张图（主题 / 集合 / Other），不再进资源详情。 */
 export function imageResourceListIsFlatImage(type: ImageResourceType): boolean {
-  return type === "theme";
+  return type === "theme" || type === "file" || type === "collection";
 }
 
 /** L1 展示 Source 列（图片关联的模块 / 位置）。 */
@@ -23,6 +23,7 @@ export function imageResourceListOpensDetail(type: ImageResourceType): boolean {
 const CATALOG_COLUMN_KEYS: Partial<Record<ImageResourceType, string>> = {
   product: "contentImage.column.product",
   article: "contentImage.column.article",
+  page: "contentImage.column.page",
 };
 
 /** L1 第一列：扁平行「图片」；商品/文章/页面用对应资源名。 */
@@ -32,11 +33,13 @@ export function imageResourceListPrimaryColumnKey(type: ImageResourceType): stri
 }
 
 export function imageResourceSearchPlaceholderKey(type: ImageResourceType): string {
-  if (type === "theme") return "contentImage.fileSearchPlaceholder";
+  if (type === "file" || type === "theme" || type === "collection") {
+    return "contentImage.fileSearchPlaceholder";
+  }
   return "contentImage.searchPlaceholder";
 }
 
-/** 本仓 P0 无 collection/file 扫描。 */
+/** 本仓无 ContentImageClassifyJob / 内容图索引，永不自动扫描。 */
 export function imageResourceAutoClassifyOnMount(_type: ImageResourceType): boolean {
   return false;
 }

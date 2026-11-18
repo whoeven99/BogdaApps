@@ -109,6 +109,14 @@ export function pictureUrlKey(url) {
   return imageUrlKey(url) ?? externalImageUrlKey(url) ?? "";
 }
 
+/** 我们上传到 Files 的译图文件名 / urlKey（`foo-ciwi-ja.png`）。未分类列表要排除这些。 */
+const CIWI_TRANSLATED_FILENAME = /-ciwi-[a-zA-Z0-9-]+\.[a-zA-Z0-9]+$/i;
+
+export function isCiwiTranslatedImageFilename(nameOrKey) {
+  const name = String(nameOrKey ?? "").split(/[\\/]/).pop() ?? "";
+  return CIWI_TRANSLATED_FILENAME.test(name);
+}
+
 export function canonicalHttpsImageUrl(url) {
   const parsed = parseUrl(url);
   if (!parsed || parsed.protocol !== "https:") return null;

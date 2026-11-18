@@ -51,7 +51,7 @@ import { useImageListDeepLink, useOpenPreviewFromQuery } from "./useImageListDee
 export default function ImageResourceDetailPage({ type }: { type: ImageResourceType }) {
   const data = useLoaderData() as ImageManageShellData;
   const params = useParams();
-  const resourceId = params.id ?? params.productId ?? params.articleId ?? "";
+  const resourceId = params.id ?? params.productId ?? params.articleId ?? params.pageId ?? "";
   const { t, i18n } = useTranslation();
   const kind = imageJobKindForResource(type);
   const [language, setLanguage] = useState<string>(

@@ -182,6 +182,9 @@
   "Product image": "Product image",
   "Theme image": "Theme image",
   "Article image": "Article image",
+  "Page image": "Page image",
+  "Collection image": "Collection image",
+  "Other image": "Other image",
   "Image Translation": "Image Translation",
   "What types of images can the tool translate?": "What types of images can the tool translate?",
   "It supports product images, theme banners, blog post images, page images, and images in custom blocks.": "It supports product images, theme banners, blog post images, page images, and images in custom blocks.",
@@ -244,6 +247,9 @@
   },
   "Article images": "Article images",
   "Product images": "Product images",
+  "Page images": "Page images",
+  "Collection images": "Collection images",
+  "Other images": "Other images",
   "Theme images": "Theme images",
   "Third-party images": "Third-party images",
   "Third-party image": "Third-party image",
@@ -587,6 +593,15 @@
   },
   "articleImage": {
     "title": "Article images"
+  },
+  "pageImage": {
+    "title": "Page images"
+  },
+  "collectionImage": {
+    "title": "Collection images"
+  },
+  "fileImage": {
+    "title": "Other images"
   },
   "themeImage": {
     "title": "Theme images",

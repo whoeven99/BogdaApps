@@ -9,12 +9,15 @@ import listStyles from "~/ui/styles/appListPage.module.css";
 const MODULE_PATH: Record<string, string> = {
   product: "/app/product",
   article: "/app/article",
+  page: "/app/page",
+  collection: "/app/collection",
+  file: "/app/file",
   theme: "/app/theme",
   switcherImage: "/app/third-party",
 };
 
 export type ImageManageSwitchersProps = {
-  type: ImageResourceType | "switcher" | "file";
+  type: ImageResourceType | "switcher";
   moduleValue?: string;
   language: string;
   languageOptions: Array<{ value: string; label: string }>;
@@ -27,6 +30,9 @@ export function ImageManageSwitchers(props: ImageManageSwitchersProps) {
   const itemOptions = [
     { value: "product", label: t("Product images") },
     { value: "article", label: t("Article images") },
+    { value: "page", label: t("Page images") },
+    { value: "collection", label: t("Collection images") },
+    { value: "file", label: t("Other images") },
     { value: "theme", label: t("Theme images") },
     { value: "switcherImage", label: t("Third-party images") },
   ];

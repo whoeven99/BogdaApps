@@ -24,5 +24,21 @@ export function imageResourceSourceLabel(
     }
     return first;
   }
+  if (type === "collection") {
+    const owner = row.usedIn?.[0];
+    if (!owner?.title) return t("contentImage.source.module.collection");
+    if (owner.field === "featured") {
+      return t("contentImage.source.collectionFeatured", { title: owner.title });
+    }
+    if (owner.field === "description") {
+      return t("contentImage.source.collectionDescription", { title: owner.title });
+    }
+    return t("contentImage.source.collection", { title: owner.title });
+  }
+  if (type === "file") {
+    const ref = row.usedIn?.[0];
+    if (ref?.title?.trim()) return ref.title.trim();
+    return t("contentImage.source.module.other");
+  }
   return row.title;
 }

@@ -288,6 +288,9 @@ export default function App() {
           {/* <Link to="/app/management">Image Manage</Link> */}
           <Link to="/app/article">{t("Article images")}</Link>
           <Link to="/app/product">{t("Product images")}</Link>
+          <Link to="/app/page">{t("Page images")}</Link>
+          <Link to="/app/collection">{t("Collection images")}</Link>
+          <Link to="/app/file">{t("Other images")}</Link>
           <Link to="/app/theme">{t("Theme images")}</Link>
           <Link to="/app/third-party">{t("Third-party images")}</Link>
           {/* <Link to="/app/management">{t("Managements")}</Link> */}

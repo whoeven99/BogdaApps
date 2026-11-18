@@ -186,6 +186,9 @@
   "Product image": "产品图片",
   "Theme image": "主题图片",
   "Article image": "文章图片",
+  "Page image": "页面图片",
+  "Collection image": "集合图片",
+  "Other image": "其他图片",
   "Image Translation": "图像翻译",
   "What types of images can the tool translate?": "该工具可以转换哪些类型的图像？",
   "It supports product images, theme banners, blog post images, page images, and images in custom blocks.": "它支持产品图片、主题横幅、博客文章图片、页面图片和自定义区块中的图片。",
@@ -248,6 +251,9 @@
   },
   "Article images": "文章图片",
   "Product images": "产品图片",
+  "Page images": "页面图片",
+  "Collection images": "集合图片",
+  "Other images": "其他图片",
   "Theme images": "主题图片",
   "Third-party images": "第三方图片",
   "Third-party image": "第三方图片",
@@ -591,6 +597,15 @@
   },
   "articleImage": {
     "title": "文章图片"
+  },
+  "pageImage": {
+    "title": "页面图片"
+  },
+  "collectionImage": {
+    "title": "集合图片"
+  },
+  "fileImage": {
+    "title": "其他图片"
   },
   "themeImage": {
     "title": "主题图片",

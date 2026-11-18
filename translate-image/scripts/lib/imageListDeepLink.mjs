@@ -40,6 +40,9 @@ function resourceKindFromLegacyType(type) {
   const value = String(type ?? "").trim().toLowerCase();
   if (value === "products" || value === "product" || value === "images") return "product";
   if (value === "articles" || value === "article") return "article";
+  if (value === "pages" || value === "page") return "page";
+  if (value === "collections" || value === "collection") return "collection";
+  if (value === "files" || value === "file" || value === "metafield") return "file";
   return "theme";
 }
 
@@ -53,6 +56,12 @@ export function legacySingleImageRedirectPath(input = {}) {
     path = productId ? `/app/products/${encodeURIComponent(productId)}` : "/app/product";
   } else if (kind === "article") {
     path = productId ? `/app/articles/${encodeURIComponent(productId)}` : "/app/article";
+  } else if (kind === "page") {
+    path = productId ? `/app/pages/${encodeURIComponent(productId)}` : "/app/page";
+  } else if (kind === "collection") {
+    path = "/app/collection";
+  } else if (kind === "file") {
+    path = "/app/file";
   }
   return appendImageListQuery(path, {
     language: language || undefined,

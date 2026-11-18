@@ -8,6 +8,17 @@ import {
   type ImageResourceType,
   shopifyResourceGid,
 } from "~/lib/imageResourcePaths";
+import {
+  fetchCollectionImageFlatPage,
+  getCollectionImageByFlatId,
+  getCollectionImageResource,
+  parseCollectionImageRowId,
+} from "./collectionImages.server";
+import {
+  isLeftoverFileRow,
+  leftoverLiveSubtractKeys,
+  type LeftoverSubtract,
+} from "./leftoverImages.server";
 import { fetchThemeImagePage, getThemeImageResource } from "./themeImages.server";
 
 export type { ImageResourceType } from "~/lib/imageResourcePaths";
@@ -66,7 +77,7 @@ const SHOPIFY_FETCH_SIZE = 50;
 const MEDIA_MAX_PAGES = 20;
 const MAX_FILL_FETCHES = 15;
 
-type ShopifyCatalogType = "product" | "article";
+type ShopifyCatalogType = "product" | "article" | "page";
 
 const LIST_QUERIES: Record<ShopifyCatalogType, string> = {
   product: `query CiwiImageResourcesProducts($first: Int!, $after: String, $query: String) {
@@ -92,12 +103,101 @@ const LIST_QUERIES: Record<ShopifyCatalogType, string> = {
       pageInfo { hasNextPage endCursor }
     }
   }`,
+  page: `query CiwiImageResourcesPages($first: Int!, $after: String, $query: String) {
+    pages(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
+      edges {
+        cursor
+        node { id title isPublished body }
+      }
+      pageInfo { hasNextPage endCursor }
+    }
+  }`,
 };
 
 const CONNECTION_FIELD: Record<ShopifyCatalogType, string> = {
   product: "products",
   article: "articles",
+  page: "pages",
 };
+
+const FILES_LIST_QUERY = `query CiwiImageResourcesFiles($first: Int!, $after: String, $query: String) {
+  files(first: $first, after: $after, query: $query, sortKey: UPDATED_AT, reverse: true) {
+    edges {
+      cursor
+      node {
+        id
+        alt
+        fileStatus
+        preview { image { url } }
+        ... on MediaImage { image { url } }
+      }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+const FILE_NODE_QUERY = `query CiwiFileImageResource($id: ID!) {
+  node(id: $id) {
+    id
+    ... on MediaImage {
+      alt
+      fileStatus
+      preview { image { url } }
+      image { url }
+    }
+  }
+}`;
+
+type FileImageNode = {
+  id?: string;
+  alt?: string | null;
+  fileStatus?: string | null;
+  image?: { url?: string | null } | null;
+  preview?: { image?: { url?: string | null } | null } | null;
+};
+
+export function filenameFromImageUrl(url: string): string {
+  const path = String(url ?? "").split(/[?#]/)[0] ?? "";
+  const name = path.split("/").pop() ?? "";
+  try {
+    return decodeURIComponent(name) || name;
+  } catch {
+    return name;
+  }
+}
+
+export function fileImageUrl(node: FileImageNode): string | null {
+  const raw = String(node.image?.url ?? node.preview?.image?.url ?? "").trim();
+  return canonicalShopifyImageUrl(raw) ?? (raw || null);
+}
+
+export function fileImageTitle(node: FileImageNode, url: string): string {
+  const alt = String(node.alt ?? "").trim();
+  if (alt) return alt;
+  return filenameFromImageUrl(url);
+}
+
+function fileImageRow(node: FileImageNode): ImageResourceRow | null {
+  if (!node.id) return null;
+  const imageUrl = fileImageUrl(node);
+  if (!imageUrl) return null;
+  const key = imageUrlKey(imageUrl);
+  return {
+    id: node.id,
+    title: fileImageTitle(node, imageUrl),
+    imageUrl,
+    status: String(node.fileStatus ?? "READY").toUpperCase(),
+    urlKey: key ?? undefined,
+  };
+}
+
+export function fileImageSourceRows(resource: ImageResourceRow): ResourceImageSourceRow[] {
+  const url = resource.imageUrl;
+  const key = url ? imageUrlKey(url) : null;
+  const canonical = url ? canonicalShopifyImageUrl(url) : null;
+  if (!key || !canonical) return [];
+  return [{ urlKey: key, imageUrl: canonical, usedIn: [{ id: resource.id, title: resource.title }] }];
+}
 
 const PRODUCT_NODE_QUERY = `query CiwiProductImageResource($id: ID!, $after: String) {
   product(id: $id) {
@@ -113,11 +213,16 @@ const ARTICLE_NODE_QUERY = `query CiwiArticleImageResource($id: ID!) {
   article(id: $id) { id title body image { url } publishedAt }
 }`;
 
+const PAGE_NODE_QUERY = `query CiwiPageImageResource($id: ID!) {
+  page(id: $id) { id title body isPublished }
+}`;
+
 type ListNode = {
   id?: string;
   title?: string;
   status?: string;
   publishedAt?: string | null;
+  isPublished?: boolean;
   featuredImage?: { url?: string } | null;
   image?: { url?: string } | null;
   descriptionHtml?: string | null;
@@ -172,12 +277,21 @@ export function buildResourceSearchQuery(args: {
   const parts: string[] = [];
   const q = sanitizeShopifySearchTerm(args.q);
   const status = (args.status ?? "all").trim().toLowerCase();
+  if (args.type === "collection") {
+    if (q) parts.push(`title:*${q}*`);
+    return parts.length ? parts.join(" ") : null;
+  }
+  if (args.type === "file") {
+    parts.push("media_type:IMAGE");
+    if (q) parts.push(`filename:*${q}*`);
+    return parts.join(" ");
+  }
   if (q) parts.push(`title:*${q}*`);
   if (args.type === "product") {
     if (status === "active" || status === "draft" || status === "archived" || status === "unlisted") {
       parts.push(`status:${status}`);
     }
-  } else if (args.type === "article" && (status === "published" || status === "unpublished")) {
+  } else if (status === "published" || status === "unpublished") {
     parts.push(`published_status:${status}`);
   }
   return parts.length ? parts.join(" ") : null;
@@ -185,6 +299,7 @@ export function buildResourceSearchQuery(args: {
 
 function nodeStatus(type: ImageResourceType, node: ListNode): string {
   if (type === "product") return String(node.status ?? "ACTIVE").toUpperCase();
+  if (type === "page") return node.isPublished ? "PUBLISHED" : "UNPUBLISHED";
   return node.publishedAt ? "PUBLISHED" : "UNPUBLISHED";
 }
 
@@ -285,7 +400,7 @@ export function countCatalogResourceImages(type: ImageResourceType, node: ListNo
       bodyUrls: productBodyImageUrls(node),
     }).length;
   }
-  if (type === "article") {
+  if (type === "article" || type === "page") {
     const keys = new Set<string>();
     for (const url of imageUrlsOfResource(node)) {
       const key = imageUrlKey(url);
@@ -310,14 +425,65 @@ function catalogRow(type: ImageResourceType, node: ListNode): ImageResourceRow |
   };
 }
 
+async function fetchFileImagePage(args: {
+  admin: AdminGraphqlClient;
+  after?: string | null;
+  q?: string | null;
+  leftover: LeftoverSubtract;
+}): Promise<ImageResourceFetchPage> {
+  try {
+    const data = await graphqlJson(args.admin, FILES_LIST_QUERY, {
+      first: SHOPIFY_FETCH_SIZE,
+      after: args.after || null,
+      query: buildResourceSearchQuery({ type: "file", q: args.q, status: "all" }),
+    });
+    return readConnection(data.files as ShopifyConnection<FileImageNode> | undefined, (node) => {
+      const row = fileImageRow(node);
+      if (!row || !isLeftoverFileRow(row, args.leftover)) return null;
+      return row;
+    });
+  } catch (err) {
+    console.warn("[contentImage] files list failed:", err);
+    return { items: [], hasNextPage: false, endCursor: null };
+  }
+}
+
 async function fetchImageResourcePage(args: {
   admin: AdminGraphqlClient;
+  shop?: string | null;
+  uiLocale?: string | null;
   type: ImageResourceType;
   after?: string | null;
   q?: string | null;
   status?: string | null;
+  leftoverLive?: LeftoverSubtract;
 }): Promise<ImageResourceFetchPage> {
-  if (args.type !== "product" && args.type !== "article") {
+  if (args.type === "theme") {
+    return fetchThemeImagePage({
+      admin: args.admin,
+      shop: args.shop,
+      uiLocale: args.uiLocale,
+      after: args.after,
+      q: args.q,
+    });
+  }
+  if (args.type === "collection") {
+    return fetchCollectionImageFlatPage({
+      admin: args.admin,
+      shop: args.shop,
+      after: args.after,
+      q: args.q,
+    });
+  }
+  if (args.type === "file") {
+    return fetchFileImagePage({
+      admin: args.admin,
+      after: args.after,
+      q: args.q,
+      leftover: args.leftoverLive ?? { theme: [], collection: [] },
+    });
+  }
+  if (args.type !== "product" && args.type !== "article" && args.type !== "page") {
     return { items: [], hasNextPage: false, endCursor: null };
   }
   const data = await graphqlJson(args.admin, LIST_QUERIES[args.type], {
@@ -352,12 +518,29 @@ export async function listImageResources(args: {
       endCursor: page.endCursor,
     };
   }
+  if (args.type === "collection") {
+    const page = await fetchCollectionImageFlatPage({
+      admin: args.admin,
+      shop: args.shop,
+      after: args.after,
+      q: args.q,
+    });
+    return {
+      rows: page.items.map((item) => item.row),
+      hasNextPage: page.hasNextPage,
+      endCursor: page.endCursor,
+    };
+  }
+  const leftoverLive =
+    args.type === "file"
+      ? await leftoverLiveSubtractKeys({ admin: args.admin, shop: args.shop })
+      : undefined;
   const items: RankedImageRow[] = [];
   let after = args.after || null;
   let shopifyHasNext = false;
   let shopifyEnd: string | null = after;
   for (let i = 0; i < MAX_FILL_FETCHES; i += 1) {
-    const page = await fetchImageResourcePage({ ...args, after });
+    const page = await fetchImageResourcePage({ ...args, after, leftoverLive });
     shopifyHasNext = page.hasNextPage;
     shopifyEnd = page.endCursor;
     for (const item of page.items) {
@@ -411,7 +594,32 @@ export async function listResourceImages(args: {
       resourceId: args.resourceId,
     });
   }
+  if (args.type === "collection") {
+    const flat = parseCollectionImageRowId(args.resourceId);
+    if (flat) {
+      return getCollectionImageByFlatId({
+        admin: args.admin,
+        collectionId: flat.collectionId,
+        urlKey: flat.urlKey,
+      });
+    }
+    return getCollectionImageResource({
+      admin: args.admin,
+      resourceId: shopifyResourceGid("collection", args.resourceId),
+    });
+  }
   const gid = shopifyResourceGid(args.type, args.resourceId);
+  if (args.type === "file") {
+    try {
+      const data = await graphqlJson(args.admin, FILE_NODE_QUERY, { id: gid });
+      const resource = fileImageRow((data.node ?? null) as FileImageNode);
+      if (!resource) return { resource: null, rows: [] };
+      return { resource, rows: fileImageSourceRows(resource) };
+    } catch (err) {
+      console.warn("[contentImage] file node failed:", err);
+      return { resource: null, rows: [] };
+    }
+  }
   if (args.type === "product") {
     const { product, mediaUrls } = await listProductMediaUrls(args.admin, gid);
     if (!product?.id) return { resource: null, rows: [] };
@@ -431,8 +639,31 @@ export async function listResourceImages(args: {
       }),
     };
   }
-  const data = await graphqlJson(args.admin, ARTICLE_NODE_QUERY, { id: gid });
-  const node = data.article as ListNode | null;
+  if (args.type === "article") {
+    const data = await graphqlJson(args.admin, ARTICLE_NODE_QUERY, { id: gid });
+    const node = data.article as ListNode | null;
+    if (!node?.id) return { resource: null, rows: [] };
+    const title = node.title ?? "";
+    const owner = { id: node.id, title };
+    const seen = new Set<string>();
+    return {
+      resource: {
+        id: node.id,
+        title,
+        imageUrl: node.image?.url ?? null,
+        status: node.publishedAt ? "PUBLISHED" : "UNPUBLISHED",
+      },
+      rows: imageUrlsOfResource(node).flatMap((url) => {
+        const key = imageUrlKey(url);
+        const canonical = canonicalShopifyImageUrl(url);
+        if (!key || !canonical || seen.has(key)) return [];
+        seen.add(key);
+        return [{ urlKey: key, imageUrl: canonical, usedIn: [owner] }];
+      }),
+    };
+  }
+  const data = await graphqlJson(args.admin, PAGE_NODE_QUERY, { id: gid });
+  const node = data.page as ListNode | null;
   if (!node?.id) return { resource: null, rows: [] };
   const title = node.title ?? "";
   const owner = { id: node.id, title };
@@ -441,8 +672,8 @@ export async function listResourceImages(args: {
     resource: {
       id: node.id,
       title,
-      imageUrl: node.image?.url ?? null,
-      status: node.publishedAt ? "PUBLISHED" : "UNPUBLISHED",
+      imageUrl: null,
+      status: node.isPublished ? "PUBLISHED" : "UNPUBLISHED",
     },
     rows: imageUrlsOfResource(node).flatMap((url) => {
       const key = imageUrlKey(url);

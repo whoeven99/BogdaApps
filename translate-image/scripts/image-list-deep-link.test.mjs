@@ -62,6 +62,33 @@ test("billing 回跳 /app/images 进商品 L2", () => {
   );
 });
 
+test("旧页面 / 集合 / Files URL 进对应入口", () => {
+  assert.equal(
+    legacySingleImageRedirectPath({
+      type: "pages",
+      productId: "gid://shopify/Page/555",
+      imageId: "files/a.jpg",
+      language: "fr",
+    }),
+    "/app/pages/555?language=fr&preview=files%2Fa.jpg",
+  );
+  assert.equal(
+    legacySingleImageRedirectPath({
+      type: "collections",
+      productId: "111",
+      imageId: "files/a.jpg",
+    }),
+    "/app/collection?preview=files%2Fa.jpg",
+  );
+  assert.equal(
+    legacySingleImageRedirectPath({
+      type: "metafield",
+      imageId: "files/a.jpg",
+    }),
+    "/app/file?preview=files%2Fa.jpg",
+  );
+});
+
 test("主题类旧 URL 进扁平行 L1", () => {
   assert.equal(
     legacySingleImageRedirectPath({

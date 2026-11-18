@@ -10,8 +10,11 @@ import WelcomeCard from "./components/welcomeCard";
 import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
 import ThemeModule from "./components/themeModule";
+import HomeImageJobSection from "./components/HomeImageJobSection";
 import { FaqComponent } from "./components/faqComponent";
 import { bootMark } from "~/server/bootTrace.server";
+import { getCurrentContentImageJob } from "~/server/contentImage/contentImageJobs.server";
+import type { ContentImageJob } from "~/routes/component/contentImage/contentImageClient";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -20,16 +23,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   bootMark("home loader", `shop=${shop}`);
   const language =
     request.headers.get("Accept-Language")?.split(",")[0] || "en";
+  const job = await getCurrentContentImageJob(shop).catch(() => null);
   return {
     language,
     ciwiSwitcherId: process.env.SHOPIFY_CIWI_SWITCHER_ID as string,
     ciwiSwitcherBlocksId: process.env.SHOPIFY_CIWI_SWITCHER_THEME_ID as string,
     shop: shop,
+    job,
   };
 };
 
 const Index = () => {
-  const { language, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
+  const { language, shop, ciwiSwitcherBlocksId, ciwiSwitcherId, job } =
     useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
@@ -146,6 +151,7 @@ const Index = () => {
             blockUrl={blockUrl}
             shop={shop}
           />
+          <HomeImageJobSection initialJob={(job as ContentImageJob | null) ?? null} />
           <ThemeModule shop={shop} />
           <FaqComponent />
           {/* <ImageTable shop={shop} /> */}

@@ -1,15 +1,32 @@
 import { attachImageTranslations } from "./resourceImageTranslations.server";
+import { parseCollectionImageRowId } from "./collectionImages.server";
+import { fileImageSourceRows } from "./resourceImages.server";
 import { themeImageSourceRows } from "./themeImages.server";
 import type { ImageResourceType } from "~/lib/imageResourcePaths";
 import type { ImageResourceRow, ResourceImageSourceRow } from "./resourceImages.server";
 
+function collectionFlatSource(row: ImageResourceRow): ResourceImageSourceRow | null {
+  if (!row.imageUrl) return null;
+  const parsed = parseCollectionImageRowId(row.id);
+  if (!parsed) return null;
+  return {
+    urlKey: parsed.urlKey,
+    imageUrl: row.imageUrl,
+    usedIn: row.usedIn ?? [],
+  };
+}
+
 function flatRowToSource(type: ImageResourceType, row: ImageResourceRow): ResourceImageSourceRow | null {
   if (!row.imageUrl) return null;
   if (type === "theme") return themeImageSourceRows(row)[0] ?? null;
+  if (type === "file") return fileImageSourceRows(row)[0] ?? null;
+  if (type === "collection") return collectionFlatSource(row);
   return null;
 }
 
-/** L1 扁平行（主题）挂上 urlKey + 目标语译图状态。 */
+const FLAT_TRANSLATION_TYPES = new Set<ImageResourceType>(["theme", "file", "collection"]);
+
+/** L1 扁平行（主题 / 集合 / Files）挂上 urlKey + 目标语译图状态。 */
 export async function attachTranslationsToFlatResourceRows(args: {
   shop: string;
   languageCode: string;
@@ -17,7 +34,7 @@ export async function attachTranslationsToFlatResourceRows(args: {
   rows: ImageResourceRow[];
 }): Promise<ImageResourceRow[]> {
   const languageCode = args.languageCode.trim();
-  if (!languageCode || args.type !== "theme") return args.rows;
+  if (!languageCode || !FLAT_TRANSLATION_TYPES.has(args.type)) return args.rows;
   const sources = args.rows.flatMap((row) => {
     const source = flatRowToSource(args.type, row);
     return source ? [source] : [];
