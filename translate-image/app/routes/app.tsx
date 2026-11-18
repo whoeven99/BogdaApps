@@ -19,8 +19,8 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import { GoogleAnalyticClickReport } from "~/api/JavaServer";
 import { fetchLocalQuota } from "~/api/pictureClient";
+import { resolveShouldCreateTestCharge } from "~/server/billing/chargeGuardApply.server";
 import { ensureAccount } from "~/server/billing/quota.server";
-import { reconcileShopBilling } from "~/server/billing/reconcile.server";
 import { globalStore } from "~/globalStore";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -47,7 +47,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   bootMark("app loader", `shop=${shop}`);
   try {
     await ensureAccount(shop);
-    await reconcileShopBilling(shop, adminAuthResult.admin);
   } catch (err) {
     console.warn(`[app.loader] billing bootstrap failed shop=${shop}`, err);
   }
@@ -62,6 +61,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const adminAuthResult = await authenticate.admin(request);
     const { shop } = adminAuthResult.session;
+    const sessionEmail = (adminAuthResult.session as { email?: string | null }).email ?? null;
     const { admin } = adminAuthResult;
     const formData = await request.formData();
     const theme = JSON.parse(formData.get("theme") as string);
@@ -132,9 +132,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           name: payInfo.name,
           price: payInfo.price,
           returnUrl,
-          test:
-            process.env.NODE_ENV === "development" ||
-            process.env.NODE_ENV === "test",
+          test: await resolveShouldCreateTestCharge(shop, sessionEmail),
         });
         return json({
           success: true,

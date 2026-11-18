@@ -31,22 +31,34 @@ model Session {
   emailVerified Boolean?  @default(false)
 }
 
-/// 薄账本：remaining = purchasePoints - usedPoints，对齐现有 Java 口径。
+/// remaining = subscriptionCredits + purchasedCredits + trialCredits - usedCredits。
+/// purchasePoints / usedPoints 为旧列兼容别名来源。
 model Account {
-  shop              String    @id
-  plan              Int       @default(1)
-  planType          String    @default("Free")
-  feeType           Int       @default(0)
-  purchasePoints    Int       @default(0)
-  usedPoints        Int       @default(0)
-  subscriptionGid   String?
-  currentPeriodEnd  DateTime?
-  hasUsedTrial      Boolean   @default(false)
-  trialEndsAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  grants            CreditGrant[]
-  usages            CreditUsage[]
+  shop                    String    @id
+  plan                    Int       @default(1)
+  planType                String    @default("Free")
+  feeType                 Int       @default(0)
+  purchasePoints          Int       @default(0)
+  usedPoints              Int       @default(0)
+  subscriptionCredits     Int       @default(0)
+  purchasedCredits        Int       @default(0)
+  trialCredits            Int       @default(0)
+  trialCreditsExpiresAt   DateTime?
+  trialInstallCredits     Int       @default(0)
+  trialInstallExpiresAt   DateTime?
+  trialBonusCredits       Int       @default(0)
+  trialBonusExpiresAt     DateTime?
+  usedCredits             Int       @default(0)
+  subscriptionGid         String?
+  currentPeriodEnd        DateTime?
+  hasUsedTrial            Boolean   @default(false)
+  trialEndsAt             DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  grants                  CreditGrant[]
+  usages                  CreditUsage[]
+  subscription            AppSubscription?
+  billingLogs             BillingLog[]
 }
 
 /// Shopify 购包 / 订阅入账幂等。订阅续费用 periodKey 区分周期。
@@ -95,6 +107,67 @@ model UserPicture {
   @@unique([shop, imageId, imageBeforeUrl, languageCode])
   @@index([shop, imageId, languageCode, isDelete])
   @@index([shop, languageCode, urlKey])
+}
+
+model PlanCatalog {
+  planKey         String   @id
+  kind            String
+  billingInterval String?
+  displayName     String
+  credits         Int
+  priceAmount     String
+  currencyCode    String   @default("USD")
+  trialDays       Int?
+  shopifyPlanName String?
+  sortOrder       Int      @default(0)
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+model AppSubscription {
+  shop                  String    @id
+  planKey               String
+  shopifySubscriptionId String    @unique
+  billingInterval       String
+  status                String
+  creditsPerPeriod      Int
+  trialEndsAt           DateTime?
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelledAt           DateTime?
+  rawPayload            Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  account Account @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model BillingLog {
+  id           String   @id @default(cuid())
+  shop         String
+  eventType    String
+  planKey      String?
+  referenceId  String?
+  creditsDelta Int?
+  usedCredits  Int?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  account Account @relation(fields: [shop], references: [shop], onDelete: Cascade)
+
+  @@index([shop, createdAt])
+  @@index([eventType, createdAt])
+  @@index([referenceId])
+}
+
+model BillingReconcileLock {
+  id       String   @id
+  lockedAt DateTime
 }
 
 model SwitcherImage {

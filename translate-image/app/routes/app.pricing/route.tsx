@@ -25,8 +25,10 @@ import { useEffect, useMemo, useState } from "react";
 import ScrollNotice from "~/components/ScrollNotice";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import { reconcileShopBilling } from "~/server/billing/reconcile.server";
+import { resolveShouldCreateTestCharge } from "~/server/billing/chargeGuardApply.server";
+import { listEnabledCatalog } from "~/server/billing/plans/planCatalog.server";
 import { resolveCancelSubscriptionGid } from "~/server/billing/resolveSubscriptionGid.server";
+import { BILLING_INTERVAL, PLAN_KIND } from "~/server/billing/types.server";
 import { useFetcher, useLoaderData } from "@remix-run/react";
 import {
   AddCreaditsModal,
@@ -50,19 +52,26 @@ const { Title, Text, Paragraph } = Typography;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop } = adminAuthResult.session;
-  try {
-    await reconcileShopBilling(shop, adminAuthResult.admin);
-  } catch (err) {
-    console.warn(`[pricing.loader] reconcile failed shop=${shop}`, err);
-  }
+  const catalog = await listEnabledCatalog();
   return {
-    shop: shop,
+    shop,
+    catalog: catalog.map((row) => ({
+      planKey: row.planKey,
+      kind: row.kind,
+      billingInterval: row.billingInterval,
+      shopifyPlanName: row.shopifyPlanName,
+      displayName: row.displayName,
+      credits: row.credits,
+      priceAmount: Number(row.priceAmount),
+      trialDays: row.trialDays ?? 0,
+    })),
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop } = adminAuthResult.session;
+  const sessionEmail = (adminAuthResult.session as { email?: string | null }).email ?? null;
   const { admin } = adminAuthResult;
 
   const formData = await request.formData();
@@ -87,9 +96,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           },
           trialDays: payForPlan.trialDays,
           returnUrl,
-          test:
-            process.env.NODE_ENV === "development" ||
-            process.env.NODE_ENV === "test",
+          test: await resolveShouldCreateTestCharge(shop, sessionEmail),
         });
 
         return {
@@ -195,7 +202,7 @@ const Index = () => {
     (state: any) => state.userConfig,
   );
   
-  const { shop } = useLoaderData<typeof loader>();
+  const { shop, catalog } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const [yearly, setYearly] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
@@ -322,15 +329,43 @@ const Index = () => {
     }
   }, [planCancelFetcher.data]);
 
+  const catalogPrices = useMemo(() => {
+    const pick = (name: string) => {
+      const monthly = catalog.find(
+        (row) =>
+          row.kind === PLAN_KIND.SUBSCRIPTION &&
+          row.shopifyPlanName === name &&
+          row.billingInterval === BILLING_INTERVAL.MONTHLY,
+      );
+      const annual = catalog.find(
+        (row) =>
+          row.kind === PLAN_KIND.SUBSCRIPTION &&
+          row.shopifyPlanName === name &&
+          row.billingInterval === BILLING_INTERVAL.ANNUAL,
+      );
+      return {
+        monthlyPrice: Number(monthly?.priceAmount || 0),
+        yearlyPrice: Number(annual?.priceAmount || 0),
+        trialDays: Number(monthly?.trialDays || annual?.trialDays || 0),
+      };
+    };
+    return {
+      Basic: pick("Basic"),
+      Pro: pick("Pro"),
+      Premium: pick("Premium"),
+    };
+  }, [catalog]);
+
   const plans = useMemo(
     () => [
       {
         title: "Basic",
         yearlyTitle: "Basic - Yearly",
-        monthlyPrice: 9.99,
-        yearlyPrice: 7.99,
+        monthlyPrice: catalogPrices.Basic.monthlyPrice,
+        yearlyPrice: catalogPrices.Basic.yearlyPrice,
+        trialDays: catalogPrices.Basic.trialDays,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 95.88,
+          amount: (catalogPrices.Basic.yearlyPrice * 12).toFixed(2),
         }),
         buttonText:
           plan.type === "Basic" && yearly === !!(plan.feeType === 1)
@@ -351,10 +386,11 @@ const Index = () => {
       {
         title: "Pro",
         yearlyTitle: "Pro - Yearly",
-        monthlyPrice: 29.99,
-        yearlyPrice: 23.99,
+        monthlyPrice: catalogPrices.Pro.monthlyPrice,
+        yearlyPrice: catalogPrices.Pro.yearlyPrice,
+        trialDays: catalogPrices.Pro.trialDays,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 287.88,
+          amount: (catalogPrices.Pro.yearlyPrice * 12).toFixed(2),
         }),
         buttonText:
           plan.type === "Pro" && yearly === !!(plan.feeType === 1)
@@ -376,10 +412,11 @@ const Index = () => {
       {
         title: "Premium",
         yearlyTitle: "Premium - Yearly",
-        monthlyPrice: 79.99,
-        yearlyPrice: 63.99,
+        monthlyPrice: catalogPrices.Premium.monthlyPrice,
+        yearlyPrice: catalogPrices.Premium.yearlyPrice,
+        trialDays: catalogPrices.Premium.trialDays,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 767.88,
+          amount: (catalogPrices.Premium.yearlyPrice * 12).toFixed(2),
         }),
         buttonText:
           plan.type === "Premium" && yearly === !!(plan.feeType === 1)
@@ -399,7 +436,7 @@ const Index = () => {
         ],
       },
     ],
-    [plan, yearly],
+    [plan, yearly, catalogPrices, t],
   );
 
   const tableData = useMemo(
@@ -408,9 +445,9 @@ const Index = () => {
         key: 0,
         features: t("Monthly Payment"),
         free: "0",
-        basic: "9.99",
-        pro: "29.99",
-        premium: "79.99",
+        basic: String(catalogPrices.Basic.monthlyPrice),
+        pro: String(catalogPrices.Pro.monthlyPrice),
+        premium: String(catalogPrices.Premium.monthlyPrice),
         type: "text",
       },
       {
@@ -459,7 +496,7 @@ const Index = () => {
         type: "text",
       },
     ],
-    [],
+    [catalogPrices, t],
   );
 
   const collapseData: CollapseProps["items"] = useMemo(
@@ -496,7 +533,7 @@ const Index = () => {
         key: 4,
         label: t("Do unused credits carry over?"),
         children: t(
-          "Plan credits reset at the end of each billing cycle. But if you cancel or downgrade, any unused credits stay active for 3 more months.",
+          "Plan credits reset at the end of each billing cycle. Extra credit packs never expire.",
         ),
       },
       {
@@ -517,7 +554,7 @@ const Index = () => {
         key: 7,
         label: t("Will I lose credits if I cancel or downgrade?"),
         children: t(
-          "No. Your unused credits stay available for 3 months. But you'll only have access to the features included in your new (lower) plan.",
+          "Unused plan credits are removed when the subscription ends. Extra credit packs stay.",
         ),
       },
     ],
@@ -980,7 +1017,7 @@ const Index = () => {
                   >
                     {item.buttonText}
                   </Button>
-                  {isNew && (
+                  {isNew && item.trialDays > 0 && (
                     <Button
                       id={`${item.title}-${yearly ? "yearly" : "month"}-${index}-5`}
                       type="primary"
@@ -990,7 +1027,7 @@ const Index = () => {
                       onClick={() =>
                         handlePayForPlan({
                           plan: item,
-                          trialDays: 5,
+                          trialDays: item.trialDays,
                           id: `${item.title}-${yearly ? "yearly" : "month"}-${index}-5`,
                         })
                       }

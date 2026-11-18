@@ -21,6 +21,9 @@ import {
   startBootDocument,
 } from "./server/bootTrace.server";
 import { normalizeEnvValue } from "./config/runtimeEnv.server";
+import { startBillingReconcileLoop } from "./server/billing/reconcileLoop.server";
+
+startBillingReconcileLoop();
 
 const APP_BRIDGE_SRC = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
 

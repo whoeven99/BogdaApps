@@ -1,23 +1,10 @@
 import prisma from "~/db.server";
+import { appendBillingLog, hasBillingLog } from "./billingLog.server";
 import { JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./billingState";
+import type { PlanRecord } from "./plans/planCatalog.server";
+import { findPackPlanByName, findSubscriptionPlan } from "./plans/planCatalog.server";
 import { ensureAccount } from "./quota.server";
-
-const PACK_CREDITS: Record<string, number> = {
-  "50 extra times": 100000,
-  "100 extra times": 200000,
-  "200 extra times": 400000,
-  "300 extra times": 600000,
-  "500 extra times": 1000000,
-  "1000 extra times": 2000000,
-  "2000 extra times": 4000000,
-  "3000 extra times": 6000000,
-};
-
-const PLAN_BY_NAME: Record<string, { plan: number; planType: string; monthlyCredits: number }> = {
-  Basic: { plan: 2, planType: "Basic", monthlyCredits: 200000 },
-  Pro: { plan: 3, planType: "Pro", monthlyCredits: 600000 },
-  Premium: { plan: 4, planType: "Premium", monthlyCredits: 1600000 },
-};
+import { BILLING_LOG_EVENT } from "./types.server";
 
 export type GrantPlanFields = {
   plan: number;
@@ -29,31 +16,74 @@ export type GrantPlanFields = {
   trialEndsAt?: Date | null;
 };
 
-export function packCreditsForName(name: string): number | null {
-  return PACK_CREDITS[name] ?? null;
-}
-
-export function planGrantForName(name: string, yearly: boolean) {
-  const hit = PLAN_BY_NAME[name];
-  if (!hit) return null;
+function aliasAfterPurchased(account: {
+  subscriptionCredits: number;
+  purchasedCredits: number;
+  trialCredits: number;
+  usedCredits: number;
+}) {
   return {
-    ...hit,
-    credits: yearly ? hit.monthlyCredits * 12 : hit.monthlyCredits,
+    purchasePoints:
+      account.subscriptionCredits + account.purchasedCredits + account.trialCredits,
+    usedPoints: account.usedCredits,
   };
 }
 
-function accountPlanData(plan: GrantPlanFields) {
+export async function packCreditsForName(name: string): Promise<number | null> {
+  const pack = await findPackPlanByName(name);
+  return pack?.credits ?? null;
+}
+
+export async function planGrantForName(name: string, yearly: boolean) {
+  const plan = await findSubscriptionPlan({
+    shopifyPlanName: name,
+    billingInterval: yearly ? "ANNUAL" : "MONTHLY",
+  });
+  if (!plan) return null;
   return {
-    plan: plan.plan,
-    planType: plan.planType,
-    feeType: plan.feeType,
-    ...(plan.subscriptionGid !== undefined ? { subscriptionGid: plan.subscriptionGid } : {}),
-    ...(plan.currentPeriodEnd !== undefined ? { currentPeriodEnd: plan.currentPeriodEnd } : {}),
-    ...(plan.hasUsedTrial ? { hasUsedTrial: true } : {}),
-    ...(plan.trialEndsAt !== undefined ? { trialEndsAt: plan.trialEndsAt } : {}),
+    plan: name === "Premium" ? 4 : name === "Pro" ? 3 : 2,
+    planType: name,
+    monthlyCredits: plan.credits,
+    credits: plan.credits,
+    planKey: plan.planKey,
   };
 }
 
+export async function applyTokenPackPurchase(params: {
+  shop: string;
+  plan: PlanRecord;
+  shopifyPurchaseId: string;
+  metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  const { shop, plan, shopifyPurchaseId } = params;
+  await ensureAccount(shop);
+  if (await hasBillingLog(shop, BILLING_LOG_EVENT.TOKEN_PACK_PURCHASED, shopifyPurchaseId)) {
+    return false;
+  }
+  const account = await prisma.account.findUniqueOrThrow({ where: { shop } });
+  const purchasedCredits = account.purchasedCredits + plan.credits;
+  await prisma.account.update({
+    where: { shop },
+    data: {
+      purchasedCredits,
+      ...aliasAfterPurchased({
+        ...account,
+        purchasedCredits,
+      }),
+    },
+  });
+  await appendBillingLog({
+    shop,
+    eventType: BILLING_LOG_EVENT.TOKEN_PACK_PURCHASED,
+    planKey: plan.planKey,
+    referenceId: shopifyPurchaseId,
+    creditsDelta: plan.credits,
+    metadata: params.metadata,
+  });
+  return true;
+}
+
+/** 兼容旧 CreditGrant 购包路径；订阅请走 applyActiveSubscription。 */
 export async function grantCreditsOnce(args: {
   shop: string;
   gid: string;
@@ -62,6 +92,39 @@ export async function grantCreditsOnce(args: {
   credits: number;
   plan?: GrantPlanFields;
 }): Promise<boolean> {
+  if (args.kind === "pack") {
+    const pack = await findPackPlanByName(
+      args.plan?.planType || "",
+    );
+    if (!pack && args.credits <= 0) return false;
+    await ensureAccount(args.shop);
+    try {
+      await prisma.creditGrant.create({
+        data: {
+          shop: args.shop,
+          gid: args.gid,
+          periodKey: args.periodKey,
+          kind: args.kind,
+          credits: args.credits,
+        },
+      });
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code;
+      if (code === "P2002") return false;
+      throw err;
+    }
+    const account = await prisma.account.findUniqueOrThrow({ where: { shop: args.shop } });
+    const purchasedCredits = account.purchasedCredits + args.credits;
+    await prisma.account.update({
+      where: { shop: args.shop },
+      data: {
+        purchasedCredits,
+        ...aliasAfterPurchased({ ...account, purchasedCredits }),
+      },
+    });
+    return true;
+  }
+
   if (args.credits <= 0) return false;
   await ensureAccount(args.shop);
   const account = await prisma.account.findUnique({ where: { shop: args.shop } });
@@ -83,18 +146,50 @@ export async function grantCreditsOnce(args: {
       if (args.plan && args.kind === "subscription") {
         await prisma.account.update({
           where: { shop: args.shop },
-          data: accountPlanData(args.plan),
+          data: {
+            plan: args.plan.plan,
+            planType: args.plan.planType,
+            feeType: args.plan.feeType,
+            ...(args.plan.subscriptionGid !== undefined
+              ? { subscriptionGid: args.plan.subscriptionGid }
+              : {}),
+            ...(args.plan.currentPeriodEnd !== undefined
+              ? { currentPeriodEnd: args.plan.currentPeriodEnd }
+              : {}),
+            ...(args.plan.hasUsedTrial ? { hasUsedTrial: true } : {}),
+            ...(args.plan.trialEndsAt !== undefined ? { trialEndsAt: args.plan.trialEndsAt } : {}),
+          },
         });
       }
       return false;
     }
     throw err;
   }
+  const nextSubscription = skipAdd ? account?.subscriptionCredits ?? 0 : args.credits;
+  const purchasedCredits = account?.purchasedCredits ?? 0;
+  const trialCredits = account?.trialCredits ?? 0;
+  const usedCredits = account?.usedCredits ?? 0;
   await prisma.account.update({
     where: { shop: args.shop },
     data: {
-      purchasePoints: { increment: skipAdd ? 0 : args.credits },
-      ...(args.plan ? accountPlanData(args.plan) : {}),
+      subscriptionCredits: nextSubscription,
+      purchasePoints: nextSubscription + purchasedCredits + trialCredits,
+      usedPoints: usedCredits,
+      ...(args.plan
+        ? {
+            plan: args.plan.plan,
+            planType: args.plan.planType,
+            feeType: args.plan.feeType,
+            ...(args.plan.subscriptionGid !== undefined
+              ? { subscriptionGid: args.plan.subscriptionGid }
+              : {}),
+            ...(args.plan.currentPeriodEnd !== undefined
+              ? { currentPeriodEnd: args.plan.currentPeriodEnd }
+              : {}),
+            ...(args.plan.hasUsedTrial ? { hasUsedTrial: true } : {}),
+            ...(args.plan.trialEndsAt !== undefined ? { trialEndsAt: args.plan.trialEndsAt } : {}),
+          }
+        : {}),
     },
   });
   return !skipAdd;
@@ -102,8 +197,17 @@ export async function grantCreditsOnce(args: {
 
 export async function markPlanCancelled(shop: string, feeType: number): Promise<void> {
   await ensureAccount(shop);
+  const account = await prisma.account.findUniqueOrThrow({ where: { shop } });
   await prisma.account.update({
     where: { shop },
-    data: { plan: 1, planType: "Free", feeType, subscriptionGid: null },
+    data: {
+      plan: 1,
+      planType: "Free",
+      feeType,
+      subscriptionGid: null,
+      subscriptionCredits: 0,
+      purchasePoints: account.purchasedCredits + account.trialCredits,
+      usedPoints: account.usedCredits,
+    },
   });
 }
