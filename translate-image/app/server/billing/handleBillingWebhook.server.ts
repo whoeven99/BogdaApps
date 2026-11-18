@@ -10,7 +10,10 @@ import {
   fetchSubscriptionChargeDetail,
 } from "./chargeGuardApply.server";
 import { applyTokenPackPurchase } from "./grants.server";
-import { scheduleChargeGuardStaffFeishu } from "./lifecycleFeishuNotify.server";
+import {
+  scheduleBillingFailureFeishu,
+  scheduleChargeGuardStaffFeishu,
+} from "./lifecycleFeishuNotify.server";
 import {
   catalogIntervalFromShopify,
   findPackPlanByName,
@@ -106,6 +109,13 @@ export async function handleSubscriptionWebhook(params: {
     console.warn(
       `[billing webhook] no subscription plan match shop=${params.shop} name=${sub?.name} interval=${billingInterval}`,
     );
+    scheduleBillingFailureFeishu({
+      shop: params.shop,
+      stage: "subscribe",
+      reason: "plan_not_found",
+      gid,
+      shopifyPlanName: sub?.name,
+    });
     return;
   }
 
@@ -141,28 +151,47 @@ export async function handleSubscriptionWebhook(params: {
       ? new Date(detail.createdAt.getTime() + detail.trialDays * DAY_MS)
       : null;
 
-  const applied = await applyActiveSubscription({
-    shop: params.shop,
-    shopifySubscriptionId: gid,
-    planKey: plan.planKey,
-    shopifyPlanName,
-    billingInterval,
-    creditsPerPeriod: plan.credits,
-    trialEndsAt,
-    period: { currentPeriodStart, currentPeriodEnd },
-    rawPayload: (params.payload ?? undefined) as Record<string, unknown> | undefined,
-    existingSubscription: existingSub,
-  });
-  if (applied.outcome === "activated" || applied.outcome === "renewed") {
-    await notifyStaffIfAllowlisted({
+  try {
+    const applied = await applyActiveSubscription({
       shop: params.shop,
+      shopifySubscriptionId: gid,
+      planKey: plan.planKey,
+      shopifyPlanName,
+      billingInterval,
+      creditsPerPeriod: plan.credits,
+      trialEndsAt,
+      period: { currentPeriodStart, currentPeriodEnd },
+      rawPayload: (params.payload ?? undefined) as Record<string, unknown> | undefined,
+      existingSubscription: existingSub,
+    });
+    if (applied.outcome === "activated" || applied.outcome === "renewed") {
+      await notifyStaffIfAllowlisted({
+        shop: params.shop,
+        gid,
+        reason: guard.reason,
+        shopEmail,
+        test: detail?.test ?? null,
+        amountCents: detail?.amountCents ?? null,
+        currencyCode: detail?.currencyCode ?? null,
+        shopifyPlanName,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      `[billing webhook] apply subscription failed shop=${params.shop} stage=${renewal ? "renewal" : "subscribe"}`,
+      err,
+    );
+    scheduleBillingFailureFeishu({
+      shop: params.shop,
+      stage: renewal ? "renewal" : "subscribe",
+      reason: "exception",
       gid,
-      reason: guard.reason,
-      shopEmail,
-      test: detail?.test ?? null,
+      shopifyPlanName,
       amountCents: detail?.amountCents ?? null,
       currencyCode: detail?.currencyCode ?? null,
-      shopifyPlanName,
+      test: detail?.test ?? null,
+      env: billingGuardEnv(),
+      detail: err,
     });
   }
 }
@@ -180,6 +209,13 @@ export async function handlePurchaseWebhook(params: {
     console.warn(
       `[billing webhook] no pack plan match shop=${params.shop} name=${purchase?.name}`,
     );
+    scheduleBillingFailureFeishu({
+      shop: params.shop,
+      stage: "purchase",
+      reason: "plan_not_found",
+      gid,
+      shopifyPlanName: purchase?.name,
+    });
     return;
   }
 
@@ -201,22 +237,38 @@ export async function handlePurchaseWebhook(params: {
   });
   if (!guard.allow) return;
 
-  const granted = await applyTokenPackPurchase({
-    shop: params.shop,
-    plan,
-    shopifyPurchaseId: gid,
-    amountUsd: resolveAmountUsd(purchaseDetail?.amountCents, plan.priceAmount),
-  });
-  if (granted) {
-    await notifyStaffIfAllowlisted({
+  try {
+    const granted = await applyTokenPackPurchase({
       shop: params.shop,
+      plan,
+      shopifyPurchaseId: gid,
+      amountUsd: resolveAmountUsd(purchaseDetail?.amountCents, plan.priceAmount),
+    });
+    if (granted) {
+      await notifyStaffIfAllowlisted({
+        shop: params.shop,
+        gid,
+        reason: guard.reason,
+        shopEmail,
+        test: purchaseDetail?.test ?? null,
+        amountCents: purchaseDetail?.amountCents ?? null,
+        currencyCode: purchaseDetail?.currencyCode ?? null,
+        shopifyPlanName,
+      });
+    }
+  } catch (err) {
+    console.warn(`[billing webhook] apply purchase failed shop=${params.shop}`, err);
+    scheduleBillingFailureFeishu({
+      shop: params.shop,
+      stage: "purchase",
+      reason: "exception",
       gid,
-      reason: guard.reason,
-      shopEmail,
-      test: purchaseDetail?.test ?? null,
+      shopifyPlanName,
       amountCents: purchaseDetail?.amountCents ?? null,
       currencyCode: purchaseDetail?.currencyCode ?? null,
-      shopifyPlanName,
+      test: purchaseDetail?.test ?? null,
+      env: billingGuardEnv(),
+      detail: err,
     });
   }
 }

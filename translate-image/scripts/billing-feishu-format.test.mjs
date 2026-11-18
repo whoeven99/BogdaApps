@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   emptyShopBillingSnapshot,
+  FAILURE_FEISHU_TTL_SEC,
+  failureFeishuBucket,
+  failureFeishuLogReference,
+  failureFeishuRedisKey,
+  failureFeishuUsesDebounce,
   formatAnnualCreditFeishuMessage,
   formatBillingFailureFeishuMessage,
   formatCancelFeishuMessage,
@@ -14,6 +19,7 @@ import {
   formatSubscribeFeishuMessage,
   formatUninstallFeishuMessage,
   resolveAmountUsd,
+  sanitizeFeishuErrorDetail,
 } from "./lib/billingFeishuFormat.mjs";
 
 const snap = {
@@ -114,6 +120,63 @@ test("入账失败含阶段原因与快照", () => {
   assert.match(text, /\nGID：gid:\/\/shopify\/AppSubscription\/1\n/);
   assert.match(text, /\n订阅：是 · Basic\n/);
   assert.equal(text.includes("图译入账闸拒绝"), false);
+});
+
+test("套餐未匹配 / 对账跳过 / 安装赠分异常文案", () => {
+  assert.match(
+    formatBillingFailureFeishuMessage({
+      snap,
+      stage: "subscribe",
+      reason: "plan_not_found",
+      shopifyPlanName: "Unknown Plan",
+    }),
+    /\n原因：套餐未匹配\n/,
+  );
+  assert.match(
+    formatBillingFailureFeishuMessage({
+      snap,
+      stage: "subscribe",
+      reason: "reconcile_skip",
+      detail: "graphql 500",
+    }),
+    /\n原因：对账跳过\n/,
+  );
+  const installFail = formatBillingFailureFeishuMessage({
+    snap,
+    stage: "install_grant",
+    reason: "exception",
+    detail: "db timeout",
+  });
+  assert.match(installFail, /\n阶段：安装赠分\n/);
+  assert.match(installFail, /\n原因：入账异常\n/);
+  assert.match(installFail, /\n详情：db timeout\n/);
+});
+
+test("失败飞书 6h 去重 key / bucket", () => {
+  assert.equal(
+    failureFeishuRedisKey(" demo.myshopify.com ", "subscribe", "exception"),
+    "img:feishu:fail:demo.myshopify.com:subscribe:exception",
+  );
+  assert.equal(failureFeishuUsesDebounce("charge_guard"), false);
+  assert.equal(failureFeishuUsesDebounce("exception"), true);
+  assert.equal(failureFeishuUsesDebounce("reconcile_skip"), true);
+  const windowMs = FAILURE_FEISHU_TTL_SEC * 1000;
+  assert.equal(failureFeishuBucket(0), 0);
+  assert.equal(failureFeishuBucket(windowMs - 1), 0);
+  assert.equal(failureFeishuBucket(windowMs), 1);
+  assert.equal(
+    failureFeishuLogReference("annual_credit", "exception", 3),
+    "annual_credit:exception:3",
+  );
+});
+
+test("失败详情截断并去掉 url / token", () => {
+  assert.equal(
+    sanitizeFeishuErrorDetail("boom https://hooks.example/abc token=secret-value rest"),
+    "boom [url] token=[redacted] rest",
+  );
+  assert.equal(sanitizeFeishuErrorDetail("   "), null);
+  assert.equal(sanitizeFeishuErrorDetail("x".repeat(301)).length, 300);
 });
 
 test("员工店放行不是失败标题", () => {

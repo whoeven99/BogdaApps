@@ -1,5 +1,11 @@
+import { getImageRedisClient } from "~/server/redis.server";
 import { sendFeishuTextMessage } from "~/server/feishu/sendFeishuTextMessage.server";
 import {
+  FAILURE_FEISHU_TTL_SEC,
+  failureFeishuBucket,
+  failureFeishuLogReference,
+  failureFeishuRedisKey,
+  failureFeishuUsesDebounce,
   formatAnnualCreditFeishuMessage,
   formatBillingFailureFeishuMessage,
   formatCancelFeishuMessage,
@@ -10,13 +16,19 @@ import {
   formatRenewalFeishuMessage,
   formatSubscribeFeishuMessage,
   formatUninstallFeishuMessage,
+  sanitizeFeishuErrorDetail,
   type BillingFeishuFailReason,
   type BillingFeishuStage,
   type ChargeGuardFeishuParams,
   type ShopBillingFeishuSnapshot,
 } from "./billingFeishuFormat";
-import { claimBillingLogFlag } from "./billingLog.server";
+import {
+  appendBillingLog,
+  claimBillingLogFlag,
+  hasBillingLog,
+} from "./billingLog.server";
 import { snapshotShopBilling } from "./snapshotShopBilling.server";
+import { BILLING_LOG_EVENT } from "./types.server";
 
 const LOG_INSTALL = "[lifecycleFeishu:install]";
 const LOG_SUBSCRIBE = "[lifecycleFeishu:subscribe]";
@@ -43,6 +55,58 @@ function fire(log: string, shop: string, work: () => Promise<void>): void {
   void work().catch((err) => {
     console.warn(`${log} shop=`, shop, err);
   });
+}
+
+async function claimFailureFeishuSlot(params: {
+  shop: string;
+  stage: BillingFeishuStage;
+  reason: BillingFeishuFailReason;
+}): Promise<boolean> {
+  if (!failureFeishuUsesDebounce(params.reason)) return true;
+
+  const redis = getImageRedisClient();
+  if (redis) {
+    try {
+      const ok = await redis.set(
+        failureFeishuRedisKey(params.shop, params.stage, params.reason),
+        "1",
+        "EX",
+        FAILURE_FEISHU_TTL_SEC,
+        "NX",
+      );
+      return ok === "OK";
+    } catch (err) {
+      console.warn(`${LOG_FAILURE} redis claim failed shop=${params.shop}`, err);
+    }
+  }
+
+  const referenceId = failureFeishuLogReference(
+    params.stage,
+    params.reason,
+    failureFeishuBucket(),
+  );
+  try {
+    if (
+      await hasBillingLog(
+        params.shop,
+        BILLING_LOG_EVENT.FEISHU_FAILURE_NOTIFIED,
+        referenceId,
+      )
+    ) {
+      return false;
+    }
+    await appendBillingLog({
+      shop: params.shop,
+      eventType: BILLING_LOG_EVENT.FEISHU_FAILURE_NOTIFIED,
+      referenceId,
+      creditsDelta: 0,
+      metadata: { stage: params.stage, reason: params.reason },
+    });
+    return true;
+  } catch (err) {
+    console.warn(`${LOG_FAILURE} log claim failed shop=${params.shop}`, err);
+    return true;
+  }
 }
 
 export function scheduleInstallFeishu(shop: string): void {
@@ -144,15 +208,28 @@ export function scheduleBillingFailureFeishu(params: {
   currencyCode?: string | null;
   test?: boolean | null;
   env?: "test" | "prod" | null;
-  detail?: string | null;
+  detail?: unknown;
   snap?: ShopBillingFeishuSnapshot;
 }): void {
   fire(LOG_FAILURE, params.shop, async () => {
+    if (
+      !(await claimFailureFeishuSlot({
+        shop: params.shop,
+        stage: params.stage,
+        reason: params.reason,
+      }))
+    ) {
+      return;
+    }
     const snap = params.snap ?? (await snapshotShopBilling(params.shop));
     await sendLifecycle(
       LOG_FAILURE,
       params.shop,
-      formatBillingFailureFeishuMessage({ ...params, snap }),
+      formatBillingFailureFeishuMessage({
+        ...params,
+        detail: sanitizeFeishuErrorDetail(params.detail),
+        snap,
+      }),
     );
   });
 }

@@ -26,6 +26,50 @@ export type BillingFeishuFailReason =
   | "reconcile_skip"
   | "exception";
 
+export const FAILURE_FEISHU_TTL_SEC = 21_600;
+
+export function failureFeishuUsesDebounce(
+  reason: BillingFeishuFailReason,
+): boolean {
+  return reason !== "charge_guard";
+}
+
+export function failureFeishuRedisKey(
+  shop: string,
+  stage: BillingFeishuStage,
+  reason: BillingFeishuFailReason,
+): string {
+  return `img:feishu:fail:${shop.trim()}:${stage}:${reason}`;
+}
+
+export function failureFeishuBucket(nowMs: number = Date.now()): number {
+  return Math.floor(Math.floor(nowMs / 1000) / FAILURE_FEISHU_TTL_SEC);
+}
+
+export function failureFeishuLogReference(
+  stage: BillingFeishuStage,
+  reason: BillingFeishuFailReason,
+  bucket: number,
+): string {
+  return `${stage}:${reason}:${bucket}`;
+}
+
+export function sanitizeFeishuErrorDetail(err: unknown): string | null {
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : err == null
+          ? ""
+          : String(err);
+  const cleaned = raw
+    .replace(/https?:\/\/[^\s]+/gi, "[url]")
+    .replace(/\b(bearer|token|secret|key)[=:\s]+\S+/gi, "$1=[redacted]");
+  const trimmed = cleaned.trim().slice(0, 300);
+  return trimmed || null;
+}
+
 export type ChargeGuardFeishuParams = {
   action: "grant" | "deny";
   env: "test" | "prod";
@@ -210,13 +254,14 @@ export function formatBillingFailureFeishuMessage(params: {
   currencyCode?: string | null;
   test?: boolean | null;
   env?: "test" | "prod" | null;
-  detail?: string | null;
+  detail?: unknown;
 }): string {
   const reasonLabel =
     params.reason === "charge_guard"
       ? `入账闸拒绝（${params.chargeGuardReason || "unknown"}）`
       : REASON_LABEL[params.reason] || params.reason;
   const snap = params.snap || emptyShopBillingSnapshot(params.shop || "");
+  const detail = sanitizeFeishuErrorDetail(params.detail);
   const extras = [
     `⚠️ 图译入账失败：${snap.shop}`,
     `阶段：${STAGE_LABEL[params.stage] || params.stage}`,
@@ -228,7 +273,7 @@ export function formatBillingFailureFeishuMessage(params: {
       : null,
     params.test == null ? null : `test：${params.test ? "true" : "false"}`,
     params.env ? `环境：${params.env}` : null,
-    params.detail ? `详情：${String(params.detail).slice(0, 300)}` : null,
+    detail ? `详情：${detail}` : null,
     ...formatShopBillingFeishuLines(snap),
   ];
   return extras.filter((line): line is string => Boolean(line)).join("\n");

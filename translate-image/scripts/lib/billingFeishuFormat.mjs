@@ -23,6 +23,40 @@ export function resolveAmountUsd(amountCents, priceAmount) {
   return Number.isFinite(n) ? n : 0;
 }
 
+export const FAILURE_FEISHU_TTL_SEC = 21_600;
+
+export function failureFeishuUsesDebounce(reason) {
+  return reason !== "charge_guard";
+}
+
+export function failureFeishuRedisKey(shop, stage, reason) {
+  return `img:feishu:fail:${String(shop ?? "").trim()}:${stage}:${reason}`;
+}
+
+export function failureFeishuBucket(nowMs = Date.now()) {
+  return Math.floor(Math.floor(nowMs / 1000) / FAILURE_FEISHU_TTL_SEC);
+}
+
+export function failureFeishuLogReference(stage, reason, bucket) {
+  return `${stage}:${reason}:${bucket}`;
+}
+
+export function sanitizeFeishuErrorDetail(err) {
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : err == null
+          ? ""
+          : String(err);
+  const cleaned = raw
+    .replace(/https?:\/\/[^\s]+/gi, "[url]")
+    .replace(/\b(bearer|token|secret|key)[=:\s]+\S+/gi, "$1=[redacted]");
+  const trimmed = cleaned.trim().slice(0, 300);
+  return trimmed || null;
+}
+
 function formatNumber(n) {
   return n.toLocaleString("en-US");
 }
@@ -140,6 +174,7 @@ export function formatBillingFailureFeishuMessage(params) {
       ? `入账闸拒绝（${params.chargeGuardReason || "unknown"}）`
       : REASON_LABEL[params.reason] || params.reason;
   const snap = params.snap || emptyShopBillingSnapshot(params.shop || "");
+  const detail = sanitizeFeishuErrorDetail(params.detail);
   const extras = [
     `⚠️ 图译入账失败：${snap.shop}`,
     `阶段：${STAGE_LABEL[params.stage] || params.stage}`,
@@ -151,7 +186,7 @@ export function formatBillingFailureFeishuMessage(params) {
       : null,
     params.test == null ? null : `test：${params.test ? "true" : "false"}`,
     params.env ? `环境：${params.env}` : null,
-    params.detail ? `详情：${String(params.detail).slice(0, 300)}` : null,
+    detail ? `详情：${detail}` : null,
     ...formatShopBillingFeishuLines(snap),
   ];
   return extras.filter(Boolean).join("\n");

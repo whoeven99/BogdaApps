@@ -12,8 +12,15 @@ import {
   catalogIntervalFromShopify,
   findSubscriptionPlan,
 } from "./plans/planCatalog.server";
-import { scheduleAnnualCreditFeishu } from "./lifecycleFeishuNotify.server";
-import { applyActiveSubscription, cancelSubscription } from "./subscription.server";
+import {
+  scheduleAnnualCreditFeishu,
+  scheduleBillingFailureFeishu,
+} from "./lifecycleFeishuNotify.server";
+import {
+  applyActiveSubscription,
+  cancelSubscription,
+  isSubscriptionRenewal,
+} from "./subscription.server";
 import { BILLING_INTERVAL, BILLING_LOG_EVENT } from "./types.server";
 
 const RECONCILE_QUERY = `#graphql
@@ -197,7 +204,19 @@ export async function reconcileShopBilling(
         shopifyPlanName: name,
         billingInterval,
       });
-      if (!plan) continue;
+      if (!plan) {
+        console.warn(
+          `[billing] reconcile no subscription plan match shop=${shop} name=${name} interval=${billingInterval}`,
+        );
+        scheduleBillingFailureFeishu({
+          shop,
+          stage: "subscribe",
+          reason: "plan_not_found",
+          gid,
+          shopifyPlanName: name,
+        });
+        continue;
+      }
       const currentPeriodEnd = node.currentPeriodEnd
         ? new Date(node.currentPeriodEnd)
         : null;
@@ -208,20 +227,58 @@ export async function reconcileShopBilling(
       const existingSubscription = await prisma.appSubscription.findUnique({
         where: { shop },
       });
-      await applyActiveSubscription({
-        shop,
-        shopifySubscriptionId: gid,
-        planKey: plan.planKey,
-        shopifyPlanName: plan.shopifyPlanName || name,
-        billingInterval,
-        creditsPerPeriod: plan.credits,
-        trialEndsAt: null,
-        period: { currentPeriodStart, currentPeriodEnd },
-        existingSubscription,
-      });
-      await maybeGrantAnnualCycle(shop);
+      const renewal =
+        Boolean(existingSubscription) &&
+        existingSubscription?.shopifySubscriptionId === gid &&
+        isSubscriptionRenewal(existingSubscription, currentPeriodEnd);
+      try {
+        await applyActiveSubscription({
+          shop,
+          shopifySubscriptionId: gid,
+          planKey: plan.planKey,
+          shopifyPlanName: plan.shopifyPlanName || name,
+          billingInterval,
+          creditsPerPeriod: plan.credits,
+          trialEndsAt: null,
+          period: { currentPeriodStart, currentPeriodEnd },
+          existingSubscription,
+        });
+      } catch (err) {
+        console.warn(
+          `[billing] reconcile apply failed shop=${shop} stage=${renewal ? "renewal" : "subscribe"}`,
+          err,
+        );
+        scheduleBillingFailureFeishu({
+          shop,
+          stage: renewal ? "renewal" : "subscribe",
+          reason: "exception",
+          gid,
+          shopifyPlanName: name,
+          detail: err,
+        });
+        continue;
+      }
+      try {
+        await maybeGrantAnnualCycle(shop);
+      } catch (err) {
+        console.warn(`[billing] reconcile annual credit failed shop=${shop}`, err);
+        scheduleBillingFailureFeishu({
+          shop,
+          stage: "annual_credit",
+          reason: "exception",
+          gid,
+          shopifyPlanName: name,
+          detail: err,
+        });
+      }
     }
   } catch (err) {
     console.warn(`[billing] reconcile skipped shop=${shop}`, err);
+    scheduleBillingFailureFeishu({
+      shop,
+      stage: "subscribe",
+      reason: "reconcile_skip",
+      detail: err,
+    });
   }
 }

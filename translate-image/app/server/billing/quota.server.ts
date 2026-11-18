@@ -12,7 +12,10 @@ import {
   expireInstallTrialCreditsIfDue,
   grantInstallCreditsIfEligible,
 } from "./grant/grantInstallCredits.server";
-import { scheduleInstallFeishu } from "./lifecycleFeishuNotify.server";
+import {
+  scheduleBillingFailureFeishu,
+  scheduleInstallFeishu,
+} from "./lifecycleFeishuNotify.server";
 
 export type AccountQuota = {
   shop: string;
@@ -55,6 +58,12 @@ export async function ensureAccount(shop: string) {
       await grantInstallCreditsIfEligible(shop);
     } catch (err) {
       console.warn(`[billing] install grant failed shop=${shop}`, err);
+      scheduleBillingFailureFeishu({
+        shop,
+        stage: "install_grant",
+        reason: "exception",
+        detail: err,
+      });
     }
     scheduleInstallFeishu(shop);
   }
