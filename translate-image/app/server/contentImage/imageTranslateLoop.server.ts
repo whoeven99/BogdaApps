@@ -121,12 +121,12 @@ async function processItem(
     const translated = await translateWithScopeRetry(job, item, graphql);
     return { outcome: { status: "DONE", imageAfterUrl: translated.url, credits } };
   } catch (err) {
+    console.error(
+      `${LOG} item failed job=${job.id} shop=${job.shop} lang=${job.targetLanguage} key=${item.urlKey} ${formatImageTranslateErrorLog(err)}`,
+    );
     if (err instanceof Error && err.message === IMAGE_TRANSLATE_MSG_SAVE_FAILED) {
       return { outcome: { status: "FAILED", error: IMAGE_TRANSLATE_MSG_SAVE_FAILED } };
     }
-    console.error(
-      `${LOG} item failed job=${job.id} key=${item.urlKey} ${formatImageTranslateErrorLog(err)}`,
-    );
     return errorToStep(err);
   }
 }
@@ -179,7 +179,9 @@ export function startImageTranslateLoop(): void {
   if (globalThis.__imgTranslateLoopStarted) return;
   globalThis.__imgTranslateLoopStarted = true;
   const tick = () => {
-    void runImageTranslateTick().catch((err) => console.error(`${LOG} tick`, err));
+    void runImageTranslateTick().catch((err) =>
+      console.error(`${LOG} tick ${formatImageTranslateErrorLog(err)}`),
+    );
   };
   setTimeout(tick, FIRST_DELAY_MS);
   setInterval(tick, pollMs());

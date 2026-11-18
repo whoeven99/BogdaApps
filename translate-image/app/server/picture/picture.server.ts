@@ -5,6 +5,7 @@ import {
   deleteShopifyFiles,
   imageTranslateErrorCode,
   pictureUrlKey,
+  summarizeError,
   translatedImageFilename,
   uploadImageToShopifyFiles,
   type ShopifyFilesGraphql,
@@ -258,7 +259,7 @@ export async function persistImageAfterFileId(input: {
     await invalidateStorefrontCache("picture", input.shop);
     return ok(toPayload(row));
   } catch (err) {
-    console.error(`[picture] persist file id failed shop=${input.shop}`, err);
+    console.error(`[picture] persist file id failed shop=${input.shop} ${summarizeError(err)}`);
     return fail(null, "SAVE_FAILED");
   }
 }
@@ -343,7 +344,7 @@ export async function upsertUserPicture(
     await invalidateStorefrontCache("picture", input.shop);
     return ok(toPayload(row));
   } catch (err) {
-    console.error(`[picture] upsert failed shop=${input.shop}`, err);
+    console.error(`[picture] upsert failed shop=${input.shop} ${summarizeError(err)}`);
     return fail(null, "SAVE_FAILED");
   }
 }
@@ -358,7 +359,7 @@ async function deleteOwnFileQuietly(
     await deleteShopifyFiles(graphql, [fileId]);
     return true;
   } catch (err) {
-    console.warn(`[picture] fileDelete failed shop=${shop}:`, err);
+    console.warn(`[picture] fileDelete failed shop=${shop} ${summarizeError(err)}`);
     return false;
   }
 }
@@ -391,7 +392,7 @@ export async function clearUserPicture(
     await invalidateStorefrontCache("picture", key.shop);
     return ok(toPayload(updated));
   } catch (err) {
-    console.error(`[picture] delete failed shop=${key.shop}:`, err);
+    console.error(`[picture] delete failed shop=${key.shop} ${summarizeError(err)}`);
     return fail(null);
   }
 }
@@ -429,7 +430,7 @@ export async function uploadAndUpsertUserPicture(
       },
     });
   } catch (err) {
-    console.error(`[picture] uploadAndUpsert failed shop=${args.shop}:`, err);
+    console.error(`[picture] uploadAndUpsert failed shop=${args.shop} ${summarizeError(err)}`);
     return fail(
       null,
       imageTranslateErrorCode(err) === "SHOPIFY_SCOPE_MISSING"

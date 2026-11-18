@@ -1,6 +1,6 @@
 import { createPrivateKey, createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { ImageTranslateError } from "./imageTranslateError";
+import { ImageTranslateError, summarizeError } from "./imageTranslateError";
 import type { ImageTranslateModelId } from "./imageTranslateModels";
 
 /**
@@ -180,9 +180,14 @@ async function getAccessToken(account: ServiceAccount, fetchImpl: typeof fetch):
   const body = (await res.json().catch(() => ({}))) as {
     access_token?: string;
     expires_in?: number;
+    error?: unknown;
+    error_description?: unknown;
   };
   if (!res.ok || !body.access_token) {
-    throw new ImageTranslateError("GEMINI_NOT_CONFIGURED", `token HTTP ${res.status}`);
+    throw new ImageTranslateError(
+      "GEMINI_NOT_CONFIGURED",
+      `token HTTP ${res.status} ${String(body.error_description || body.error || "")}`.trim(),
+    );
   }
   cachedToken = {
     email: account.client_email,
@@ -272,7 +277,7 @@ async function postGenerateContent(
       signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new ImageTranslateError("GEMINI_FAILED", err instanceof Error ? err.message : String(err));
+    throw new ImageTranslateError("GEMINI_FAILED", summarizeError(err), { cause: err });
   }
   return { res, json: await res.json().catch(() => ({})) };
 }

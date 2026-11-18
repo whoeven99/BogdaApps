@@ -5,7 +5,7 @@
 import { promises as dns } from "node:dns";
 import { closestAspectRatio, readImageDimensions } from "./imageDimensions";
 import { geminiTranslateImage } from "./geminiImage";
-import { ImageTranslateError } from "./imageTranslateError";
+import { ImageTranslateError, summarizeError } from "./imageTranslateError";
 import { resolveImageTranslateModel, type ImageTranslateModelId } from "./imageTranslateModels";
 import {
   externalImageUrlKey,
@@ -85,7 +85,7 @@ export async function fetchSourceImage(
       signal: AbortSignal.timeout(SOURCE_FETCH_TIMEOUT_MS),
     });
   } catch (err) {
-    throw new ImageTranslateError("IMAGE_FETCH_FAILED", err instanceof Error ? err.message : String(err));
+    throw new ImageTranslateError("IMAGE_FETCH_FAILED", summarizeError(err), { cause: err });
   }
   if (!res.ok) throw new ImageTranslateError("IMAGE_FETCH_FAILED", `HTTP ${res.status}`);
   const mimeType = (res.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();

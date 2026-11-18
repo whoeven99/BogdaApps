@@ -133,5 +133,5 @@ export function imageTranslateFailStorage(err: unknown): string {
   const { code, detail } = describeImageTranslateError(err);
   const token = classifyImageTranslateUserMessageToken(code, detail);
   if (!detail) return token;
-  return `${token}: ${detail}`.slice(0, 500);
+  return `${token}: ${detail}`.slice(0, 800);
 }

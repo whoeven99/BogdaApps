@@ -1,4 +1,4 @@
-import { ImageTranslateError } from "./imageTranslateError";
+import { ImageTranslateError, summarizeError } from "./imageTranslateError";
 
 /** 返回 GraphQL `data`；顶层 errors 由调用方 adapter 抛错（App `admin.graphql` / Worker `shopifyGraphql`）。 */
 export type ShopifyFilesGraphql = (
@@ -74,12 +74,9 @@ async function callGraphql(
     return await graphql(query, variables);
   } catch (err) {
     if (isShopifyScopeMissingError(err)) {
-      throw new ImageTranslateError("SHOPIFY_SCOPE_MISSING");
+      throw new ImageTranslateError("SHOPIFY_SCOPE_MISSING", summarizeError(err), { cause: err });
     }
-    throw new ImageTranslateError(
-      "SHOPIFY_UPLOAD_FAILED",
-      err instanceof Error ? err.message : String(err),
-    );
+    throw new ImageTranslateError("SHOPIFY_UPLOAD_FAILED", summarizeError(err), { cause: err });
   }
 }
 
@@ -116,9 +113,22 @@ async function postStagedFile(
   const form = new FormData();
   for (const p of target.parameters ?? []) form.append(p.name, p.value);
   form.append("file", new Blob([new Uint8Array(file.bytes)], { type: file.mimeType }), file.filename);
-  const res = await fetchImpl(target.url, { method: "POST", body: form });
+  let res: Response;
+  try {
+    res = await fetchImpl(target.url, { method: "POST", body: form });
+  } catch (err) {
+    throw new ImageTranslateError(
+      "SHOPIFY_UPLOAD_FAILED",
+      `staged POST ${summarizeError(err)}`,
+      { cause: err },
+    );
+  }
   if (!res.ok) {
-    throw new ImageTranslateError("SHOPIFY_UPLOAD_FAILED", `staged POST HTTP ${res.status}`);
+    const body = await res.text().catch(() => "");
+    throw new ImageTranslateError(
+      "SHOPIFY_UPLOAD_FAILED",
+      `staged POST HTTP ${res.status} ${body.slice(0, 200)}`.trim(),
+    );
   }
 }
 
