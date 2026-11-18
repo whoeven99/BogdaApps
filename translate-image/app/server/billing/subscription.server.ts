@@ -5,6 +5,13 @@ import { getAnnualCreditCycleIndex } from "./annualCreditCycle";
 import { appendBillingLog } from "./billingLog.server";
 import { JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./billingState";
 import {
+  grantBasicFirstPayBonusIfEligible,
+  revokeBasicFirstPayBonusIfLeftBasic,
+  revokeBasicFirstPayBonusNow,
+} from "./grant/grantBasicFirstPayBonus.server";
+import { expireInstallTrialCreditsIfDue } from "./grant/grantInstallCredits.server";
+import { scheduleCancelFeishu, scheduleSubscribeFeishu } from "./lifecycleFeishuNotify.server";
+import {
   feeTypeForCatalogInterval,
   planNumberForName,
 } from "./plans/planCatalog.server";
@@ -34,6 +41,31 @@ export type ApplyActiveSubscriptionResult = {
 };
 
 const RENEWAL_SKEW_MS = 2000;
+
+function isBasicPlanName(shopifyPlanName: string, planKey: string): boolean {
+  return (
+    shopifyPlanName.trim().toLowerCase() === "basic" ||
+    planKey.trim().toLowerCase().startsWith("basic")
+  );
+}
+
+async function maybeGrantBasicFirstPayBonus(
+  shop: string,
+  planKey: string,
+  trialEndsAt: Date | null | undefined,
+): Promise<void> {
+  await revokeBasicFirstPayBonusIfLeftBasic(shop, planKey);
+  const bonus = await grantBasicFirstPayBonusIfEligible({
+    shop,
+    planKey,
+    trialEndsAt: trialEndsAt ?? null,
+  });
+  if (bonus.granted) {
+    console.info(
+      `[billing] basic first-pay bonus granted shop=${shop} planKey=${planKey}`,
+    );
+  }
+}
 
 export function isSubscriptionRenewal(
   previous: AppSubscription | null,
@@ -69,6 +101,11 @@ export async function archivePeriodAndRenew(params: {
   };
 }): Promise<void> {
   const { shop, subscription, next } = params;
+  await expireInstallTrialCreditsIfDue(
+    shop,
+    new Date(),
+    isBasicPlanName(next.shopifyPlanName, next.planKey) ? undefined : { forceLots: ["bonus"] },
+  );
   const account = await prisma.account.findUniqueOrThrow({ where: { shop } });
   const settled = settlePoolsAtRenewal(account);
   const usedCredits = 0;
@@ -125,6 +162,7 @@ export async function archivePeriodAndRenew(params: {
       },
     }),
   ]);
+  await maybeGrantBasicFirstPayBonus(shop, next.planKey, subscription.trialEndsAt);
 }
 
 export async function applyActiveSubscription(
@@ -246,9 +284,24 @@ export async function applyActiveSubscription(
         creditCycleIndex,
       },
     });
+    if (!skipAdd) {
+      await maybeGrantBasicFirstPayBonus(shop, planKey, trialEndsAt);
+    }
+    const activatedCount = await prisma.billingLog.count({
+      where: { shop, eventType: BILLING_LOG_EVENT.SUBSCRIPTION_ACTIVATED },
+    });
+    scheduleSubscribeFeishu({
+      shop,
+      planKey,
+      inTrial: Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now()),
+      first: activatedCount <= 1,
+    });
     return { outcome: "activated" };
   }
 
+  if (!skipAdd) {
+    await maybeGrantBasicFirstPayBonus(shop, planKey, trialEndsAt);
+  }
   return { outcome: "updated" };
 }
 
@@ -274,6 +327,8 @@ export async function cancelSubscription(params: {
     });
     return { cancelled: false };
   }
+
+  await revokeBasicFirstPayBonusNow(params.shop);
 
   await prisma.$transaction(async (tx) => {
     const account = await tx.account.findUnique({ where: { shop: params.shop } });
@@ -323,5 +378,6 @@ export async function cancelSubscription(params: {
     await tx.appSubscription.delete({ where: { shop: params.shop } });
   });
 
+  scheduleCancelFeishu(params.shop, params.status);
   return { cancelled: true };
 }

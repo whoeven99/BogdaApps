@@ -1,6 +1,7 @@
 import prisma from "~/db.server";
 import { getImageRedisClient } from "~/server/redis.server";
 import { getShopAdmin } from "~/server/shop/shopAdminToken.server";
+import { expireInstallTrialCreditsIfDue } from "./grant/grantInstallCredits.server";
 import { APP_SUBSCRIPTION_STATUS } from "./types.server";
 import { reconcileShopBilling } from "./reconcile.server";
 
@@ -52,6 +53,22 @@ export async function runBillingReconcileTick(): Promise<void> {
     locked = await tryAcquireLock();
     if (!locked) return;
     const shops = await listCandidateShops();
+    const due = await prisma.account.findMany({
+      where: {
+        OR: [
+          { trialInstallExpiresAt: { lte: new Date() }, trialInstallCredits: { gt: 0 } },
+          { trialBonusExpiresAt: { lte: new Date() }, trialBonusCredits: { gt: 0 } },
+        ],
+      },
+      select: { shop: true },
+    });
+    for (const row of due) {
+      try {
+        await expireInstallTrialCreditsIfDue(row.shop);
+      } catch (err) {
+        console.warn(`[billing] trial expire failed shop=${row.shop}`, err);
+      }
+    }
     for (const shop of shops) {
       try {
         const admin = getShopAdmin({ shop, path: "billing.reconcile" });

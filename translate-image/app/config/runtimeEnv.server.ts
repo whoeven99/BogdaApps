@@ -197,6 +197,14 @@ function logCriticalEnvStatus(): void {
     ["RENDER_KV", process.env.RENDER_KV?.trim() ? "(已设置)" : ""],
   ]);
 
+  logEnvCheck("Feishu", Boolean(process.env.FEISHU_WEBHOOK_URL_SUPPORT?.trim()), [
+    ["FEISHU_ENV", process.env.FEISHU_ENV],
+    [
+      "FEISHU_WEBHOOK_URL_SUPPORT",
+      process.env.FEISHU_WEBHOOK_URL_SUPPORT?.trim() ? "(已设置)" : "",
+    ],
+  ]);
+
   logEnvCheck(
     "Google",
     Boolean(

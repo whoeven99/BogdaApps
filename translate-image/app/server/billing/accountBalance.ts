@@ -109,6 +109,176 @@ export function periodCreditsFromCatalog(
   return hit ? Math.max(0, Math.floor(Number(hit.credits) || 0)) : 0;
 }
 
+export const TRIAL_LOT_REFERENCE_ID = {
+  install: "install_credits",
+  bonus: "basic_first_pay_bonus",
+} as const;
+
+export const TRIAL_LOT_GRANT_KIND = {
+  install: "install_credits_expired",
+  bonus: "basic_first_pay_bonus_expired",
+  bonusRevoked: "basic_first_pay_bonus_revoked",
+} as const;
+
+export type TrialLotKind = "install" | "bonus";
+
+export type InstallTrialExpiryFields = {
+  usedCredits: number;
+  trialInstallCredits: number;
+  trialInstallExpiresAt: Date | string | null;
+  trialBonusCredits: number;
+  trialBonusExpiresAt: Date | string | null;
+};
+
+export type TrialLotSettlement = {
+  kind: TrialLotKind;
+  leftover: number;
+  consumed: number;
+  referenceId: (typeof TRIAL_LOT_REFERENCE_ID)[TrialLotKind];
+  grantKind: (typeof TRIAL_LOT_GRANT_KIND)[keyof typeof TRIAL_LOT_GRANT_KIND];
+  expiresAt: string | null;
+};
+
+export type SettleExpiredTrialOptions = {
+  forceLots?: readonly TrialLotKind[];
+};
+
+export type InstallTrialExpirySettlement = {
+  trialInstallCredits: number;
+  trialInstallExpiresAt: Date | string | null;
+  trialBonusCredits: number;
+  trialBonusExpiresAt: Date | string | null;
+  trialCredits: number;
+  usedCredits: number;
+  settled: boolean;
+  lots: TrialLotSettlement[];
+};
+
+function isDueTrialLot(
+  credits: number,
+  expiresAt: Date | string | null,
+  now: Date,
+): boolean {
+  if (credits <= 0 || !expiresAt) return false;
+  return now.getTime() >= new Date(expiresAt).getTime();
+}
+
+function shouldExpireTrialLot(
+  kind: TrialLotKind,
+  credits: number,
+  expiresAt: Date | string | null,
+  now: Date,
+  forceLots?: readonly TrialLotKind[],
+): boolean {
+  if (credits <= 0) return false;
+  if (forceLots?.includes(kind)) return true;
+  return isDueTrialLot(credits, expiresAt, now);
+}
+
+export function earliestTrialLotExpiresAt(
+  installCredits: number,
+  installExpiresAt: Date | string | null,
+  bonusCredits: number,
+  bonusExpiresAt: Date | string | null,
+): Date | null {
+  const dates: Date[] = [];
+  if (installCredits > 0 && installExpiresAt) dates.push(new Date(installExpiresAt));
+  if (bonusCredits > 0 && bonusExpiresAt) dates.push(new Date(bonusExpiresAt));
+  if (dates.length === 0) return null;
+  return dates.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
+}
+
+export function settleExpiredInstallTrialCredits(
+  account: InstallTrialExpiryFields,
+  now: Date = new Date(),
+  options?: SettleExpiredTrialOptions,
+): InstallTrialExpirySettlement {
+  const install = Math.max(0, account.trialInstallCredits | 0);
+  const bonus = Math.max(0, account.trialBonusCredits | 0);
+  const used = Math.max(0, account.usedCredits | 0);
+  const forceLots = options?.forceLots;
+  const expireInstall = shouldExpireTrialLot(
+    "install",
+    install,
+    account.trialInstallExpiresAt,
+    now,
+    forceLots,
+  );
+  const expireBonus = shouldExpireTrialLot(
+    "bonus",
+    bonus,
+    account.trialBonusExpiresAt,
+    now,
+    forceLots,
+  );
+  if (!expireInstall && !expireBonus) {
+    return {
+      trialInstallCredits: install,
+      trialInstallExpiresAt: account.trialInstallExpiresAt ?? null,
+      trialBonusCredits: bonus,
+      trialBonusExpiresAt: account.trialBonusExpiresAt ?? null,
+      trialCredits: install + bonus,
+      usedCredits: used,
+      settled: false,
+      lots: [],
+    };
+  }
+
+  const usedTrial = Math.min(used, install + bonus);
+  const attrInstall = Math.min(usedTrial, install);
+  const attrBonus = usedTrial - attrInstall;
+  const lots: TrialLotSettlement[] = [];
+  let nextInstall = install;
+  let nextInstallExp: Date | string | null = account.trialInstallExpiresAt ?? null;
+  let nextBonus = bonus;
+  let nextBonusExp: Date | string | null = account.trialBonusExpiresAt ?? null;
+  let nextUsed = used;
+
+  if (expireInstall) {
+    lots.push({
+      kind: "install",
+      consumed: attrInstall,
+      leftover: install - attrInstall,
+      referenceId: TRIAL_LOT_REFERENCE_ID.install,
+      grantKind: TRIAL_LOT_GRANT_KIND.install,
+      expiresAt: account.trialInstallExpiresAt
+        ? new Date(account.trialInstallExpiresAt).toISOString()
+        : null,
+    });
+    nextUsed -= attrInstall;
+    nextInstall = 0;
+    nextInstallExp = null;
+  }
+  if (expireBonus) {
+    lots.push({
+      kind: "bonus",
+      consumed: attrBonus,
+      leftover: bonus - attrBonus,
+      referenceId: TRIAL_LOT_REFERENCE_ID.bonus,
+      grantKind: forceLots?.includes("bonus")
+        ? TRIAL_LOT_GRANT_KIND.bonusRevoked
+        : TRIAL_LOT_GRANT_KIND.bonus,
+      expiresAt: account.trialBonusExpiresAt
+        ? new Date(account.trialBonusExpiresAt).toISOString()
+        : null,
+    });
+    nextUsed -= attrBonus;
+    nextBonus = 0;
+    nextBonusExp = null;
+  }
+
+  return {
+    trialInstallCredits: nextInstall,
+    trialInstallExpiresAt: nextInstallExp,
+    trialBonusCredits: nextBonus,
+    trialBonusExpiresAt: nextBonusExp,
+    trialCredits: nextInstall + nextBonus,
+    usedCredits: nextUsed,
+    settled: true,
+    lots,
+  };
+}
+
 export function splitLegacyRemaining(args: {
   remaining: number;
   plan: number;

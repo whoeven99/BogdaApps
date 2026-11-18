@@ -1,8 +1,9 @@
 import { postShopGraphql } from "~/server/shop/shopAdminToken.server";
-import { appendBillingLog } from "./billingLog.server";
+import { appendBillingLog, hasBillingLog } from "./billingLog.server";
 import { decideChargeGrant, dollarsToCents, type ChargeGuardDecision } from "./chargeGuard";
 import { loadAllowedChargeCents } from "./plans/planCatalog.server";
 import { isProdTestBillingShop, shouldCreateTestCharge } from "./testBillingShop";
+import { scheduleChargeGuardDeniedFeishu } from "./lifecycleFeishuNotify.server";
 import { BILLING_LOG_EVENT } from "./types.server";
 
 const DETAIL_TIMEOUT_MS = 2_500;
@@ -162,6 +163,15 @@ export async function persistChargeGuardDenied(params: {
   planKey?: string | null;
   reason: ChargeGuardDecision["reason"];
 }): Promise<void> {
+  if (
+    await hasBillingLog(
+      params.shop,
+      BILLING_LOG_EVENT.CHARGE_GUARD_DENIED,
+      params.gid,
+    )
+  ) {
+    return;
+  }
   await appendBillingLog({
     shop: params.shop,
     eventType: BILLING_LOG_EVENT.CHARGE_GUARD_DENIED,
@@ -174,6 +184,11 @@ export async function persistChargeGuardDenied(params: {
         notifiedAt: new Date().toISOString(),
       },
     },
+  });
+  scheduleChargeGuardDeniedFeishu({
+    shop: params.shop,
+    reason: params.reason,
+    gid: params.gid,
   });
 }
 

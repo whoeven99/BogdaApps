@@ -8,6 +8,11 @@ import {
   isInFreePlanTime,
   javaSnapshotGrantGid,
 } from "./billingState";
+import {
+  expireInstallTrialCreditsIfDue,
+  grantInstallCreditsIfEligible,
+} from "./grant/grantInstallCredits.server";
+import { scheduleInstallFeishu } from "./lifecycleFeishuNotify.server";
 
 export type AccountQuota = {
   shop: string;
@@ -31,11 +36,24 @@ export {
 };
 
 export async function ensureAccount(shop: string) {
-  await prisma.account.upsert({
-    where: { shop },
-    create: { shop },
-    update: {},
-  });
+  let created = false;
+  try {
+    await prisma.account.create({ data: { shop } });
+    created = true;
+  } catch (err) {
+    const code =
+      typeof err === "object" && err && "code" in err
+        ? String((err as { code?: unknown }).code)
+        : "";
+    if (code !== "P2002") {
+      const existing = await prisma.account.findUnique({ where: { shop } });
+      if (!existing) throw err;
+    }
+  }
+  if (created) {
+    const granted = await grantInstallCreditsIfEligible(shop);
+    if (granted.granted) scheduleInstallFeishu(shop);
+  }
   const row = await prisma.account.findUniqueOrThrow({ where: { shop } });
   if (row.hasUsedTrial) return row;
   const grantCount = await prisma.creditGrant.count({ where: { shop } });
@@ -67,7 +85,9 @@ export function remainingOf(account: {
 }
 
 export async function getAccountQuota(shop: string): Promise<AccountQuota | null> {
-  const row = await ensureAccount(shop);
+  await ensureAccount(shop);
+  await expireInstallTrialCreditsIfDue(shop);
+  const row = await prisma.account.findUniqueOrThrow({ where: { shop } });
   const aliases = quotaAliases(row);
   return {
     shop: row.shop,
@@ -97,6 +117,7 @@ export async function deductCredits(
 ): Promise<AccountQuota> {
   const amount = Math.max(0, Math.floor(credits));
   await ensureAccount(shop);
+  await expireInstallTrialCreditsIfDue(shop);
   if (amount > 0) {
     await prisma.account.update({
       where: { shop },
