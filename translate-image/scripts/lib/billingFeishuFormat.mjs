@@ -41,6 +41,20 @@ export function failureFeishuLogReference(stage, reason, bucket) {
   return `${stage}:${reason}:${bucket}`;
 }
 
+export const UNINSTALL_FEISHU_TTL_SEC = 86_400;
+
+export function uninstallFeishuRedisKey(shop) {
+  return `img:feishu:uninstall:${String(shop ?? "").trim()}`;
+}
+
+export function uninstallFeishuBucket(nowMs = Date.now()) {
+  return Math.floor(Math.floor(nowMs / 1000) / UNINSTALL_FEISHU_TTL_SEC);
+}
+
+export function uninstallFeishuLogReference(bucket) {
+  return `uninstall:${bucket}`;
+}
+
 export function sanitizeFeishuErrorDetail(err) {
   const raw =
     err instanceof Error

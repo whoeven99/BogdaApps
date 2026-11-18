@@ -2,10 +2,14 @@ import { getImageRedisClient } from "~/server/redis.server";
 import { sendFeishuTextMessage } from "~/server/feishu/sendFeishuTextMessage.server";
 import {
   FAILURE_FEISHU_TTL_SEC,
+  UNINSTALL_FEISHU_TTL_SEC,
   failureFeishuBucket,
   failureFeishuLogReference,
   failureFeishuRedisKey,
   failureFeishuUsesDebounce,
+  uninstallFeishuBucket,
+  uninstallFeishuLogReference,
+  uninstallFeishuRedisKey,
   formatAnnualCreditFeishuMessage,
   formatBillingFailureFeishuMessage,
   formatCancelFeishuMessage,
@@ -187,8 +191,51 @@ export function scheduleCancelFeishu(snap: ShopBillingFeishuSnapshot): void {
   });
 }
 
+async function claimUninstallFeishuSlot(shop: string): Promise<boolean> {
+  const redis = getImageRedisClient();
+  if (redis) {
+    try {
+      const ok = await redis.set(
+        uninstallFeishuRedisKey(shop),
+        "1",
+        "EX",
+        UNINSTALL_FEISHU_TTL_SEC,
+        "NX",
+      );
+      return ok === "OK";
+    } catch (err) {
+      console.warn(`${LOG_UNINSTALL} redis claim failed shop=${shop}`, err);
+    }
+  }
+
+  const referenceId = uninstallFeishuLogReference(uninstallFeishuBucket());
+  try {
+    if (
+      await hasBillingLog(
+        shop,
+        BILLING_LOG_EVENT.UNINSTALL_FEISHU_NOTIFIED,
+        referenceId,
+      )
+    ) {
+      return false;
+    }
+    await appendBillingLog({
+      shop,
+      eventType: BILLING_LOG_EVENT.UNINSTALL_FEISHU_NOTIFIED,
+      referenceId,
+      creditsDelta: 0,
+      metadata: { kind: "uninstall" },
+    });
+    return true;
+  } catch (err) {
+    console.warn(`${LOG_UNINSTALL} log claim failed shop=${shop}`, err);
+    return true;
+  }
+}
+
 export function scheduleUninstallFeishu(snap: ShopBillingFeishuSnapshot): void {
   fire(LOG_UNINSTALL, snap.shop, async () => {
+    if (!(await claimUninstallFeishuSlot(snap.shop))) return;
     await sendLifecycle(
       LOG_UNINSTALL,
       snap.shop,

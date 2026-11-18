@@ -3,10 +3,14 @@ import test from "node:test";
 import {
   emptyShopBillingSnapshot,
   FAILURE_FEISHU_TTL_SEC,
+  UNINSTALL_FEISHU_TTL_SEC,
   failureFeishuBucket,
   failureFeishuLogReference,
   failureFeishuRedisKey,
   failureFeishuUsesDebounce,
+  uninstallFeishuBucket,
+  uninstallFeishuLogReference,
+  uninstallFeishuRedisKey,
   formatAnnualCreditFeishuMessage,
   formatBillingFailureFeishuMessage,
   formatCancelFeishuMessage,
@@ -168,6 +172,18 @@ test("失败飞书 6h 去重 key / bucket", () => {
     failureFeishuLogReference("annual_credit", "exception", 3),
     "annual_credit:exception:3",
   );
+});
+
+test("卸载飞书 24h 去重 key / bucket", () => {
+  assert.equal(
+    uninstallFeishuRedisKey(" demo.myshopify.com "),
+    "img:feishu:uninstall:demo.myshopify.com",
+  );
+  const windowMs = UNINSTALL_FEISHU_TTL_SEC * 1000;
+  assert.equal(uninstallFeishuBucket(0), 0);
+  assert.equal(uninstallFeishuBucket(windowMs - 1), 0);
+  assert.equal(uninstallFeishuBucket(windowMs), 1);
+  assert.equal(uninstallFeishuLogReference(2), "uninstall:2");
 });
 
 test("失败详情截断并去掉 url / token", () => {

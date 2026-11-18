@@ -30,6 +30,8 @@ export const BILLING_LOG_EVENT = {
   CHARGE_GUARD_DENIED: "CHARGE_GUARD_DENIED",
   /** 入账失败飞书 6h 去重（无 Redis 时）；creditsDelta=0 */
   FEISHU_FAILURE_NOTIFIED: "FEISHU_FAILURE_NOTIFIED",
+  /** 卸载飞书 24h 去重（无 Redis 时）；creditsDelta=0 */
+  UNINSTALL_FEISHU_NOTIFIED: "UNINSTALL_FEISHU_NOTIFIED",
 } as const;
 export type BillingLogEvent =
   (typeof BILLING_LOG_EVENT)[keyof typeof BILLING_LOG_EVENT];
