@@ -149,19 +149,64 @@ export function decodeSwitcherPagePathParam(param: string): string | null {
 
 export const THIRD_PARTY_LIST_PATH = "/app/third-party";
 export const SWITCHER_IMAGE_PAGE_SIZE = 50;
+export const SWITCHER_PAGE_SEARCH_MAX = 128;
 
-export function thirdPartyPagePath(pagePath: string, language?: string): string {
-  const path = `${THIRD_PARTY_LIST_PATH}/pages/${encodeSwitcherPagePathParam(pagePath)}`;
-  return language ? `${path}?language=${encodeURIComponent(language)}` : path;
+export function normalizeSwitcherPageSearch(q?: string | null): string {
+  return String(q ?? "").trim().toLowerCase().slice(0, SWITCHER_PAGE_SEARCH_MAX);
 }
 
-export function thirdPartyImagePath(urlKey: string, extra?: { pagePath?: string; language?: string }): string {
+export function matchesSwitcherPageSearch(
+  pagePath: string,
+  displayPath: string,
+  q?: string | null,
+): boolean {
+  const needle = normalizeSwitcherPageSearch(q);
+  if (!needle) return true;
+  return (
+    pagePath.toLowerCase().includes(needle) || displayPath.toLowerCase().includes(needle)
+  );
+}
+
+export function thirdPartyListHref(extra?: {
+  language?: string;
+  q?: string;
+  after?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (extra?.language) params.set("language", extra.language);
+  const q = extra?.q?.trim();
+  if (q) params.set("q", q);
+  if (extra?.after) params.set("after", extra.after);
+  const s = params.toString();
+  return s ? `${THIRD_PARTY_LIST_PATH}?${s}` : THIRD_PARTY_LIST_PATH;
+}
+
+export function thirdPartyPagePath(
+  pagePath: string,
+  language?: string,
+  q?: string,
+): string {
+  const path = `${THIRD_PARTY_LIST_PATH}/pages/${encodeSwitcherPagePathParam(pagePath)}`;
+  const params = new URLSearchParams();
+  if (language) params.set("language", language);
+  const query = q?.trim();
+  if (query) params.set("q", query);
+  const s = params.toString();
+  return s ? `${path}?${s}` : path;
+}
+
+export function thirdPartyImagePath(
+  urlKey: string,
+  extra?: { pagePath?: string; language?: string; q?: string },
+): string {
   const path = `${THIRD_PARTY_LIST_PATH}/image/${encodeURIComponent(urlKey)}`;
   const params = new URLSearchParams();
   if (extra?.pagePath) params.set("pagePath", extra.pagePath);
   if (extra?.language) params.set("language", extra.language);
-  const q = params.toString();
-  return q ? `${path}?${q}` : path;
+  const query = extra?.q?.trim();
+  if (query) params.set("q", query);
+  const s = params.toString();
+  return s ? `${path}?${s}` : path;
 }
 
 export type SwitcherPageSighting = {

@@ -257,7 +257,10 @@
   "Clear": "Clear",
   "thirdParty": {
     "hint": "Open your storefront in this language, then refresh after the theme extension collects images.",
-    "empty": "No third-party images yet. Open your storefront in this language, browse a few pages, then refresh.",
+    "searchPlaceholder": "Search path",
+    "emptyTitle": "No third-party images yet",
+    "empty": "Open your storefront in this language, browse a few pages, then refresh.",
+    "searchEmpty": "No matching paths.",
     "pageEmpty": "No images on this path for the current language. Go back to the list."
   },
   "Title": "Title",

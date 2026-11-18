@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   displaySwitcherPagePath,
+  matchesSwitcherPageSearch,
+  normalizeSwitcherPageSearch,
   resolveCollectTargetCode,
   resolveShopLocale,
   stripShopLocalePrefix,
@@ -32,6 +34,15 @@ test("stripShopLocalePrefix 剥本店语言前缀", () => {
 test("displaySwitcherPagePath 非主语言加回前缀", () => {
   assert.equal(displaySwitcherPagePath("/products/hat", "zh-CN", LOCALES, "en"), "/zh-cn/products/hat");
   assert.equal(displaySwitcherPagePath("/products/hat", "en", LOCALES, "en"), "/products/hat");
+});
+
+test("matchesSwitcherPageSearch 匹配存储路径或展示路径，忽略大小写", () => {
+  const display = displaySwitcherPagePath("/products/hat", "zh-CN", LOCALES, "en");
+  assert.equal(matchesSwitcherPageSearch("/products/hat", display, "HAT"), true);
+  assert.equal(matchesSwitcherPageSearch("/products/hat", display, "zh-cn"), true);
+  assert.equal(matchesSwitcherPageSearch("/products/hat", display, "loox"), false);
+  assert.equal(matchesSwitcherPageSearch("/products/hat", display, "  "), true);
+  assert.equal(normalizeSwitcherPageSearch(`/${"a".repeat(200)}`).length, 128);
 });
 
 test("resolveCollectTargetCode 优先客户端语言，对不上不挂页", () => {

@@ -3,6 +3,8 @@ import { contentImageId } from "~/lib/contentPicture";
 import {
   SWITCHER_IMAGE_PAGE_SIZE,
   displaySwitcherPagePath,
+  matchesSwitcherPageSearch,
+  normalizeSwitcherPageSearch,
   summarizeSwitcherPages,
 } from "~/lib/shopLocale";
 import { listPicturesByUrlKeys } from "~/server/picture/picture.server";
@@ -41,6 +43,7 @@ export async function loadAdminShopLocales(admin: {
 export async function listSwitcherPages(args: {
   shop: string;
   languageCode: string;
+  q?: string | null;
   after?: string | null;
   take?: number;
   locales?: readonly string[];
@@ -52,15 +55,29 @@ export async function listSwitcherPages(args: {
   if (!targetCode) {
     return { rows: [], hasNextPage: false, endCursor: null as string | null };
   }
+  const locales = args.locales ?? [];
+  const primaryLocale = args.primaryLocale ?? "";
+  const q = normalizeSwitcherPageSearch(args.q);
   const groups = await prisma.switcherImagePage.groupBy({
     by: ["pagePath"],
     where: { shop: args.shop, targetCode },
     _max: { lastSeenAt: true },
   });
-  const ordered = [...groups].sort((a, b) => {
-    const byTime = (b._max.lastSeenAt?.getTime() ?? 0) - (a._max.lastSeenAt?.getTime() ?? 0);
-    return byTime !== 0 ? byTime : a.pagePath.localeCompare(b.pagePath);
-  });
+  const ordered = groups
+    .filter((row) => {
+      if (!q) return true;
+      const displayPath = displaySwitcherPagePath(
+        row.pagePath,
+        targetCode,
+        locales,
+        primaryLocale,
+      );
+      return matchesSwitcherPageSearch(row.pagePath, displayPath, q);
+    })
+    .sort((a, b) => {
+      const byTime = (b._max.lastSeenAt?.getTime() ?? 0) - (a._max.lastSeenAt?.getTime() ?? 0);
+      return byTime !== 0 ? byTime : a.pagePath.localeCompare(b.pagePath);
+    });
   const pageGroups = ordered.slice(skip, skip + take + 1);
   const hasNextPage = pageGroups.length > take;
   const visible = pageGroups.slice(0, take);
@@ -99,8 +116,6 @@ export async function listSwitcherPages(args: {
     translatedKeys,
   );
   const byPath = new Map(summaries.map((row) => [row.pagePath, row]));
-  const locales = args.locales ?? [];
-  const primaryLocale = args.primaryLocale ?? "";
   return {
     rows: pagePaths.flatMap((path) => {
       const row = byPath.get(path);

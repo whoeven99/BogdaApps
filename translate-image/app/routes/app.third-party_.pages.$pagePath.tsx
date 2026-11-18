@@ -10,8 +10,8 @@ import ScrollNotice from "~/components/ScrollNotice";
 import {
   decodeSwitcherPagePathParam,
   displaySwitcherPagePath,
-  THIRD_PARTY_LIST_PATH,
   thirdPartyImagePath,
+  thirdPartyListHref,
 } from "~/lib/shopLocale";
 import { authenticate } from "~/shopify.server";
 import {
@@ -29,6 +29,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     locales.find((row) => !row.primary)?.locale ||
     locales[0]?.locale ||
     "";
+  const q = url.searchParams.get("q") ?? "";
   const rows = pagePath && language
     ? await listSwitcherImages({
         shop: session.shop,
@@ -40,6 +41,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return json({
     shop: session.shop,
     language,
+    q,
     pagePath,
     displayPath: displaySwitcherPagePath(
       pagePath,
@@ -55,8 +57,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 export default function ThirdPartyPageImages() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { language, pagePath, displayPath, languageName, rows } =
+  const { language, q, pagePath, displayPath, languageName, rows } =
     useLoaderData<typeof loader>();
+  const backToList = () =>
+    navigate(thirdPartyListHref({ language, q: q || undefined }));
 
   const columns: ColumnsType<(typeof rows)[number]> = [
     {
@@ -92,7 +96,7 @@ export default function ThirdPartyPageImages() {
         <Button
           type="link"
           onClick={() =>
-            navigate(thirdPartyImagePath(row.urlKey, { pagePath, language }))
+            navigate(thirdPartyImagePath(row.urlKey, { pagePath, language, q }))
           }
         >
           {t("Translate")}
@@ -105,12 +109,7 @@ export default function ThirdPartyPageImages() {
     <Page
       backAction={{
         content: t("Third-party images"),
-        onAction: () =>
-          navigate(
-            language
-              ? `${THIRD_PARTY_LIST_PATH}?language=${encodeURIComponent(language)}`
-              : THIRD_PARTY_LIST_PATH,
-          ),
+        onAction: backToList,
       }}
     >
       <TitleBar title={`${displayPath} · ${languageName}`} />
@@ -120,7 +119,16 @@ export default function ThirdPartyPageImages() {
         )}
       />
       {rows.length === 0 ? (
-        <Empty description={t("thirdParty.pageEmpty")} />
+        <Empty
+          description={
+            <div>
+              <div>{t("thirdParty.pageEmpty")}</div>
+              <Button type="link" onClick={backToList}>
+                {t("Third-party images")}
+              </Button>
+            </div>
+          }
+        />
       ) : (
         <Table
           rowKey="urlKey"

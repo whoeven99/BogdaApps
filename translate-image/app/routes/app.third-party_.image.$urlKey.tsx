@@ -17,8 +17,8 @@ import {
 import { contentImageId } from "~/lib/contentPicture";
 import { merchantImageCredits } from "~/lib/imageTranslate";
 import {
-  THIRD_PARTY_LIST_PATH,
   decodeSwitcherPagePathParam,
+  thirdPartyListHref,
   thirdPartyPagePath,
 } from "~/lib/shopLocale";
 import { listPicturesByImageId } from "~/server/picture/picture.server";
@@ -36,6 +36,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const urlKey = decodeSwitcherPagePathParam(params.urlKey ?? "") || "";
   const url = new URL(request.url);
   const pagePath = url.searchParams.get("pagePath") || "";
+  const q = url.searchParams.get("q") || "";
   const locales = await loadAdminShopLocales(admin).catch(() => []);
   const language =
     url.searchParams.get("language")?.trim() ||
@@ -50,6 +51,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     shop: session.shop,
     urlKey,
     pagePath,
+    q,
     language,
     image,
     pictures,
@@ -82,7 +84,7 @@ export default function ThirdPartyImageDetail() {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const translateFetcher = useFetcher<typeof action>();
-  const { shop, urlKey, pagePath, language, image, pictures, locales } =
+  const { shop, urlKey, pagePath, q, language, image, pictures, locales } =
     useLoaderData<typeof loader>();
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
   const [merchantModel, setMerchantModel] = useState<"standard" | "advance">("standard");
@@ -116,14 +118,8 @@ export default function ThirdPartyImageDetail() {
   }, [translateFetcher.data, translateFetcher.state]);
 
   const backToList = () => {
-    if (pagePath) navigate(thirdPartyPagePath(pagePath, language));
-    else {
-      navigate(
-        language
-          ? `${THIRD_PARTY_LIST_PATH}?language=${encodeURIComponent(language)}`
-          : THIRD_PARTY_LIST_PATH,
-      );
-    }
+    if (pagePath) navigate(thirdPartyPagePath(pagePath, language, q));
+    else navigate(thirdPartyListHref({ language, q: q || undefined }));
   };
 
   const triggerTranslate = (locale: string) => {

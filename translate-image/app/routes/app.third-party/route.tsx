@@ -1,16 +1,18 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useNavigate, useSearchParams } from "@remix-run/react";
+import { useLoaderData, useNavigate } from "@remix-run/react";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { Page, Pagination, Select, Text, Thumbnail } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
-import { Empty, Table } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
+import { Empty, Input, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ScrollNotice from "~/components/ScrollNotice";
 import {
   pickDefaultTargetLocale,
   SWITCHER_IMAGE_PAGE_SIZE,
-  THIRD_PARTY_LIST_PATH,
+  thirdPartyListHref,
   thirdPartyPagePath,
 } from "~/lib/shopLocale";
 import { authenticate } from "~/shopify.server";
@@ -18,6 +20,8 @@ import {
   listSwitcherPages,
   loadAdminShopLocales,
 } from "~/server/contentImage/switcherImages.server";
+
+const SEARCH_DEBOUNCE_MS = 400;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -27,11 +31,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const language =
     (requested && locales.some((row) => row.locale === requested) ? requested : "") ||
     pickDefaultTargetLocale(locales);
+  const q = url.searchParams.get("q") ?? "";
   const after = url.searchParams.get("after");
   const page = language
     ? await listSwitcherPages({
         shop: session.shop,
         languageCode: language,
+        q,
         after,
         locales: locales.map((row) => row.locale),
         primaryLocale: locales.find((row) => row.primary)?.locale,
@@ -40,6 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({
     shop: session.shop,
     language,
+    q,
     locales,
     rows: page.rows,
     hasNextPage: page.hasNextPage,
@@ -51,15 +58,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function ThirdPartyPages() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { language, locales, rows, hasNextPage, endCursor, skip } =
+  const { language, q, locales, rows, hasNextPage, endCursor, skip } =
     useLoaderData<typeof loader>();
+  const [draft, setDraft] = useState(q);
+
+  useEffect(() => {
+    setDraft(q);
+  }, [q]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (draft.trim() === q.trim()) return;
+      navigate(
+        thirdPartyListHref({
+          language,
+          q: draft.trim() || undefined,
+        }),
+      );
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, language, navigate, q]);
 
   const setLanguage = (value: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("language", value);
-    next.delete("after");
-    navigate(`${THIRD_PARTY_LIST_PATH}?${next.toString()}`);
+    navigate(thirdPartyListHref({ language: value, q: draft.trim() || undefined }));
   };
 
   const columns: ColumnsType<(typeof rows)[number]> = [
@@ -89,6 +110,8 @@ export default function ThirdPartyPages() {
     },
   ];
 
+  const searching = Boolean(q.trim());
+
   return (
     <Page
       backAction={{ content: t("Home"), onAction: () => navigate("/app") }}
@@ -99,7 +122,24 @@ export default function ThirdPartyPages() {
           "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
         )}
       />
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ width: 280 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder={t("thirdParty.searchPlaceholder")}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </div>
         <div style={{ width: 220 }}>
           <Select
             label={t("Language")}
@@ -120,7 +160,20 @@ export default function ThirdPartyPages() {
         </Text>
       </div>
       {rows.length === 0 ? (
-        <Empty description={t("thirdParty.empty")} />
+        <Empty
+          description={
+            searching ? (
+              t("thirdParty.searchEmpty")
+            ) : (
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                  {t("thirdParty.emptyTitle")}
+                </div>
+                <div>{t("thirdParty.empty")}</div>
+              </div>
+            )
+          }
+        />
       ) : (
         <>
           <Table
@@ -129,7 +182,8 @@ export default function ThirdPartyPages() {
             dataSource={rows}
             pagination={false}
             onRow={(row) => ({
-              onClick: () => navigate(thirdPartyPagePath(row.pagePath, language)),
+              onClick: () =>
+                navigate(thirdPartyPagePath(row.pagePath, language, q)),
               style: { cursor: "pointer" },
             })}
           />
@@ -138,17 +192,24 @@ export default function ThirdPartyPages() {
               hasPrevious={skip > 0}
               hasNext={hasNextPage}
               onPrevious={() => {
-                const next = new URLSearchParams(searchParams);
                 const prev = Math.max(0, skip - SWITCHER_IMAGE_PAGE_SIZE);
-                if (prev <= 0) next.delete("after");
-                else next.set("after", String(prev));
-                navigate(`${THIRD_PARTY_LIST_PATH}?${next.toString()}`);
+                navigate(
+                  thirdPartyListHref({
+                    language,
+                    q: q || undefined,
+                    after: prev > 0 ? String(prev) : undefined,
+                  }),
+                );
               }}
               onNext={() => {
                 if (!endCursor) return;
-                const next = new URLSearchParams(searchParams);
-                next.set("after", endCursor);
-                navigate(`${THIRD_PARTY_LIST_PATH}?${next.toString()}`);
+                navigate(
+                  thirdPartyListHref({
+                    language,
+                    q: q || undefined,
+                    after: endCursor,
+                  }),
+                );
               }}
             />
           </div>

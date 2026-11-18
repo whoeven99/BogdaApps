@@ -118,6 +118,28 @@ export function displaySwitcherPagePath(pagePath, selectedLocale, locales, prima
   return applyShopLocalePrefix(canonical, selectedLocale, primaryLocale);
 }
 
+export const SWITCHER_PAGE_SEARCH_MAX = 128;
+
+export function normalizeSwitcherPageSearch(q) {
+  return String(q ?? "")
+    .trim()
+    .toLowerCase()
+    .slice(0, SWITCHER_PAGE_SEARCH_MAX);
+}
+
+export function matchesSwitcherPageSearch(pagePath, displayPath, q) {
+  const needle = normalizeSwitcherPageSearch(q);
+  if (!needle) return true;
+  return (
+    String(pagePath ?? "")
+      .toLowerCase()
+      .includes(needle) ||
+    String(displayPath ?? "")
+      .toLowerCase()
+      .includes(needle)
+  );
+}
+
 export function encodeSwitcherPagePathParam(pagePath) {
   return encodeURIComponent(pagePath);
 }
