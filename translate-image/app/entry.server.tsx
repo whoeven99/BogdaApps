@@ -22,8 +22,10 @@ import {
 } from "./server/bootTrace.server";
 import { normalizeEnvValue } from "./config/runtimeEnv.server";
 import { startBillingReconcileLoop } from "./server/billing/reconcileLoop.server";
+import { startImageTranslateLoop } from "./server/contentImage/imageTranslateLoop.server";
 
 startBillingReconcileLoop();
+startImageTranslateLoop();
 
 const APP_BRIDGE_SRC = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
 

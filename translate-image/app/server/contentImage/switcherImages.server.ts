@@ -1,6 +1,10 @@
 import prisma from "~/db.server";
 import { contentImageId } from "~/lib/contentPicture";
 import {
+  IMAGE_RESOURCE_BULK_SELECT_MAX,
+  isResourceImagesBatchTruncated,
+} from "~/lib/imageResourcePaths";
+import {
   SWITCHER_IMAGE_PAGE_SIZE,
   displaySwitcherPagePath,
   matchesSwitcherPageSearch,
@@ -8,6 +12,7 @@ import {
   summarizeSwitcherPages,
 } from "~/lib/shopLocale";
 import { listPicturesByUrlKeys } from "~/server/picture/picture.server";
+import { CONTENT_IMAGE_JOB_MAX_ITEMS } from "./contentImageJobs.server";
 
 export { SWITCHER_IMAGE_PAGE_SIZE };
 
@@ -173,6 +178,82 @@ export async function listSwitcherImages(args: {
       lastSeenAt: links.find((link) => link.urlKey === urlKey)?.lastSeenAt ?? image.lastSeenAt,
     }];
   });
+}
+
+function parsePagePaths(args: { pagePath?: string; pagePaths?: string[] }): string[] {
+  const raw = args.pagePaths?.length ? args.pagePaths : args.pagePath ? [args.pagePath] : [];
+  return [...new Set(raw.map((path) => path.trim()).filter(Boolean))].slice(
+    0,
+    IMAGE_RESOURCE_BULK_SELECT_MAX,
+  );
+}
+
+export async function listSwitcherImagesBatch(args: {
+  shop: string;
+  languageCode: string;
+  q?: string;
+  pagePath?: string;
+  pagePaths?: string[];
+  take?: number;
+  capItems?: boolean;
+}) {
+  const pagePaths = parsePagePaths(args);
+  const requestedCount = (args.pagePaths?.length ? args.pagePaths : args.pagePath ? [args.pagePath] : [])
+    .map((path) => path.trim())
+    .filter(Boolean).length;
+  const targetCode = args.languageCode.trim();
+  if (pagePaths.length === 0 || !targetCode) {
+    return { rows: [], truncated: isResourceImagesBatchTruncated(requestedCount, false) };
+  }
+  const take = Math.min(args.take ?? 200, args.capItems ? CONTENT_IMAGE_JOB_MAX_ITEMS : 200);
+  const q = args.q?.trim().toLowerCase();
+  const links = await prisma.switcherImagePage.findMany({
+    where: { shop: args.shop, targetCode, pagePath: { in: pagePaths } },
+    orderBy: [{ lastSeenAt: "desc" }, { urlKey: "desc" }],
+  });
+  const uniqueKeys: string[] = [];
+  const seen = new Set<string>();
+  for (const link of links) {
+    if (seen.has(link.urlKey)) continue;
+    seen.add(link.urlKey);
+    uniqueKeys.push(link.urlKey);
+  }
+  const truncated = uniqueKeys.length > take || requestedCount > IMAGE_RESOURCE_BULK_SELECT_MAX;
+  const keys = uniqueKeys.slice(0, take);
+  const images = await prisma.switcherImage.findMany({
+    where: { shop: args.shop, urlKey: { in: keys } },
+  });
+  const imageByKey = new Map(images.map((row) => [row.urlKey, row]));
+  const pageByKey = new Map(links.map((row) => [row.urlKey, row.pagePath]));
+  const pics = await listPicturesByUrlKeys({
+    shop: args.shop,
+    languageCode: targetCode,
+    urlKeys: keys,
+  });
+  const byKey = new Map(pics.map((pic) => [pic.urlKey, pic]));
+  const rows = keys.flatMap((urlKey) => {
+    const image = imageByKey.get(urlKey);
+    if (!image) return [];
+    const pic = byKey.get(urlKey);
+    const imageUrl = image.imageBeforeUrl;
+    if (q && !urlKey.toLowerCase().includes(q) && !imageUrl.toLowerCase().includes(q)) {
+      return [];
+    }
+    return [{
+      urlKey,
+      imageUrl,
+      usedIn: pageByKey.get(urlKey) ? [{ id: pageByKey.get(urlKey)!, title: pageByKey.get(urlKey)! }] : [],
+      translated: pic?.imageAfterUrl
+        ? {
+            imageId: pic.imageId,
+            imageBeforeUrl: pic.imageBeforeUrl,
+            imageAfterUrl: pic.imageAfterUrl,
+            urlKey: pic.urlKey,
+          }
+        : null,
+    }];
+  });
+  return { rows, truncated };
 }
 
 export async function getSwitcherImage(shop: string, urlKey: string) {

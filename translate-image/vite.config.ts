@@ -52,7 +52,7 @@ export default defineConfig({
   },
   plugins: [
     remix({
-      ignoredRouteFiles: ["**/.*"],
+      ignoredRouteFiles: ["**/.*", "component/**", "app.translate-v4/**"],
       future: {
         v3_fetcherPersist: true,
         v3_relativeSplatPath: true,

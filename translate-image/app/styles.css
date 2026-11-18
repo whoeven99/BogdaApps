@@ -15,3 +15,14 @@
 body {
   margin: 0;
 }
+
+.in-flow-select--open {
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 768px) {
+  .in-flow-select--open {
+    z-index: 40;
+  }
+}

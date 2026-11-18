@@ -118,3 +118,16 @@ export function canonicalHttpsImageUrl(url) {
   parsed.password = "";
   return parsed.toString();
 }
+
+export function canonicalShopifyImageUrl(url) {
+  if (!imageUrlKey(url)) return null;
+  const parsed = parseUrl(url);
+  if (!parsed) return null;
+  parsed.pathname = stripShopifyImageSizeSuffix(parsed.pathname);
+  parsed.search = "";
+  parsed.hash = "";
+  parsed.protocol = "https:";
+  parsed.username = "";
+  parsed.password = "";
+  return parsed.toString();
+}

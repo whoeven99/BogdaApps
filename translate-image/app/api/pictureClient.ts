@@ -2,13 +2,15 @@
 
 export async function UploadProductImage(args: {
   shopName: string;
-  imageId: string;
+  imageId?: string;
+  productId?: string;
   imageUrl: string;
   languageCode: string;
   file: Blob;
   altBeforeTranslation?: string;
   altAfterTranslation?: string;
 }) {
+  const imageId = args.imageId || args.productId || "";
   try {
     const form = new FormData();
     form.append("shopName", args.shopName);
@@ -16,7 +18,7 @@ export async function UploadProductImage(args: {
       "userPicturesDoJson",
       JSON.stringify({
         shopName: args.shopName,
-        imageId: args.imageId,
+        imageId,
         imageBeforeUrl: args.imageUrl,
         altBeforeTranslation: args.altBeforeTranslation ?? "",
         altAfterTranslation: args.altAfterTranslation ?? "",
@@ -80,6 +82,50 @@ export async function SaveProductImageAlt(args: {
     console.error("Error SaveProductImageAlt:", error);
     return { success: false, errorCode: 10001, errorMsg: "SERVER_ERROR", response: undefined };
   }
+}
+
+export async function TranslateImage(args: {
+  imageId: string;
+  imageUrl: string;
+  languageCode: string;
+  model: string;
+}) {
+  try {
+    const res = await fetch("/api/picture/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(args),
+    });
+    const body = await res.json().catch(() => null);
+    if (body && typeof body === "object" && "success" in body) return body;
+    return {
+      success: false,
+      errorCode: res.status,
+      errorMsg: `HTTP_${res.status}`,
+      response: null,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: error instanceof Error ? error.message : "SERVER_ERROR",
+      response: null,
+    };
+  }
+}
+
+export async function DeleteProductImageData(args: {
+  shopName: string;
+  productId: string;
+  imageUrl: string;
+  languageCode: string;
+}) {
+  return DeleteProductImageLocal({
+    shopName: args.shopName,
+    imageId: args.productId,
+    imageUrl: args.imageUrl,
+    languageCode: args.languageCode,
+  });
 }
 
 export async function DeleteProductImageLocal(args: {

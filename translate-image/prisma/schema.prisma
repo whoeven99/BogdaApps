@@ -199,3 +199,52 @@ model SwitcherImagePage {
   @@index([shop, targetCode, pagePath, lastSeenAt])
   @@index([shop, lastSeenAt])
 }
+
+model ImageTranslateJob {
+  id             String    @id
+  shop           String
+  targetLanguage String
+  model          String
+  /// content = 文章/主题/第三方；product = 商品相册
+  kind           String    @default("content")
+  /// QUEUED | RUNNING | PAUSED | COMPLETED | CANCELLED
+  status         String
+  /// MANUAL | QUOTA_INSUFFICIENT | SCOPE_MISSING | SERVICE_ERROR
+  pauseReason    String?
+  retranslate    Boolean   @default(false)
+  total          Int       @default(0)
+  done           Int       @default(0)
+  failed         Int       @default(0)
+  skipped        Int       @default(0)
+  creditsUsed    Int       @default(0)
+  claimedBy      String?
+  heartbeatAt    DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([shop, createdAt])
+  @@index([shop, kind, createdAt])
+  @@index([status, updatedAt])
+}
+
+model ImageTranslateJobItem {
+  id            String   @id
+  jobId         String
+  shop          String
+  urlKey        String
+  imageUrl      String
+  /// 商品相册为 Product GID；content 为空串
+  productId     String   @default("")
+  resourceTitle String?
+  /// PENDING | DONE | FAILED | SKIPPED
+  status        String   @default("PENDING")
+  error         String?
+  imageAfterUrl String?
+  credits       Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([jobId, urlKey, productId])
+  @@index([jobId, status])
+}

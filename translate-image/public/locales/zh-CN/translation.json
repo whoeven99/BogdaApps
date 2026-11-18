@@ -287,6 +287,341 @@
     "scopeMissing": "需要 Files 权限才能保存译图。请授权后继续。",
     "grantAccess": "去授权",
     "grantAccessFailed": "未能更新 Files 权限，请重试。",
-    "scopeDeclined": "未授予 Files 权限，译图无法保存。"
+    "scopeDeclined": "未授予 Files 权限，译图无法保存。",
+    "error": {
+      "IMAGE_TRANSLATE_GEMINI_RATE_LIMIT": "图片翻译服务繁忙，请等待几分钟后重试。",
+      "IMAGE_TRANSLATE_GEMINI_UNAVAILABLE": "图片翻译服务暂时不可用，请稍后重试。",
+      "IMAGE_TRANSLATE_GEMINI_FAILED": "图片生成失败，请稍后重试。",
+      "IMAGE_TRANSLATE_GEMINI_BLOCKED": "由于内容限制，无法翻译此图片。",
+      "IMAGE_TRANSLATE_GEMINI_NO_IMAGE": "模型未返回译图，可换一张图或模型再试。",
+      "IMAGE_TRANSLATE_GEMINI_NOT_CONFIGURED": "服务端未配置图片翻译，请联系支持。",
+      "IMAGE_TRANSLATE_INVALID_IMAGE_URL": "图片链接无效或无法访问。",
+      "IMAGE_TRANSLATE_UNSUPPORTED_FORMAT": "不支持该图片格式。",
+      "IMAGE_TRANSLATE_IMAGE_TOO_LARGE": "图片过大，无法翻译。",
+      "IMAGE_TRANSLATE_IMAGE_FETCH_FAILED": "无法下载原图。",
+      "IMAGE_TRANSLATE_SHOPIFY_SCOPE_MISSING": "请允许 Ciwi 将译图保存到 Shopify 文件中。",
+      "IMAGE_TRANSLATE_SHOPIFY_UPLOAD_FAILED": "无法将译图上传到 Shopify 文件。",
+      "IMAGE_TRANSLATE_SAVE_FAILED": "译图保存失败，请重试。",
+      "IMAGE_TRANSLATE_GENERIC": "图片翻译失败，请稍后重试。"
+    },
+    "model": "模型",
+    "modelStandard": "标准",
+    "modelAdvance": "进阶",
+    "creditsPerImage": "每张 {{credits}} 积分",
+    "savedToFiles": "译图会保存到 Shopify Files。",
+    "insufficientCredits": "积分不够，无法翻译图片。"
+  },
+  "v4": {
+    "createTask": {
+      "confirmAction": "立即翻译",
+      "confirmBuyCreditsAndStart": "购买积分并完整启动",
+      "confirmBuyCreditsOnly": "购买积分",
+      "confirmCompactList": "已选 {{count}} 项：{{items}}",
+      "confirmCompactListEmpty": "未选择",
+      "confirmCompactListMore": "已选 {{count}} 项，其中：{{items}}，另 {{more}} 项",
+      "confirmCreditsAvailable": "可用积分",
+      "confirmCreditsRequired": "所需积分",
+      "confirmEstimateComputing": "计算中……",
+      "confirmEstimateUnavailable": "未预估",
+      "confirmEstimateUnavailableHint": "当前还没有精准预估数据。点击“精准预估”后，会为本次任务获取更准确的积分消耗。",
+      "confirmEstimateLoadingHint": "正在获取精准预估，拿到结果后会立即展示本次任务的积分消耗。",
+      "confirmEstimatePanelTitle": "积分信息",
+      "confirmNoCreditsTitle": "积分不足，购买积分后继续",
+      "confirmPaidOfferDesc": "如果希望完整翻译本次任务，可以先补充积分；如果想现在开始，也可以先翻译当前积分可覆盖的部分。",
+      "confirmPaidOfferTitle": "已订阅付费计划",
+      "confirmPartialTitle": "积分不足，可先翻译部分内容",
+      "confirmPricingFeatureCredits": "订阅赠送\n最高 800 万积分",
+      "confirmPricingFeatureModel": "GPT 5.6等模型",
+      "confirmPricingFeatureSpeed": "翻译速度\nx2",
+      "confirmPricingOfferDesc": "继续创建任务前，需要先订阅套餐；如果暂时不想订阅，也可以仅购买积分。",
+      "confirmPricingOfferTitle": "订阅套餐",
+      "confirmPricingTitle": "积分不足，请先订阅或购买积分",
+      "confirmReadyTitle": "确认翻译任务",
+      "confirmBasicTrialAndStart": "开启 Basic 试用",
+      "confirmSelectedPlanAndStart": "按所选套餐继续",
+      "confirmRecommendedPlan": "推荐套餐",
+      "confirmSelectedPlanSecondary": "改选月付套餐",
+      "confirmStartNow": "启动翻译",
+      "confirmStartPartial": "先翻译可覆盖部分",
+      "confirmTaskDetailTitle": "任务配置",
+      "confirmTrialFeatureModel": "1,500,000 Credit/Month",
+      "confirmTrialFeatureModelValue": "$7.99/month",
+      "confirmTrialOfferTitle": "5 Days Free trial",
+      "confirmTrialTitle": "积分不足，可开启免费试用",
+      "confirmViewPlans": "查看套餐",
+      "confirmPolishCredits": "其中 AI 润色约 {{credits}} 积分"
+    },
+    "job": {
+      "creditsShort": "{{formattedCount}} 积分"
+    },
+    "notice": {
+      "quotaInsufficient": "额度不足，已自动暂停。",
+      "quotaInsufficientPartial": "积分不足。部分资源已翻译并写回。添加积分并选择“继续”以继续。",
+      "quotaInsufficientPartialPolish": "积分不足。部分正文已润色并写回，其余仍是译文。添加积分并选择「继续」以继续润色。"
+    },
+    "stage": {
+      "init": "初始化",
+      "translate": "翻译",
+      "polish": "润色",
+      "writeback": "写回"
+    },
+    "status": {
+      "CANCELLED": "已取消",
+      "COMPLETED": "已完成",
+      "CREATED": "已创建",
+      "FAILED": "失败",
+      "INIT_DONE": "初始化完成",
+      "INIT_QUEUED": "等待初始化",
+      "INITIALIZING": "初始化中",
+      "PAUSED": "已暂停",
+      "POLISH_QUEUED": "等待润色",
+      "POLISHING": "润色中",
+      "stopping": "正在暂停…",
+      "TRANSLATE_DONE": "翻译完成",
+      "TRANSLATE_QUEUED": "等待翻译",
+      "translateResumeQueued": "排队续译",
+      "TRANSLATING": "翻译中",
+      "VERIFY_QUEUED": "写回完成",
+      "VERIFYING": "写回完成",
+      "WRITEBACK_QUEUED": "等待写回",
+      "writebackResumeQueued": "排队写回",
+      "WRITING_BACK": "写回 Shopify 中"
+    },
+    "tasks": {
+      "cancelled": "已取消",
+      "cancelTask": "取消任务",
+      "collapse": "收起",
+      "createdHint": "已在下方创建 {{count}} 个任务，系统会在这里持续更新进度。",
+      "currentHelper": "优先处理进行中、暂停中和失败的任务。",
+      "deleteConfirmDesc": "会清除任务记录及其翻译内容数据，不可恢复。",
+      "deleteConfirmTitle": "删除该任务？",
+      "deleteRecord": "删除记录",
+      "ended": "已结束",
+      "historyHelper": "这里保留已完成或已取消的任务记录。",
+      "historyPageTitle": "历史任务 · {{count}}",
+      "inProgress": "进行中：{{stage}}",
+      "justCreated": "刚创建",
+      "noCurrent": "当前没有进行中的任务",
+      "noCurrentDesc": "选好目标语言和翻译内容后，点击上方按钮创建第一个翻译任务。",
+      "noHistory": "暂无历史任务",
+      "noHistoryDesc": "完成或取消后的任务记录会显示在这里。",
+      "openHistory": "查看历史任务（{{count}}）",
+      "pause": "暂停",
+      "queuedForTranslate": "排队等待翻译",
+      "resume": "继续",
+      "syncLive": "实时同步",
+      "title": "任务列表 · {{count}}",
+      "view": "查看",
+      "waiting": "等待"
+    }
+  },
+  "contentImage": {
+    "search": "搜索",
+    "searchPlaceholder": "按标题搜索",
+    "column": {
+      "image": "图片",
+      "source": "来源",
+      "usedIn": "所在内容",
+      "status": "状态",
+      "actions": "操作",
+      "resource": "资源",
+      "product": "商品",
+      "article": "文章",
+      "page": "页面",
+      "translation": "翻译进度"
+    },
+    "usedIn": {
+      "unused": "未引用"
+    },
+    "usedInCount": "{{title}} 等 {{count}} 处",
+    "themeRow": {
+      "openPreview": "打开对照预览"
+    },
+    "source": {
+      "module": {
+        "theme": "主题",
+        "collection": "集合",
+        "other": "其他图片"
+      },
+      "collection": "集合 · {{title}}",
+      "collectionFeatured": "集合 · {{title}} · 封面图",
+      "collectionDescription": "集合 · {{title}} · 描述",
+      "themeMany": "{{title}}（{{count}} 处）"
+    },
+    "status": {
+      "translated": "已翻译",
+      "notTranslated": "未翻译"
+    },
+    "action": {
+      "translate": "翻译",
+      "replace": "上传译图",
+      "view": "查看",
+      "clear": "移除译图"
+    },
+    "compare": {
+      "heading": "对比图片",
+      "original": "原图",
+      "translated": "译图"
+    },
+    "empty": "这里没有找到 Shopify 图片",
+    "noLanguage": "请先添加目标语言再翻译图片。",
+    "translateDone": "图片已翻译",
+    "cleared": "已移除译图。",
+    "clearFailed": "清除译图失败",
+    "confirm": {
+      "taskDetailTitle": "任务详情",
+      "targetLanguage": "目标语言",
+      "imageCount": "图片数量",
+      "perImage": "每张消耗 {{credits}} 积分",
+      "partial": "当前积分约够翻译 {{count}} 张，用完后任务会自动暂停。",
+      "retranslate": "重新翻译已翻译的图片",
+      "start": "开始翻译"
+    },
+    "job": {
+      "failed": "{{count}} 张失败",
+      "status": {
+        "QUEUED": "排队中",
+        "RUNNING": "翻译中",
+        "PAUSED": "已暂停",
+        "COMPLETED": "已完成",
+        "CANCELLED": "已取消"
+      },
+      "pauseReason": {
+        "MANUAL": "已暂停",
+        "QUOTA_INSUFFICIENT": "已暂停：积分不足",
+        "SCOPE_MISSING": "已暂停：需要授权 Shopify 文件",
+        "SERVICE_ERROR": "已暂停：图片服务暂不可用，请稍后继续"
+      },
+      "notice": {
+        "scopeMissing": "需要授权 Shopify 文件才能继续翻译图片。",
+        "serviceError": "图片服务暂不可用，请稍后重试。"
+      },
+      "created": "图片任务已创建",
+      "active": "已有图片任务在进行中。打开任务查看进度，或等它完成后再开始。",
+      "activeOther": "已有「{{kind}}」任务在进行中。同时只能跑一个图片任务。",
+      "kind": {
+        "product": "产品图片",
+        "content": "内容图片"
+      },
+      "viewResult": "查看结果",
+      "title": "{{kind}} · {{language}}",
+      "imagesShort": "{{done}}/{{total}} 张"
+    },
+    "home": {
+      "title": "图片翻译",
+      "description": "翻译产品、文章、页面、集合、其他 Shopify 文件与主题图上的文字，以及店面上采集的第三方图片中的文字。",
+      "button": "翻译图片",
+      "embedHint": "需要开启 Ciwi Switcher 主题嵌入，译图才会在店面生效。"
+    },
+    "clearedMany": "已清除 {{count}} 张译图",
+    "clearManyPartial": "{{count}} 张中有 {{failed}} 张清除失败",
+    "clearConfirm": {
+      "heading": "移除译图",
+      "body": "要移除 {{count}} 张 {{language}} 译图吗？店铺将恢复显示原图。Ciwi 会尝试删除它上传到 Shopify 文件中的译图。"
+    },
+    "statusTab": {
+      "all": "全部",
+      "active": "上架",
+      "draft": "草稿",
+      "archived": "已归档",
+      "unlisted": "未列出",
+      "published": "已发布",
+      "unpublished": "未发布"
+    },
+    "storeStatus": {
+      "ACTIVE": "上架",
+      "DRAFT": "草稿",
+      "ARCHIVED": "已归档",
+      "UNLISTED": "未列出",
+      "PUBLISHED": "已发布",
+      "UNPUBLISHED": "未发布",
+      "READY": "已就绪",
+      "PROCESSING": "处理中",
+      "FAILED": "失败",
+      "UPLOADED": "已上传"
+    },
+    "resourceEmpty": {
+      "product": "没有找到带图片的商品",
+      "article": "没有找到带图片的文章",
+      "page": "没有找到带图片的页面",
+      "file": "没有其他 Shopify 文件图片",
+      "theme": "当前发布主题没有引用可翻译的图片",
+      "collection": "没有找到带图片的集合",
+      "metafield": "上次扫描没有自定义字段图片"
+    },
+    "failed": {
+      "hint": "当前语言下有 {{count}} 张图在最近的批量任务中翻译失败。进入对应资源查看状态并重新翻译。"
+    },
+    "resourceTranslationCoverage": "已译 {{translated}}/{{total}}",
+    "resourceTranslationFailuresOnly": "{{count}} 张失败",
+    "resourceTranslationFailureTooltip": "最近任务中有 {{count}} 张失败，进入该资源查看详情。",
+    "collectFailed": "无法加载所选资源的图片，请重试。",
+    "noImagesInSelection": "所选资源里没有图片。",
+    "truncatedSelection": "图片过多，将先翻译前 500 张（最多 20 个资源）。",
+    "resourceMissing": "找不到这个资源。",
+    "fileSearchPlaceholder": "按文件名搜索",
+    "jobResult": {
+      "missing": "找不到这个图片任务。",
+      "emptyItems": "这个任务没有可展示的图片。已翻译的图可能被跳过了。",
+      "summaryLine": "{{done}}/{{total}} 张 · 已用 {{credits}} 积分",
+      "column": {
+        "preview": "预览"
+      }
+    },
+    "item": {
+      "PENDING": "排队中",
+      "DONE": "已翻译",
+      "FAILED": "失败",
+      "SKIPPED": "已跳过"
+    },
+    "title": "内容图片",
+    "rowStatus": {
+      "waitingInJob": "排队中"
+    },
+    "resourceImageCount_one": "{{count}} 张图片",
+    "resourceImageCount_other": "{{count}} 张图片",
+    "insufficientCredits": "积分不够，无法翻译图片。"
+  },
+  "productImage": {
+    "title": "产品图片"
+  },
+  "articleImage": {
+    "title": "文章图片"
+  },
+  "themeImage": {
+    "title": "主题图片",
+    "page": {
+      "404": "404",
+      "index": "首页",
+      "product": "产品",
+      "collection": "集合",
+      "page": "页面",
+      "blog": "博客",
+      "article": "文章",
+      "cart": "购物车",
+      "search": "搜索",
+      "password": "密码页",
+      "list-collections": "集合列表",
+      "gift_card": "礼品卡",
+      "settings": "主题设置",
+      "header-group": "页头",
+      "footer-group": "页脚"
+    },
+    "field": {
+      "image": "图片",
+      "mobile_image": "移动端图片",
+      "logo": "Logo"
+    }
+  },
+  "switcherImage": {
+    "title": "第三方图片",
+    "emptyPages": "还没有从店面采集到带地址的图片。请打开已嵌入 Ciwi Switcher 的店面后再刷新。",
+    "emptyPage": "这一页还没有采集到图片。",
+    "searchPlaceholder": "按页面路径搜索",
+    "column": {
+      "path": "页面路径",
+      "coverage": "已译"
+    },
+    "coverage": "{{translated}}/{{total}}"
   }
 }

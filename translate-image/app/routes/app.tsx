@@ -3,7 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   json,
   Link,
@@ -39,6 +39,20 @@ import { FilesAccessBanner } from "~/lib/FilesAccessBanner";
 import { useResumeFilesGrant } from "~/lib/filesAccess";
 import { hasWriteFilesScope } from "~/lib/writeFilesScope";
 import { bootMark } from "~/server/bootTrace.server";
+import { AddCreaditsModal } from "~/routes/app._index/components/addCreditsModal";
+import { OPEN_CREDITS_PURCHASE_MODAL_EVENT } from "~/utils/creditsPurchaseModal";
+
+function GlobalCreditsPurchaseModal() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(OPEN_CREDITS_PURCHASE_MODAL_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_CREDITS_PURCHASE_MODAL_EVENT, onOpen);
+  }, []);
+  return (
+    <AddCreaditsModal openModal={open} onClose={() => setOpen(false)} action="images" />
+  );
+}
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -285,6 +299,7 @@ export default function App() {
           </div>
         ) : null}
         <Outlet />
+        <GlobalCreditsPurchaseModal />
       </ConfigProvider>
     </AppProvider>
   );

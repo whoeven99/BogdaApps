@@ -6,12 +6,15 @@ import { deductCredits, precheckCredits } from "~/server/billing/quota.server";
 import {
   DEFAULT_IMAGE_TRANSLATE_MODEL,
   IMAGE_TRANSLATE_ADVANCE_MODEL,
+  IMAGE_TRANSLATE_MSG_SAVE_FAILED,
   formatImageTranslateErrorLog,
   imageTranslateCredits,
   imageTranslateErrorCode,
   imageTranslateFailMessage,
   pictureUrlKey,
+  resolveImageTranslateModel,
   translateImageToShopifyFiles,
+  type ShopifyFilesGraphql,
 } from "./imageTranslate";
 import { upsertUserPictureFile } from "./picture.server";
 import { adminFilesGraphql, sessionCanWriteFiles } from "./shopifyFilesAdmin.server";
@@ -22,12 +25,71 @@ type AdminGraphqlClient = {
 
 export type MerchantImageModel = "standard" | "advance";
 
-function resolveMerchantModel(raw: unknown): MerchantImageModel {
-  return raw === "advance" ? "advance" : "standard";
+export class ImageTranslateQuotaError extends Error {
+  constructor() {
+    super(IMAGE_TRANSLATE_INSUFFICIENT_CREDITS);
+    this.name = "ImageTranslateQuotaError";
+  }
+}
+
+function resolveRunModel(raw: unknown): string {
+  if (raw === "advance") return IMAGE_TRANSLATE_ADVANCE_MODEL;
+  if (raw === "standard") return DEFAULT_IMAGE_TRANSLATE_MODEL;
+  return resolveImageTranslateModel(raw);
 }
 
 function fail(errorMsg: string, errorCode = 10001) {
   return { success: false, errorCode, errorMsg, response: null as string | null };
+}
+
+/** 单张与批量共用：预检额度 → Gemini → Files → UserPicture → 扣费。失败抛错。 */
+export async function runTranslateImageItem(args: {
+  shop: string;
+  graphql: ShopifyFilesGraphql;
+  imageId: string;
+  imageUrl: string;
+  targetLanguage: string;
+  model: string;
+  alt?: string;
+}): Promise<{ url: string; fileId: string }> {
+  const credits = imageTranslateCredits(args.model);
+  const quota = await precheckCredits(args.shop, credits);
+  if (!quota) throw new ImageTranslateQuotaError();
+
+  const uploaded = await translateImageToShopifyFiles({
+    graphql: args.graphql,
+    imageUrl: args.imageUrl,
+    targetLanguage: args.targetLanguage,
+    model: args.model,
+    alt: args.alt,
+  });
+  const saved = await upsertUserPictureFile({
+    graphql: args.graphql,
+    input: {
+      shop: args.shop,
+      imageId: args.imageId,
+      imageBeforeUrl: args.imageUrl,
+      languageCode: args.targetLanguage,
+      imageAfterUrl: uploaded.url,
+      imageAfterFileId: uploaded.fileId,
+      altBeforeTranslation: args.alt,
+    },
+  });
+  if (!saved.success) {
+    throw new Error(saved.errorMsg || IMAGE_TRANSLATE_MSG_SAVE_FAILED);
+  }
+  try {
+    await deductCredits(args.shop, credits, {
+      source: "image",
+      model: args.model,
+      languageCode: args.targetLanguage,
+    });
+  } catch (err) {
+    console.error(
+      `[picture.deduct] shop=${args.shop} failed after Files save ${formatImageTranslateErrorLog(err)}`,
+    );
+  }
+  return { url: uploaded.url, fileId: uploaded.fileId };
 }
 
 export async function translateImageToFiles(args: {
@@ -49,46 +111,18 @@ export async function translateImageToFiles(args: {
   if (!pictureUrlKey(imageUrl)) return fail("INVALID_IMAGE_URL", 400);
   if (!sessionCanWriteFiles(args.session)) return fail(IMAGE_TRANSLATE_SCOPE_MISSING, 403);
 
-  const merchantModel = resolveMerchantModel(args.model);
-  const model =
-    merchantModel === "advance" ? IMAGE_TRANSLATE_ADVANCE_MODEL : DEFAULT_IMAGE_TRANSLATE_MODEL;
-  const credits = imageTranslateCredits(model);
-  const quota = await precheckCredits(args.shop, credits);
-  if (!quota) return fail(IMAGE_TRANSLATE_INSUFFICIENT_CREDITS, 403);
-
+  const model = resolveRunModel(args.model);
   const graphql = adminFilesGraphql(args.admin);
   try {
-    const uploaded = await translateImageToShopifyFiles({
+    const uploaded = await runTranslateImageItem({
+      shop: args.shop,
       graphql,
+      imageId,
       imageUrl,
       targetLanguage,
       model,
       alt: args.alt,
     });
-    const saved = await upsertUserPictureFile({
-      graphql,
-      input: {
-        shop: args.shop,
-        imageId,
-        imageBeforeUrl: imageUrl,
-        languageCode: targetLanguage,
-        imageAfterUrl: uploaded.url,
-        imageAfterFileId: uploaded.fileId,
-        altBeforeTranslation: args.alt,
-      },
-    });
-    if (!saved.success) return fail(saved.errorMsg || "SAVE_FAILED");
-    try {
-      await deductCredits(args.shop, credits, {
-        source: "image",
-        model,
-        languageCode: targetLanguage,
-      });
-    } catch (err) {
-      console.error(
-        `[picture.deduct] shop=${args.shop} failed after Files save ${formatImageTranslateErrorLog(err)}`,
-      );
-    }
     return {
       success: true,
       errorCode: 0,
@@ -98,6 +132,9 @@ export async function translateImageToFiles(args: {
     };
   } catch (err) {
     console.error(`[picture.translate] shop=${args.shop} ${formatImageTranslateErrorLog(err)}`);
+    if (err instanceof ImageTranslateQuotaError) {
+      return fail(IMAGE_TRANSLATE_INSUFFICIENT_CREDITS, 403);
+    }
     if (imageTranslateErrorCode(err) === "SHOPIFY_SCOPE_MISSING") {
       return fail(IMAGE_TRANSLATE_SCOPE_MISSING, 403);
     }
