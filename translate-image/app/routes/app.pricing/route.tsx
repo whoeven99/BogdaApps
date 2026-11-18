@@ -28,7 +28,7 @@ import { authenticate } from "~/shopify.server";
 import { resolveShouldCreateTestCharge } from "~/server/billing/chargeGuardApply.server";
 import { listEnabledCatalog } from "~/server/billing/plans/planCatalog.server";
 import { resolveCancelSubscriptionGid } from "~/server/billing/resolveSubscriptionGid.server";
-import { BILLING_INTERVAL, PLAN_KIND } from "~/server/billing/types.server";
+import { BILLING_INTERVAL, PLAN_KIND } from "~/server/billing/types";
 import { useFetcher, useLoaderData } from "@remix-run/react";
 import {
   AddCreaditsModal,
