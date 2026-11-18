@@ -96,3 +96,33 @@ model UserPicture {
   @@index([shop, imageId, languageCode, isDelete])
   @@index([shop, languageCode, urlKey])
 }
+
+model SwitcherImage {
+  id             String   @id @default(cuid())
+  shop           String
+  urlKey         String
+  imageBeforeUrl String
+  lastPagePath   String?
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([shop, urlKey])
+  @@index([shop, lastSeenAt])
+}
+
+model SwitcherImagePage {
+  id         String   @id @default(cuid())
+  shop       String
+  urlKey     String
+  pagePath   String
+  targetCode String?
+  lastSeenAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([shop, urlKey, pagePath, targetCode])
+  @@index([shop, targetCode, pagePath, lastSeenAt])
+  @@index([shop, lastSeenAt])
+}

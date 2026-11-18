@@ -7,7 +7,20 @@ import {
   type StorefrontUrlKeyPicture,
   type UserPicturePayload,
 } from "./picture.server";
+import { resolvePictureReadLanguage } from "./storefrontPictureLanguage";
+import { loadCachedShopLocales } from "~/server/storefront/shopLocalesCache.server";
 import { ok, fail, type BaseResponse } from "~/server/storefront/response.server";
+
+async function languageForPictureRead(shop: string, languageCode: string): Promise<string> {
+  const trimmed = String(languageCode ?? "").trim();
+  if (!trimmed) return trimmed;
+  try {
+    const { locales } = await loadCachedShopLocales(shop);
+    return resolvePictureReadLanguage(trimmed, locales);
+  } catch {
+    return trimmed;
+  }
+}
 
 export async function getStorefrontProductPictures(args: {
   shop: string;
@@ -46,7 +59,10 @@ export async function getStorefrontPicturesByUrlKeys(args: {
   languageCode: string;
   urlKeys: unknown;
 }): Promise<BaseResponse<StorefrontUrlKeyPicture[]>> {
-  const languageCode = String(args.languageCode ?? "").trim();
+  const languageCode = await languageForPictureRead(
+    args.shop,
+    String(args.languageCode ?? "").trim(),
+  );
   const urlKeys = normalizeUrlKeys(args.urlKeys);
   if (!languageCode) return fail(400, "languageCode required");
   try {

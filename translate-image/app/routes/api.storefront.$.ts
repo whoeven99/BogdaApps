@@ -3,11 +3,15 @@ import { verifyAppProxyHmac } from "~/server/storefront/auth.server";
 import { readThroughStorefrontCache } from "~/server/storefront/cache.server";
 import { fail } from "~/server/storefront/response.server";
 import { normalizeUrlKeys } from "~/server/picture/picture.server";
+import { resolvePictureReadLanguage } from "~/server/picture/storefrontPictureLanguage";
 import {
   getStorefrontPicturesByUrlKeys,
   getStorefrontProductPictures,
   getStorefrontShopPictures,
 } from "~/server/picture/storefrontPictures.server";
+import { collectSwitcherImages } from "~/server/storefront/pictureCollect.server";
+import { loadCachedShopLocales } from "~/server/storefront/shopLocalesCache.server";
+import { allowStorefrontCollect } from "~/server/storefront/storefrontCollectRateLimit.server";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -99,18 +103,47 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
     if (path === "picture/getPictureDataByUrlKeys") {
       const urlKeys = normalizeUrlKeys(body.urlKeys);
+      let readLanguage = languageCode;
+      try {
+        const { locales } = await loadCachedShopLocales(auth.shop);
+        readLanguage = resolvePictureReadLanguage(languageCode, locales) || languageCode;
+      } catch {
+        readLanguage = languageCode;
+      }
       const result = await readThroughStorefrontCache(
         "picture",
         auth.shop,
-        ["urlKeys", languageCode, [...urlKeys].sort().join(",")],
+        ["urlKeys", readLanguage, [...urlKeys].sort().join(",")],
         () =>
           getStorefrontPicturesByUrlKeys({
             shop: auth.shop,
-            languageCode,
+            languageCode: readLanguage,
             urlKeys,
           }),
       );
       return json(result, { headers: CORS_HEADERS });
+    }
+    if (path === "picture/collect") {
+      const allowed = await allowStorefrontCollect(auth.shop);
+      const result = allowed
+        ? await collectSwitcherImages({
+            shop: auth.shop,
+            images: body.images,
+            pagePath: body.pagePath,
+            languageCode: body.languageCode,
+          })
+        : {
+            accepted: false as const,
+            reason: "rate_limited",
+            inserted: 0,
+            updated: 0,
+            skipped: 0,
+            total: 0,
+          };
+      return json(
+        { success: true, errorCode: null, errorMsg: null, response: result },
+        { status: 202, headers: CORS_HEADERS },
+      );
     }
   } catch (err) {
     console.error(`[storefront] ${path} failed shop=${auth.shop}`, err);

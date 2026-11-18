@@ -1,10 +1,5 @@
 import { Card, Row, Col, Button, Typography, Flex } from "antd";
-import {
-  PictureOutlined,
-  BgColorsOutlined,
-  FileImageOutlined,
-  AuditOutlined,
-} from "@ant-design/icons";
+import { GlobalOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { useFetcher, useNavigate } from "@remix-run/react";
@@ -34,6 +29,11 @@ export default function ThemeModule({ shop }: { shop: string }) {
       title: t("Article image"),
       icon: "&#xe615;",
       key: "article",
+    },
+    {
+      title: t("Third-party images"),
+      icon: "global",
+      key: "third-party",
     },
     // {
     //   title: "Alt Text generate",
@@ -73,6 +73,9 @@ export default function ThemeModule({ shop }: { shop: string }) {
       case "theme":
         navigate("/app/theme");
         break;
+      case "third-party":
+        navigate("/app/third-party");
+        break;
     }
   };
   const handleTranslate = (item: any) => {
@@ -105,6 +108,9 @@ export default function ThemeModule({ shop }: { shop: string }) {
         break;
       case "theme":
         navigate("/app/theme");
+        break;
+      case "third-party":
+        navigate("/app/third-party");
         break;
     }
   };
@@ -147,11 +153,15 @@ export default function ThemeModule({ shop }: { shop: string }) {
                   justifyContent: "center",
                 }}
               >
-                <i
-                  className="iconfont"
-                  style={{ fontSize: 48 }}
-                  dangerouslySetInnerHTML={{ __html: item.icon }}
-                />
+                {item.key === "third-party" ? (
+                  <GlobalOutlined style={{ fontSize: 48 }} />
+                ) : (
+                  <i
+                    className="iconfont"
+                    style={{ fontSize: 48 }}
+                    dangerouslySetInnerHTML={{ __html: item.icon }}
+                  />
+                )}
               </div>
 
               {/* 底部按钮 */}

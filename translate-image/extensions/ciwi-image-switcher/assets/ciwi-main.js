@@ -1,5 +1,4 @@
-import * as API from "./ciwi-api.js";
-import { GetContentImageData } from "./ciwi-api.js";
+import { CollectSwitcherImageData, GetContentImageData } from "./ciwi-api.js";
 
 function isLikelyBotByUA() {
   const ua = navigator.userAgent.toLowerCase();
@@ -347,17 +346,19 @@ function observeContentImages(translatedByKey) {
   _contentImageObserver.observe(document.body, { childList: true, subtree: true });
 }
 
+function currentStorefrontLanguage() {
+  return (
+    document.querySelector('input[name="image_language_code"]')?.value ||
+    document.documentElement.lang ||
+    ""
+  );
+}
+
 async function ContentImageTranslate() {
-  const blockId = document.querySelector('input[name="image_block_id"]')?.value;
-  const ciwiBlock = blockId
-    ? document.querySelector(`#shopify-block-${blockId}`)
-    : document.querySelector("#image_queryCiwiId")?.closest("[id]");
   const shop =
-    ciwiBlock?.querySelector?.("#image_queryCiwiId")?.value ||
-    document.querySelector("#image_queryCiwiId")?.value;
-  const language =
-    ciwiBlock?.querySelector?.('input[name="image_language_code"]')?.value ||
-    document.querySelector('input[name="image_language_code"]')?.value;
+    document.querySelector("#image_queryCiwiId")?.value ||
+    document.querySelector('input[name="image_queryCiwiId"]')?.value;
+  const language = currentStorefrontLanguage();
   if (!shop || !language) return;
 
   const imagesByKey = collectTranslatableMediaByKey(collectScanRoots());
@@ -379,24 +380,313 @@ async function ContentImageTranslate() {
   observeContentImages(translatedByKey);
 }
 
-window.onload = async () => {
-  const blockId = document.querySelector('input[name="image_block_id"]')?.value;
-  if (!blockId) return console.warn("blockId not found");
-  const ciwiBlock = document.querySelector(`#shopify-block-${blockId}`);
-  if (!ciwiBlock) return console.warn("ciwiBlock not found");
-  const shop = ciwiBlock.querySelector("#image_queryCiwiId");
+const SWITCHER_IMAGE_MIN_ATTR_PX = 80;
+const SWITCHER_IMAGE_POST_CHUNK = 100;
+const SWITCHER_IMAGE_OBSERVE_MS = 15000;
+const SWITCHER_IMAGE_POSTED_PREFIX = "ciwi_sw_img_posted:";
 
-  const reason = isLikelyBotByUA();
-  if (reason) {
-    console.warn("⚠️ 疑似爬虫访问", reason);
-    API.CrawlerDDetectionReport({
-      shop: shop.value,
-      blockId,
-      ua: navigator.userAgent,
-      reason,
-    });
+function isThemeEditor() {
+  const referrer = String(document.referrer || "");
+  if (document.documentElement.classList.contains("shopify-design-mode")) return true;
+  if (window.Shopify?.designMode === true) return true;
+  if (window.Shopify?.visualPreviewMode === true) return true;
+  if (/admin\.shopify\.com\/.*\/themes\/\d+\/editor/i.test(referrer)) return true;
+  if (/shopifypreview|preview_theme_id/i.test(window.location.href)) return true;
+  return false;
+}
+
+function scheduleIdle(fn, timeout = 2000) {
+  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+    window.requestIdleCallback(fn, { timeout });
     return;
   }
+  setTimeout(fn, Math.min(timeout, 2000));
+}
 
-  await ContentImageTranslate();
-};
+function originalImgSrc(img) {
+  if (!(img instanceof HTMLImageElement)) return "";
+  return (
+    img.dataset.ciwiOriginalSrc ||
+    img.currentSrc ||
+    img.getAttribute("src") ||
+    img.getAttribute("data-src") ||
+    ""
+  );
+}
+
+function isTinySwitcherImg(img) {
+  const w = Number(img.getAttribute("width"));
+  const h = Number(img.getAttribute("height"));
+  if (Number.isFinite(w) && w > 0 && w < SWITCHER_IMAGE_MIN_ATTR_PX) return true;
+  if (Number.isFinite(h) && h > 0 && h < SWITCHER_IMAGE_MIN_ATTR_PX) return true;
+  return false;
+}
+
+function collectibleSwitcherImg(img) {
+  if (!(img instanceof HTMLImageElement)) return null;
+  if (isTinySwitcherImg(img)) return null;
+  const src = originalImgSrc(img);
+  if (!src || /^(data:|blob:)/i.test(src)) return null;
+  if (shopifyContentImageUrlKey(src)) return null;
+  const urlKey = externalContentImageUrlKey(src);
+  if (!urlKey) return null;
+  return { src, urlKey };
+}
+
+function collectSwitcherImgElements(node, out) {
+  if (!node) return;
+  try {
+    if (node instanceof HTMLImageElement) out.push(node);
+    node.querySelectorAll?.("img")?.forEach((img) => out.push(img));
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (node.shadowRoot) collectSwitcherImgElements(node.shadowRoot, out);
+    node.querySelectorAll?.("*")?.forEach((el) => {
+      if (el.shadowRoot) collectSwitcherImgElements(el.shadowRoot, out);
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+function collectSwitcherImgsFromRoots() {
+  const byKey = new Map();
+  for (const root of collectScanRoots()) {
+    const imgs = [];
+    collectSwitcherImgElements(root, imgs);
+    for (const img of imgs) {
+      const item = collectibleSwitcherImg(img);
+      if (!item || byKey.has(item.urlKey)) continue;
+      byKey.set(item.urlKey, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
+function noteSwitcherImgsFrom(node, pending) {
+  const imgs = [];
+  collectSwitcherImgElements(node, imgs);
+  for (const img of imgs) {
+    const item = collectibleSwitcherImg(img);
+    if (item) pending.set(item.urlKey, item);
+  }
+}
+
+function loadPostedSwitcherKeys(shop, pagePath) {
+  const posted = new Set();
+  try {
+    const raw = sessionStorage.getItem(`${SWITCHER_IMAGE_POSTED_PREFIX}${shop}:${pagePath}`);
+    if (raw) JSON.parse(raw).forEach((key) => posted.add(key));
+  } catch {
+    /* ignore */
+  }
+  return posted;
+}
+
+function savePostedSwitcherKeys(shop, pagePath, posted) {
+  try {
+    sessionStorage.setItem(
+      `${SWITCHER_IMAGE_POSTED_PREFIX}${shop}:${pagePath}`,
+      JSON.stringify([...posted]),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function CollectSwitcherImages(shop) {
+  const shopName = typeof shop === "string" ? shop : shop?.value;
+  if (!shopName) return;
+  const pagePath = window.location.pathname || "/";
+  const languageCode = currentStorefrontLanguage();
+  const posted = loadPostedSwitcherKeys(shopName, pagePath);
+  const inFlight = new Set();
+  const pending = new Map();
+  const observedRoots = new WeakSet();
+  const frameLoads = [];
+
+  const commitPostedKeys = (keys) => {
+    let changed = false;
+    for (const key of keys) {
+      if (posted.has(key)) continue;
+      posted.add(key);
+      changed = true;
+    }
+    if (changed) savePostedSwitcherKeys(shopName, pagePath, posted);
+  };
+
+  const postChunk = async (chunk) => {
+    const keys = chunk.map((item) => item.urlKey);
+    try {
+      const data = await CollectSwitcherImageData({
+        shopName,
+        images: chunk,
+        pagePath,
+        languageCode,
+      });
+      if (data?.success === true && data?.response?.accepted !== false) {
+        commitPostedKeys(keys);
+      }
+    } catch {
+      /* CollectSwitcherImageData already logs */
+    } finally {
+      keys.forEach((key) => inFlight.delete(key));
+    }
+  };
+
+  const postSeen = (items) => {
+    const fresh = items.filter(
+      (item) => item && !posted.has(item.urlKey) && !inFlight.has(item.urlKey),
+    );
+    if (!fresh.length) return;
+    fresh.forEach((item) => inFlight.add(item.urlKey));
+    for (let i = 0; i < fresh.length; i += SWITCHER_IMAGE_POST_CHUNK) {
+      void postChunk(fresh.slice(i, i + SWITCHER_IMAGE_POST_CHUNK));
+    }
+  };
+
+  let flushTimer = 0;
+  const flushPending = () => {
+    if (flushTimer) {
+      window.clearTimeout(flushTimer);
+      flushTimer = 0;
+    }
+    if (pending.size === 0) return;
+    const items = [...pending.values()];
+    pending.clear();
+    postSeen(items);
+  };
+  const scheduleFlush = () => {
+    if (flushTimer) return;
+    flushTimer = window.setTimeout(() => {
+      flushTimer = 0;
+      flushPending();
+    }, 400);
+  };
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === "attributes") {
+        noteSwitcherImgsFrom(mutation.target, pending);
+        continue;
+      }
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof Element) && node?.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
+          return;
+        }
+        noteSwitcherImgsFrom(node, pending);
+        watchSwitcherImageTree(node);
+      });
+    }
+    scheduleFlush();
+  });
+
+  const observeRoot = (root) => {
+    if (!root || observedRoots.has(root)) return;
+    observedRoots.add(root);
+    try {
+      observer.observe(root, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "srcset", "data-src"],
+      });
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const watchFrame = (frame) => {
+    const attach = () => {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc?.body) return;
+        observeRoot(doc.body);
+        noteSwitcherImgsFrom(doc.body, pending);
+        scheduleFlush();
+      } catch {
+        /* cross-origin */
+      }
+    };
+    attach();
+    frame.addEventListener("load", attach);
+    frameLoads.push([frame, attach]);
+  };
+
+  const watchSwitcherImageTree = (node) => {
+    if (!node) return;
+    try {
+      if (node.shadowRoot) {
+        observeRoot(node.shadowRoot);
+        watchSwitcherImageTree(node.shadowRoot);
+      }
+      node.querySelectorAll?.("*")?.forEach((el) => {
+        if (el.shadowRoot) {
+          observeRoot(el.shadowRoot);
+          watchSwitcherImageTree(el.shadowRoot);
+        }
+      });
+      node.querySelectorAll?.("iframe")?.forEach(watchFrame);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  postSeen(collectSwitcherImgsFromRoots());
+  observeRoot(document.body);
+  watchSwitcherImageTree(document.body);
+  window.setTimeout(() => {
+    observer.disconnect();
+    frameLoads.forEach(([frame, attach]) => {
+      try {
+        frame.removeEventListener("load", attach);
+      } catch {
+        /* ignore */
+      }
+    });
+    flushPending();
+    postSeen(collectSwitcherImgsFromRoots());
+  }, SWITCHER_IMAGE_OBSERVE_MS);
+}
+
+function watchLanguageAndHistory() {
+  let lastLang = currentStorefrontLanguage();
+  const rerunIfLangChanged = () => {
+    const next = currentStorefrontLanguage();
+    if (!next || next === lastLang) return;
+    lastLang = next;
+    void ContentImageTranslate();
+  };
+  const langObserver = new MutationObserver(rerunIfLangChanged);
+  langObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["lang"],
+  });
+  window.addEventListener("pageshow", () => {
+    void ContentImageTranslate();
+  });
+  window.addEventListener("popstate", rerunIfLangChanged);
+}
+
+function startImageSwitcher() {
+  if (isLikelyBotByUA()) return;
+  const shop = document.querySelector("#image_queryCiwiId")?.value;
+  const runReplace = () => {
+    void ContentImageTranslate();
+  };
+  if (isThemeEditor()) {
+    runReplace();
+    return;
+  }
+  scheduleIdle(runReplace, 2000);
+  scheduleIdle(() => CollectSwitcherImages(shop), 2000);
+  watchLanguageAndHistory();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startImageSwitcher, { once: true });
+} else {
+  startImageSwitcher();
+}

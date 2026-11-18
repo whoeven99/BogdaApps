@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import {
+  canonicalHttpsImageUrl,
   normalizeUrlKeys,
   pictureUrlKey,
   stripShopifyImageSizeSuffix,
@@ -79,6 +80,14 @@ test("pictureUrlKey 外部 https 走 ext:，不剥文件名尺寸", () => {
     pictureUrlKey("https://cdn.example.com/hero_720x.jpg?w=1"),
     "ext:cdn.example.com/hero_720x.jpg",
   );
+});
+
+test("canonicalHttpsImageUrl 去掉 query / hash", () => {
+  assert.equal(
+    canonicalHttpsImageUrl("https://cdn.judgeme.com/reviews/a.jpg?w=400#x"),
+    "https://cdn.judgeme.com/reviews/a.jpg",
+  );
+  assert.equal(canonicalHttpsImageUrl("http://cdn.judgeme.com/reviews/a.jpg"), null);
 });
 
 test("normalizeStorefrontCacheKeyPart 短 extra 原样保留", () => {

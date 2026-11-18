@@ -9,7 +9,8 @@ import {
   uploadImageToShopifyFiles,
   type ShopifyFilesGraphql,
 } from "./imageTranslate";
-import { normalizeUrlKeys } from "./imageUrlKey";
+import { isContentImageId, pickLatestContentPictureRow } from "~/lib/contentPicture";
+import { canonicalHttpsImageUrl, normalizeUrlKeys } from "./imageUrlKey";
 import { pickPicturesByLanguage, productImageLookupIds } from "./productMedia";
 
 export { URL_KEY_LOOKUP_MAX, normalizeUrlKeys } from "./imageUrlKey";
@@ -99,6 +100,28 @@ function findUserPicture(key: UserPictureKey) {
   });
 }
 
+async function findExistingPictureRow(key: UserPictureKey) {
+  if (isContentImageId(key.imageId)) {
+    const rows = await prisma.userPicture.findMany({
+      where: {
+        shop: key.shop,
+        imageId: key.imageId,
+        languageCode: key.languageCode,
+        isDelete: false,
+      },
+      orderBy: { id: "desc" },
+      take: 8,
+    });
+    const latest = pickLatestContentPictureRow(rows);
+    if (latest) return latest;
+    return findUserPicture({
+      ...key,
+      imageBeforeUrl: canonicalHttpsImageUrl(key.imageBeforeUrl) || key.imageBeforeUrl,
+    });
+  }
+  return findUserPicture(key);
+}
+
 export async function listPicturesByImageId(shop: string, imageId: string): Promise<UserPicturePayload[]> {
   const rows = await prisma.userPicture.findMany({
     where: { shop, imageId, isDelete: false },
@@ -168,12 +191,11 @@ function toStorefrontUrlKeyItem(row: UserPicturePayload): StorefrontUrlKeyPictur
   return { urlKey: row.urlKey, imageAfterUrl, altAfterTranslation };
 }
 
-/** 按 urlKey 查译图 / alt；同 key 取 id 最新一行。 */
-export async function getPicturesByUrlKeys(args: {
+export async function listPicturesByUrlKeys(args: {
   shop: string;
   languageCode: string;
   urlKeys: string[];
-}): Promise<StorefrontUrlKeyPicture[]> {
+}): Promise<UserPicturePayload[]> {
   const keys = normalizeUrlKeys(args.urlKeys);
   const languageCode = String(args.languageCode ?? "").trim();
   if (!languageCode || keys.length === 0) return [];
@@ -191,7 +213,16 @@ export async function getPicturesByUrlKeys(args: {
     const payload = toPayload(row);
     if (payload.urlKey && !latest.has(payload.urlKey)) latest.set(payload.urlKey, payload);
   }
-  return [...latest.values()].flatMap((row) => {
+  return [...latest.values()];
+}
+
+/** 按 urlKey 查译图 / alt；同 key 取 id 最新一行。 */
+export async function getPicturesByUrlKeys(args: {
+  shop: string;
+  languageCode: string;
+  urlKeys: string[];
+}): Promise<StorefrontUrlKeyPicture[]> {
+  return (await listPicturesByUrlKeys(args)).flatMap((row) => {
     const item = toStorefrontUrlKeyItem(row);
     return item ? [item] : [];
   });
@@ -204,7 +235,7 @@ export async function persistImageAfterFileId(input: {
   languageCode: string;
   imageAfterFileId: string | null;
 }) {
-  const existing = await findUserPicture({
+  const existing = await findExistingPictureRow({
     shop: input.shop,
     imageId: input.imageId,
     imageBeforeUrl: input.imageBeforeUrl,
@@ -258,6 +289,10 @@ export async function upsertUserPicture(
 ): Promise<{ success: boolean; errorCode: number; errorMsg: string; response: UserPicturePayload | null }> {
   try {
     const urlKey = pictureUrlKey(input.imageBeforeUrl);
+    const imageBeforeUrl =
+      isContentImageId(input.imageId)
+        ? canonicalHttpsImageUrl(input.imageBeforeUrl) || input.imageBeforeUrl
+        : input.imageBeforeUrl;
     const data = {
       imageAfterUrl: input.imageAfterUrl,
       imageAfterFileId: input.imageAfterFileId,
@@ -266,19 +301,40 @@ export async function upsertUserPicture(
       urlKey,
       isDelete: false,
     };
+    if (isContentImageId(input.imageId)) {
+      const existing = await prisma.userPicture.findMany({
+        where: {
+          shop: input.shop,
+          imageId: input.imageId,
+          languageCode: input.languageCode,
+          isDelete: false,
+        },
+        orderBy: { id: "desc" },
+        take: 8,
+      });
+      const latest = pickLatestContentPictureRow(existing);
+      if (latest) {
+        const row = await prisma.userPicture.update({
+          where: { id: latest.id },
+          data: { ...data, imageBeforeUrl },
+        });
+        await invalidateStorefrontCache("picture", input.shop);
+        return ok(toPayload(row));
+      }
+    }
     const row = await prisma.userPicture.upsert({
       where: {
         shop_imageId_imageBeforeUrl_languageCode: {
           shop: input.shop,
           imageId: input.imageId,
-          imageBeforeUrl: input.imageBeforeUrl,
+          imageBeforeUrl,
           languageCode: input.languageCode,
         },
       },
       create: {
         shop: input.shop,
         imageId: input.imageId,
-        imageBeforeUrl: input.imageBeforeUrl,
+        imageBeforeUrl,
         languageCode: input.languageCode,
         ...data,
       },
@@ -311,7 +367,7 @@ export async function upsertUserPictureFile(args: {
   graphql: ShopifyFilesGraphql;
   input: UserPictureWriteInput & { imageAfterUrl: string; imageAfterFileId: string };
 }) {
-  const previous = await findUserPicture(args.input).catch(() => null);
+  const previous = await findExistingPictureRow(args.input).catch(() => null);
   const res = await upsertUserPicture(args.input);
   const oldFileId = previous?.imageAfterFileId;
   if (res.success && oldFileId && oldFileId !== args.input.imageAfterFileId) {
@@ -325,7 +381,7 @@ export async function clearUserPicture(
 ) {
   const { graphql, ...key } = args;
   try {
-    const existing = await findUserPicture(key);
+    const existing = await findExistingPictureRow(key);
     if (!existing) return fail(null, "NOT_FOUND");
     const deleted = await deleteOwnFileQuietly(graphql, key.shop, existing.imageAfterFileId);
     const updated = await prisma.userPicture.update({

@@ -108,3 +108,13 @@ export function externalImageUrlKey(url) {
 export function pictureUrlKey(url) {
   return imageUrlKey(url) ?? externalImageUrlKey(url) ?? "";
 }
+
+export function canonicalHttpsImageUrl(url) {
+  const parsed = parseUrl(url);
+  if (!parsed || parsed.protocol !== "https:") return null;
+  parsed.search = "";
+  parsed.hash = "";
+  parsed.username = "";
+  parsed.password = "";
+  return parsed.toString();
+}

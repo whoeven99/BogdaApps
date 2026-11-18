@@ -91,6 +91,31 @@ export async function GetShopImageData({ shopName, languageCode }) {
   }
 }
 
+export async function CollectSwitcherImageData({ shopName, images, pagePath, languageCode }) {
+  try {
+    if (!Array.isArray(images) || images.length === 0) {
+      return { success: true, errorCode: null, errorMsg: null, response: { accepted: true } };
+    }
+    const base = resolveStorefrontApiBase();
+    const { data } = await fetchJson(
+      `${base}/picture/collect?shopName=${encodeURIComponent(shopName)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ shopName, images, pagePath, languageCode }),
+      },
+    );
+    return data;
+  } catch (err) {
+    console.error("Error CollectSwitcherImageData:", err);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "collect_failed",
+      response: null,
+    };
+  }
+}
+
 export async function GetContentImageData({ shopName, urlKeys, languageCode }) {
   try {
     const base = resolveStorefrontApiBase();

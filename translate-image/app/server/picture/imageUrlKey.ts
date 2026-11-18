@@ -140,6 +140,17 @@ export function pictureUrlKey(url: string | null | undefined): string | null {
   return imageUrlKey(url) ?? externalImageUrlKey(url);
 }
 
+/** 去掉 query / hash，内容图 imageBeforeUrl 用，避免签名参数裂行。 */
+export function canonicalHttpsImageUrl(url: string): string | null {
+  const parsed = parseUrl(url);
+  if (!parsed || parsed.protocol !== "https:") return null;
+  parsed.search = "";
+  parsed.hash = "";
+  parsed.username = "";
+  parsed.password = "";
+  return parsed.toString();
+}
+
 /** 去掉 query / hash 的 https 地址，作为内容图 `UserPicture.imageBeforeUrl`。 */
 export function canonicalShopifyImageUrl(url: string): string | null {
   if (!imageUrlKey(url)) return null;
