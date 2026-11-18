@@ -1,6 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "~/db.server";
-import type { BillingLogEvent } from "./types.server";
+import { BILLING_LOG_EVENT, type BillingLogEvent } from "./types.server";
+
+function asMeta(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return { ...(value as Record<string, unknown>) };
+  }
+  return {};
+}
 
 export type AppendBillingLogParams = {
   shop: string;
@@ -12,8 +19,10 @@ export type AppendBillingLogParams = {
   metadata?: Record<string, unknown> | null;
 };
 
-export async function appendBillingLog(params: AppendBillingLogParams): Promise<void> {
-  await prisma.billingLog.create({
+export async function appendBillingLog(
+  params: AppendBillingLogParams,
+): Promise<{ id: string }> {
+  const row = await prisma.billingLog.create({
     data: {
       shop: params.shop,
       eventType: params.eventType,
@@ -23,7 +32,50 @@ export async function appendBillingLog(params: AppendBillingLogParams): Promise<
       usedCredits: params.usedCredits ?? null,
       metadata: (params.metadata ?? undefined) as Prisma.InputJsonValue,
     },
+    select: { id: true },
   });
+  return row;
+}
+
+export async function claimBillingLogFlag(
+  id: string,
+  flag: string,
+): Promise<boolean> {
+  const row = await prisma.billingLog.findUnique({
+    where: { id },
+    select: { metadata: true },
+  });
+  if (!row) return false;
+  const meta = asMeta(row.metadata);
+  if (meta[flag] === true) return false;
+  await prisma.billingLog.update({
+    where: { id },
+    data: { metadata: { ...meta, [flag]: true } as Prisma.InputJsonValue },
+  });
+  return true;
+}
+
+export async function claimStaffFeishuSent(
+  shop: string,
+  referenceId: string,
+): Promise<boolean> {
+  const row = await prisma.billingLog.findFirst({
+    where: {
+      shop,
+      referenceId,
+      eventType: {
+        in: [
+          BILLING_LOG_EVENT.SUBSCRIPTION_ACTIVATED,
+          BILLING_LOG_EVENT.SUBSCRIPTION_RENEWED,
+          BILLING_LOG_EVENT.TOKEN_PACK_PURCHASED,
+        ],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!row) return false;
+  return claimBillingLogFlag(row.id, "staffFeishuSent");
 }
 
 export async function hasBillingLog(

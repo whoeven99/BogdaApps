@@ -1,6 +1,10 @@
 import prisma from "~/db.server";
+import { scheduleUninstallFeishu } from "./lifecycleFeishuNotify.server";
+import { snapshotShopBilling } from "./snapshotShopBilling.server";
 
 export async function handleAppUninstalled(shop: string): Promise<void> {
+  const snap = await snapshotShopBilling(shop);
+  scheduleUninstallFeishu(snap);
   await prisma.account.updateMany({
     where: { shop },
     data: { plan: 1, planType: "Free", subscriptionGid: null },

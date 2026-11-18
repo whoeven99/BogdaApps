@@ -1,9 +1,10 @@
 import { postShopGraphql } from "~/server/shop/shopAdminToken.server";
 import { appendBillingLog, hasBillingLog } from "./billingLog.server";
+import type { BillingFeishuStage } from "./billingFeishuFormat";
 import { decideChargeGrant, dollarsToCents, type ChargeGuardDecision } from "./chargeGuard";
 import { loadAllowedChargeCents } from "./plans/planCatalog.server";
 import { isProdTestBillingShop, shouldCreateTestCharge } from "./testBillingShop";
-import { scheduleChargeGuardDeniedFeishu } from "./lifecycleFeishuNotify.server";
+import { scheduleBillingFailureFeishu } from "./lifecycleFeishuNotify.server";
 import { BILLING_LOG_EVENT } from "./types.server";
 
 const DETAIL_TIMEOUT_MS = 2_500;
@@ -162,6 +163,11 @@ export async function persistChargeGuardDenied(params: {
   gid: string;
   planKey?: string | null;
   reason: ChargeGuardDecision["reason"];
+  stage: BillingFeishuStage;
+  shopifyPlanName?: string | null;
+  test: boolean | null;
+  amountCents: number | null;
+  currencyCode: string | null;
 }): Promise<void> {
   if (
     await hasBillingLog(
@@ -185,10 +191,17 @@ export async function persistChargeGuardDenied(params: {
       },
     },
   });
-  scheduleChargeGuardDeniedFeishu({
+  scheduleBillingFailureFeishu({
     shop: params.shop,
-    reason: params.reason,
+    stage: params.stage,
+    reason: "charge_guard",
+    chargeGuardReason: params.reason,
     gid: params.gid,
+    shopifyPlanName: params.shopifyPlanName,
+    amountCents: params.amountCents,
+    currencyCode: params.currencyCode,
+    test: params.test,
+    env: billingGuardEnv(),
   });
 }
 
@@ -200,6 +213,8 @@ export async function evaluateChargeGuard(params: {
   currencyCode: string | null;
   gid: string;
   planKey?: string | null;
+  shopifyPlanName?: string | null;
+  stage: BillingFeishuStage;
 }): Promise<{ allow: boolean; reason: ChargeGuardDecision["reason"] }> {
   const allowedCents = await loadAllowedChargeCents();
   const decision = decideChargeGrant({
@@ -216,6 +231,11 @@ export async function evaluateChargeGuard(params: {
       gid: params.gid,
       planKey: params.planKey,
       reason: decision.reason,
+      stage: params.stage,
+      shopifyPlanName: params.shopifyPlanName,
+      test: params.test,
+      amountCents: params.amountCents,
+      currencyCode: params.currencyCode,
     });
     return { allow: false, reason: decision.reason };
   }

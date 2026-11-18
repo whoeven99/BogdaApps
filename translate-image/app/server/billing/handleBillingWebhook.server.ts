@@ -1,18 +1,26 @@
 import prisma from "~/db.server";
+import { resolveAmountUsd } from "./billingFeishuFormat";
 import { computeTrialEndsAt } from "./billingState";
+import { claimStaffFeishuSent } from "./billingLog.server";
 import {
+  billingGuardEnv,
   evaluateChargeGuard,
   fetchPurchaseChargeDetail,
   fetchShopEmailForChargeGuard,
   fetchSubscriptionChargeDetail,
 } from "./chargeGuardApply.server";
 import { applyTokenPackPurchase } from "./grants.server";
+import { scheduleChargeGuardStaffFeishu } from "./lifecycleFeishuNotify.server";
 import {
   catalogIntervalFromShopify,
   findPackPlanByName,
   findSubscriptionPlan,
 } from "./plans/planCatalog.server";
-import { applyActiveSubscription, cancelSubscription } from "./subscription.server";
+import {
+  applyActiveSubscription,
+  cancelSubscription,
+  isSubscriptionRenewal,
+} from "./subscription.server";
 import { APP_SUBSCRIPTION_STATUS, BILLING_INTERVAL } from "./types.server";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,6 +43,31 @@ type PurchasePayload = {
   name?: string;
   status?: string;
 };
+
+async function notifyStaffIfAllowlisted(params: {
+  shop: string;
+  gid: string;
+  reason: string;
+  shopEmail?: string | null;
+  test: boolean | null;
+  amountCents: number | null;
+  currencyCode: string | null;
+  shopifyPlanName: string;
+}): Promise<void> {
+  if (params.reason !== "staff_allowlist") return;
+  if (!(await claimStaffFeishuSent(params.shop, params.gid))) return;
+  scheduleChargeGuardStaffFeishu({
+    env: billingGuardEnv(),
+    shop: params.shop,
+    shopEmail: params.shopEmail,
+    test: params.test,
+    shopifyPlanName: params.shopifyPlanName,
+    amountCents: params.amountCents,
+    currencyCode: params.currencyCode,
+    gid: params.gid,
+    reason: params.reason,
+  });
+}
 
 export async function handleSubscriptionWebhook(params: {
   shop: string;
@@ -76,6 +109,11 @@ export async function handleSubscriptionWebhook(params: {
     return;
   }
 
+  const shopifyPlanName = plan.shopifyPlanName || sub?.name || plan.displayName;
+  const renewal =
+    Boolean(existingSub) &&
+    existingSub?.shopifySubscriptionId === gid &&
+    isSubscriptionRenewal(existingSub, detail?.currentPeriodEnd ?? null);
   const guard = await evaluateChargeGuard({
     shop: params.shop,
     shopEmail,
@@ -84,6 +122,8 @@ export async function handleSubscriptionWebhook(params: {
     currencyCode: detail?.currencyCode ?? null,
     gid,
     planKey: plan.planKey,
+    shopifyPlanName,
+    stage: renewal ? "renewal" : "subscribe",
   });
   if (!guard.allow) return;
 
@@ -101,11 +141,11 @@ export async function handleSubscriptionWebhook(params: {
       ? new Date(detail.createdAt.getTime() + detail.trialDays * DAY_MS)
       : null;
 
-  await applyActiveSubscription({
+  const applied = await applyActiveSubscription({
     shop: params.shop,
     shopifySubscriptionId: gid,
     planKey: plan.planKey,
-    shopifyPlanName: plan.shopifyPlanName || sub?.name || plan.displayName,
+    shopifyPlanName,
     billingInterval,
     creditsPerPeriod: plan.credits,
     trialEndsAt,
@@ -113,6 +153,18 @@ export async function handleSubscriptionWebhook(params: {
     rawPayload: (params.payload ?? undefined) as Record<string, unknown> | undefined,
     existingSubscription: existingSub,
   });
+  if (applied.outcome === "activated" || applied.outcome === "renewed") {
+    await notifyStaffIfAllowlisted({
+      shop: params.shop,
+      gid,
+      reason: guard.reason,
+      shopEmail,
+      test: detail?.test ?? null,
+      amountCents: detail?.amountCents ?? null,
+      currencyCode: detail?.currencyCode ?? null,
+      shopifyPlanName,
+    });
+  }
 }
 
 export async function handlePurchaseWebhook(params: {
@@ -135,6 +187,7 @@ export async function handlePurchaseWebhook(params: {
     fetchPurchaseChargeDetail(params.shop, gid),
     fetchShopEmailForChargeGuard(params.shop),
   ]);
+  const shopifyPlanName = plan.shopifyPlanName || purchase?.name || plan.displayName;
   const guard = await evaluateChargeGuard({
     shop: params.shop,
     shopEmail,
@@ -143,12 +196,27 @@ export async function handlePurchaseWebhook(params: {
     currencyCode: purchaseDetail?.currencyCode ?? null,
     gid,
     planKey: plan.planKey,
+    shopifyPlanName,
+    stage: "purchase",
   });
   if (!guard.allow) return;
 
-  await applyTokenPackPurchase({
+  const granted = await applyTokenPackPurchase({
     shop: params.shop,
     plan,
     shopifyPurchaseId: gid,
+    amountUsd: resolveAmountUsd(purchaseDetail?.amountCents, plan.priceAmount),
   });
+  if (granted) {
+    await notifyStaffIfAllowlisted({
+      shop: params.shop,
+      gid,
+      reason: guard.reason,
+      shopEmail,
+      test: purchaseDetail?.test ?? null,
+      amountCents: purchaseDetail?.amountCents ?? null,
+      currencyCode: purchaseDetail?.currencyCode ?? null,
+      shopifyPlanName,
+    });
+  }
 }

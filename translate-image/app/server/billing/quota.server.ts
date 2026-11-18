@@ -51,8 +51,12 @@ export async function ensureAccount(shop: string) {
     }
   }
   if (created) {
-    const granted = await grantInstallCreditsIfEligible(shop);
-    if (granted.granted) scheduleInstallFeishu(shop);
+    try {
+      await grantInstallCreditsIfEligible(shop);
+    } catch (err) {
+      console.warn(`[billing] install grant failed shop=${shop}`, err);
+    }
+    scheduleInstallFeishu(shop);
   }
   const row = await prisma.account.findUniqueOrThrow({ where: { shop } });
   if (row.hasUsedTrial) return row;

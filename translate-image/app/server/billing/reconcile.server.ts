@@ -12,6 +12,7 @@ import {
   catalogIntervalFromShopify,
   findSubscriptionPlan,
 } from "./plans/planCatalog.server";
+import { scheduleAnnualCreditFeishu } from "./lifecycleFeishuNotify.server";
 import { applyActiveSubscription, cancelSubscription } from "./subscription.server";
 import { BILLING_INTERVAL, BILLING_LOG_EVENT } from "./types.server";
 
@@ -125,7 +126,7 @@ async function maybeGrantAnnualCycle(shop: string): Promise<void> {
   const account = await prisma.account.findUniqueOrThrow({ where: { shop } });
   const settled = settlePoolsAtRenewal(account);
   const window = getAnnualCreditWindow(local.currentPeriodEnd, decision.creditCycleIndex);
-  await appendBillingLog({
+  const grantedLog = await appendBillingLog({
     shop,
     eventType: BILLING_LOG_EVENT.SUBSCRIPTION_RENEWED,
     planKey: local.planKey,
@@ -155,6 +156,13 @@ async function maybeGrantAnnualCycle(shop: string): Promise<void> {
         local.creditsPerPeriod + settled.purchasedCredits + settled.trialCredits,
     },
   });
+  if (local.creditsPerPeriod > 0) {
+    scheduleAnnualCreditFeishu({
+      shop,
+      billingLogId: grantedLog.id,
+      creditCycleIndex: decision.creditCycleIndex,
+    });
+  }
 }
 
 export async function reconcileShopBilling(

@@ -1,67 +1,170 @@
 import { sendFeishuTextMessage } from "~/server/feishu/sendFeishuTextMessage.server";
+import {
+  formatAnnualCreditFeishuMessage,
+  formatBillingFailureFeishuMessage,
+  formatCancelFeishuMessage,
+  formatChargeGuardFeishuMessage,
+  formatFirstSubscribeFeishuMessage,
+  formatInstallFeishuMessage,
+  formatPurchaseFeishuMessage,
+  formatRenewalFeishuMessage,
+  formatSubscribeFeishuMessage,
+  formatUninstallFeishuMessage,
+  type BillingFeishuFailReason,
+  type BillingFeishuStage,
+  type ChargeGuardFeishuParams,
+  type ShopBillingFeishuSnapshot,
+} from "./billingFeishuFormat";
+import { claimBillingLogFlag } from "./billingLog.server";
+import { snapshotShopBilling } from "./snapshotShopBilling.server";
 
-async function notify(log: string, shop: string, text: string): Promise<void> {
+const LOG_INSTALL = "[lifecycleFeishu:install]";
+const LOG_SUBSCRIBE = "[lifecycleFeishu:subscribe]";
+const LOG_PURCHASE = "[lifecycleFeishu:purchase]";
+const LOG_RENEWAL = "[lifecycleFeishu:renewal]";
+const LOG_ANNUAL = "[lifecycleFeishu:annual-credit]";
+const LOG_CANCEL = "[lifecycleFeishu:cancel]";
+const LOG_UNINSTALL = "[lifecycleFeishu:uninstall]";
+const LOG_FAILURE = "[lifecycleFeishu:failure]";
+const LOG_CHARGE_GUARD = "[lifecycleFeishu:charge-guard]";
+
+async function sendLifecycle(
+  log: string,
+  shop: string,
+  text: string,
+): Promise<void> {
   const result = await sendFeishuTextMessage(text);
   if (!result.ok && !("skipped" in result && result.skipped)) {
     console.warn(`${log} send failed shop=${shop}`, result);
   }
 }
 
+function fire(log: string, shop: string, work: () => Promise<void>): void {
+  void work().catch((err) => {
+    console.warn(`${log} shop=`, shop, err);
+  });
+}
+
 export function scheduleInstallFeishu(shop: string): void {
-  void notify("[lifecycleFeishu:install]", shop, `图译安装 · ${shop}`).catch((err) => {
-    console.warn("[lifecycleFeishu:install] shop=", shop, err);
+  fire(LOG_INSTALL, shop, async () => {
+    const snap = await snapshotShopBilling(shop);
+    await sendLifecycle(LOG_INSTALL, shop, formatInstallFeishuMessage(snap));
   });
 }
 
 export function scheduleSubscribeFeishu(params: {
   shop: string;
-  planKey: string;
   inTrial: boolean;
   first: boolean;
 }): void {
-  const { shop, planKey, inTrial, first } = params;
-  const title = first ? "图译首次订阅" : "图译订阅";
-  const trial = inTrial ? " · 试用中" : "";
-  void notify(
-    "[lifecycleFeishu:subscribe]",
-    shop,
-    `${title} · ${shop}\n套餐：${planKey}${trial}`,
-  ).catch((err) => {
-    console.warn("[lifecycleFeishu:subscribe] shop=", shop, err);
+  fire(LOG_SUBSCRIBE, params.shop, async () => {
+    const snap = await snapshotShopBilling(params.shop);
+    const text = params.first
+      ? formatFirstSubscribeFeishuMessage(snap)
+      : formatSubscribeFeishuMessage(snap, { trial: params.inTrial });
+    await sendLifecycle(LOG_SUBSCRIBE, params.shop, text);
   });
 }
 
-export function schedulePurchaseFeishu(shop: string, credits: number): void {
-  void notify(
-    "[lifecycleFeishu:purchase]",
-    shop,
-    `图译购买积分 · ${shop}\n积分：${credits}`,
-  ).catch((err) => {
-    console.warn("[lifecycleFeishu:purchase] shop=", shop, err);
-  });
-}
-
-export function scheduleCancelFeishu(shop: string, status: string): void {
-  void notify(
-    "[lifecycleFeishu:cancel]",
-    shop,
-    `图译订阅取消 · ${shop}\n状态：${status}`,
-  ).catch((err) => {
-    console.warn("[lifecycleFeishu:cancel] shop=", shop, err);
-  });
-}
-
-export function scheduleChargeGuardDeniedFeishu(params: {
+export function schedulePurchaseFeishu(params: {
   shop: string;
-  reason: string;
-  gid: string;
+  credits: number;
+  amountUsd: number;
 }): void {
-  const { shop, reason, gid } = params;
-  void notify(
-    "[lifecycleFeishu:charge-guard]",
-    shop,
-    `图译入账闸拒绝 · ${shop}\n原因：${reason}\nGID：${gid}`,
-  ).catch((err) => {
-    console.warn("[lifecycleFeishu:charge-guard] shop=", shop, err);
+  fire(LOG_PURCHASE, params.shop, async () => {
+    const snap = await snapshotShopBilling(params.shop);
+    await sendLifecycle(
+      LOG_PURCHASE,
+      params.shop,
+      formatPurchaseFeishuMessage(snap, {
+        credits: params.credits,
+        amountUsd: params.amountUsd,
+      }),
+    );
+  });
+}
+
+export function scheduleRenewalFeishu(params: {
+  shop: string;
+  billingLogId: string;
+}): void {
+  fire(LOG_RENEWAL, params.shop, async () => {
+    if (!(await claimBillingLogFlag(params.billingLogId, "renewalFeishuSent"))) {
+      return;
+    }
+    const snap = await snapshotShopBilling(params.shop);
+    await sendLifecycle(LOG_RENEWAL, params.shop, formatRenewalFeishuMessage(snap));
+  });
+}
+
+export function scheduleAnnualCreditFeishu(params: {
+  shop: string;
+  billingLogId: string;
+  creditCycleIndex?: number | null;
+}): void {
+  fire(LOG_ANNUAL, params.shop, async () => {
+    if (!(await claimBillingLogFlag(params.billingLogId, "annualCreditFeishuSent"))) {
+      return;
+    }
+    const snap = await snapshotShopBilling(params.shop);
+    await sendLifecycle(
+      LOG_ANNUAL,
+      params.shop,
+      formatAnnualCreditFeishuMessage(snap, {
+        creditCycleIndex: params.creditCycleIndex,
+      }),
+    );
+  });
+}
+
+export function scheduleCancelFeishu(snap: ShopBillingFeishuSnapshot): void {
+  fire(LOG_CANCEL, snap.shop, async () => {
+    await sendLifecycle(LOG_CANCEL, snap.shop, formatCancelFeishuMessage(snap));
+  });
+}
+
+export function scheduleUninstallFeishu(snap: ShopBillingFeishuSnapshot): void {
+  fire(LOG_UNINSTALL, snap.shop, async () => {
+    await sendLifecycle(
+      LOG_UNINSTALL,
+      snap.shop,
+      formatUninstallFeishuMessage(snap),
+    );
+  });
+}
+
+export function scheduleBillingFailureFeishu(params: {
+  shop: string;
+  stage: BillingFeishuStage;
+  reason: BillingFeishuFailReason;
+  chargeGuardReason?: string | null;
+  gid?: string | null;
+  shopifyPlanName?: string | null;
+  amountCents?: number | null;
+  currencyCode?: string | null;
+  test?: boolean | null;
+  env?: "test" | "prod" | null;
+  detail?: string | null;
+  snap?: ShopBillingFeishuSnapshot;
+}): void {
+  fire(LOG_FAILURE, params.shop, async () => {
+    const snap = params.snap ?? (await snapshotShopBilling(params.shop));
+    await sendLifecycle(
+      LOG_FAILURE,
+      params.shop,
+      formatBillingFailureFeishuMessage({ ...params, snap }),
+    );
+  });
+}
+
+export function scheduleChargeGuardStaffFeishu(
+  params: Omit<ChargeGuardFeishuParams, "action">,
+): void {
+  fire(LOG_CHARGE_GUARD, params.shop, async () => {
+    await sendLifecycle(
+      LOG_CHARGE_GUARD,
+      params.shop,
+      formatChargeGuardFeishuMessage({ ...params, action: "grant" }),
+    );
   });
 }

@@ -4,6 +4,7 @@ import { JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./billingState";
 import type { PlanRecord } from "./plans/planCatalog.server";
 import { findPackPlanByName, findSubscriptionPlan } from "./plans/planCatalog.server";
 import { ensureAccount } from "./quota.server";
+import { resolveAmountUsd } from "./billingFeishuFormat";
 import { schedulePurchaseFeishu } from "./lifecycleFeishuNotify.server";
 import { BILLING_LOG_EVENT } from "./types.server";
 
@@ -54,6 +55,7 @@ export async function applyTokenPackPurchase(params: {
   shop: string;
   plan: PlanRecord;
   shopifyPurchaseId: string;
+  amountUsd?: number;
   metadata?: Record<string, unknown>;
 }): Promise<boolean> {
   const { shop, plan, shopifyPurchaseId } = params;
@@ -81,7 +83,11 @@ export async function applyTokenPackPurchase(params: {
     creditsDelta: plan.credits,
     metadata: params.metadata,
   });
-  schedulePurchaseFeishu(shop, plan.credits);
+  schedulePurchaseFeishu({
+    shop,
+    credits: plan.credits,
+    amountUsd: params.amountUsd ?? resolveAmountUsd(null, plan.priceAmount),
+  });
   return true;
 }
 

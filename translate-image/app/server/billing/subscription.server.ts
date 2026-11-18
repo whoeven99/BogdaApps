@@ -10,7 +10,12 @@ import {
   revokeBasicFirstPayBonusNow,
 } from "./grant/grantBasicFirstPayBonus.server";
 import { expireInstallTrialCreditsIfDue } from "./grant/grantInstallCredits.server";
-import { scheduleCancelFeishu, scheduleSubscribeFeishu } from "./lifecycleFeishuNotify.server";
+import {
+  scheduleCancelFeishu,
+  scheduleRenewalFeishu,
+  scheduleSubscribeFeishu,
+} from "./lifecycleFeishuNotify.server";
+import { snapshotShopBilling } from "./snapshotShopBilling.server";
 import {
   feeTypeForCatalogInterval,
   planNumberForName,
@@ -111,7 +116,7 @@ export async function archivePeriodAndRenew(params: {
   const usedCredits = 0;
   const subscriptionCredits = next.creditsPerPeriod;
 
-  await appendBillingLog({
+  const renewedLog = await appendBillingLog({
     shop,
     eventType: BILLING_LOG_EVENT.SUBSCRIPTION_RENEWED,
     planKey: next.planKey,
@@ -163,6 +168,7 @@ export async function archivePeriodAndRenew(params: {
     }),
   ]);
   await maybeGrantBasicFirstPayBonus(shop, next.planKey, subscription.trialEndsAt);
+  scheduleRenewalFeishu({ shop, billingLogId: renewedLog.id });
 }
 
 export async function applyActiveSubscription(
@@ -292,7 +298,6 @@ export async function applyActiveSubscription(
     });
     scheduleSubscribeFeishu({
       shop,
-      planKey,
       inTrial: Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now()),
       first: activatedCount <= 1,
     });
@@ -328,6 +333,7 @@ export async function cancelSubscription(params: {
     return { cancelled: false };
   }
 
+  const snap = await snapshotShopBilling(params.shop);
   await revokeBasicFirstPayBonusNow(params.shop);
 
   await prisma.$transaction(async (tx) => {
@@ -378,6 +384,6 @@ export async function cancelSubscription(params: {
     await tx.appSubscription.delete({ where: { shop: params.shop } });
   });
 
-  scheduleCancelFeishu(params.shop, params.status);
+  scheduleCancelFeishu(snap);
   return { cancelled: true };
 }
