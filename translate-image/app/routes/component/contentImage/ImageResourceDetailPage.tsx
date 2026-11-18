@@ -33,11 +33,20 @@ import { useRecentImageFailures } from "./useRecentImageFailures";
 import { useContentImageActions } from "./useContentImageActions";
 import { useBatchTranslate } from "./useBatchTranslate";
 import { useResourceImages } from "./useResourceImages";
-import { imageRowKey, type ContentImageRow } from "./contentImageClient";
+import {
+  contentImageRowMatchesPreview,
+  selectFailedContentRows,
+} from "~/lib/imageListDeepLink";
+import {
+  failedItemToRow,
+  imageRowKey,
+  type ContentImageRow,
+} from "./contentImageClient";
 import type { ImageManageShellData } from "./ImageResourceListPage";
 import { useImageTranslateQuotaOffer } from "./useImageTranslateQuotaOffer";
 import { imageResourceSearchPlaceholderKey } from "./imageResourceUi";
 import { startViewImageTranslate } from "./startViewImageTranslate";
+import { useImageListDeepLink, useOpenPreviewFromQuery } from "./useImageListDeepLink";
 
 export default function ImageResourceDetailPage({ type }: { type: ImageResourceType }) {
   const data = useLoaderData() as ImageManageShellData;
@@ -110,6 +119,14 @@ export default function ImageResourceDetailPage({ type }: { type: ImageResourceT
   );
   const [clearRows, setClearRows] = useState<ContentImageRow[]>([]);
   const [viewRow, setViewRow] = useState<ContentImageRow | null>(null);
+  const { preview, failedOnly, setFailedOnly, clearPreview } = useImageListDeepLink();
+  const openPreviewRow = useCallback((row: ContentImageRow) => setViewRow(row), []);
+  useOpenPreviewFromQuery(
+    images.rows,
+    preview,
+    contentImageRowMatchesPreview,
+    openPreviewRow,
+  );
   useEffect(() => {
     setViewRow((current) => {
       if (!current) return current;
@@ -121,9 +138,16 @@ export default function ImageResourceDetailPage({ type }: { type: ImageResourceT
   const backAction = useAppHomeBackAction(listPath, t(`${type}Image.title`));
   const title = images.resource?.title || t(`${type}Image.title`);
   const q = query.trim().toLowerCase();
-  const visibleRows = q
+  const searchedRows = q
     ? images.rows.filter((row) => row.urlKey.toLowerCase().includes(q) || row.imageUrl.toLowerCase().includes(q))
     : images.rows;
+  const fallbackFailedRows = useMemo(
+    () => recentFailures.items.map(failedItemToRow),
+    [recentFailures.items],
+  );
+  const visibleRows = failedOnly
+    ? selectFailedContentRows(searchedRows, recentFailures.index.byRowKey, fallbackFailedRows)
+    : searchedRows;
 
   return (
     <>
@@ -137,7 +161,11 @@ export default function ImageResourceDetailPage({ type }: { type: ImageResourceT
               languageLabel={languageLabel}
               onChanged={setJob}
             />
-            <ImageTranslationFailureHint count={recentFailures.index.total} />
+            <ImageTranslationFailureHint
+              count={recentFailures.index.total}
+              active={failedOnly}
+              onToggle={() => setFailedOnly(!failedOnly)}
+            />
           </div>
           {!canWriteFiles ? <FilesAccessBanner /> : null}
           {data.targets.length === 0 ? (
@@ -217,7 +245,10 @@ export default function ImageResourceDetailPage({ type }: { type: ImageResourceT
             onSpent: (credits) => setRemaining((r) => (r == null ? r : Math.max(0, r - credits))),
           });
         }}
-        onClose={() => setViewRow(null)}
+        onClose={() => {
+          setViewRow(null);
+          if (preview) clearPreview();
+        }}
       />
       <AppSModal
         open={clearRows.length > 0}

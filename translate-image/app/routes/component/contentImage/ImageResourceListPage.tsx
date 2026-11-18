@@ -26,9 +26,14 @@ import AppSubpageTitleBar from "~/ui/components/AppSubpageTitleBar";
 import listStyles from "~/ui/styles/appListPage.module.css";
 import ContentImageCompareModal from "./components/ContentImageCompareModal";
 import ContentImageConfirmModal from "./components/ContentImageConfirmModal";
+import ContentImageTable from "./components/ContentImageTable";
 import ContentImageResourceTable, {
   type ResourceListRow,
 } from "./components/ContentImageResourceTable";
+import {
+  contentImageRowMatchesPreview,
+  resourceRowMatchesPreview,
+} from "~/lib/imageListDeepLink";
 import {
   imageResourceListOpensDetail,
   imageResourceListSupportsPreview,
@@ -48,7 +53,9 @@ import { useImageResourceList } from "./useImageResourceList";
 import { useRecentImageFailures } from "./useRecentImageFailures";
 import { useImageTranslateQuotaOffer } from "./useImageTranslateQuotaOffer";
 import { startViewImageTranslate } from "./startViewImageTranslate";
+import { useImageListDeepLink, useOpenPreviewFromQuery } from "./useImageListDeepLink";
 import {
+  failedItemToRow,
   fetchResourceImages,
   fetchResourceImagesMany,
   imageRowKey,
@@ -97,6 +104,8 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
   const opensDetail = imageResourceListOpensDetail(type);
   const [previewResource, setPreviewResource] = useState<ResourceListRow | null>(null);
   const [previewRows, setPreviewRows] = useState<ContentImageRow[]>([]);
+  const [viewRow, setViewRow] = useState<ContentImageRow | null>(null);
+  const { preview, failedOnly, setFailedOnly, clearPreview } = useImageListDeepLink();
   const list = useImageResourceList({
     type,
     q,
@@ -225,6 +234,30 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
     },
     [supportsPreview],
   );
+  const openPreviewRow = useCallback((row: ContentImageRow) => setViewRow(row), []);
+  const failedRows = useMemo(() => {
+    const rows = recentFailures.items.map(failedItemToRow);
+    const needle = query.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter(
+      (row) =>
+        row.urlKey.toLowerCase().includes(needle) ||
+        row.imageUrl.toLowerCase().includes(needle) ||
+        (row.usedIn[0]?.title || "").toLowerCase().includes(needle),
+    );
+  }, [query, recentFailures.items]);
+  useOpenPreviewFromQuery(
+    failedOnly ? failedRows : [],
+    preview,
+    contentImageRowMatchesPreview,
+    openPreviewRow,
+  );
+  useOpenPreviewFromQuery(
+    !failedOnly && supportsPreview ? list.rows : [],
+    preview,
+    resourceRowMatchesPreview,
+    openResourcePreview,
+  );
 
   const startPreviewTranslate = useCallback(() => {
     if (!previewMatchRow) return;
@@ -311,7 +344,11 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
               languageLabel={languageLabel}
               onChanged={setJob}
             />
-            <ImageTranslationFailureHint count={recentFailures.index.total} />
+            <ImageTranslationFailureHint
+              count={recentFailures.index.total}
+              active={failedOnly}
+              onToggle={() => setFailedOnly(!failedOnly)}
+            />
           </div>
           {!canWriteFiles ? <FilesAccessBanner /> : null}
           {data.targets.length === 0 ? (
@@ -320,7 +357,7 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
             </AppSectionCard>
           ) : (
             <ImageManageListShell
-              bulkBar={bulkBar}
+              bulkBar={failedOnly ? null : bulkBar}
               toolbar={
                 <ImageManageToolbar
                   searchPlaceholder={t(imageResourceSearchPlaceholderKey(type))}
@@ -333,7 +370,7 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
                     onLanguageChange: setLanguage,
                   }}
                   status={
-                    tabs.length > 1
+                    !failedOnly && tabs.length > 1
                       ? {
                           options: statusOptions,
                           value: status,
@@ -344,36 +381,55 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
                 />
               }
             >
-              <ContentImageResourceTable
-                type={type}
-                rows={list.rows}
-                loading={list.loading}
-                selectedIds={selectedResourceIds}
-                onSelectedIdsChange={setSelectedResourceIds}
-                showTranslationColumn={showTranslationColumn}
-                failuresByResourceId={recentFailures.index.failuresByResourceId}
-                getRowLiveStatus={(row) => {
-                  const imageRow = resourceListRowToContentImageRow(row);
-                  return imageRow ? getRowLiveStatus(imageRow) : null;
-                }}
-                onOpen={(id) => {
-                  if (!opensDetail) {
-                    const row = list.rows.find((item) => item.id === id);
-                    if (row) openResourcePreview(row);
-                    return;
-                  }
-                  navigate(imageResourceDetailPath(type, id, language));
-                }}
-                onPreviewImage={supportsPreview ? openResourcePreview : undefined}
-              />
-              <div className={listStyles.listPagination}>
-                <Pagination
-                  hasPrevious={list.hasPrevious && !list.loading}
-                  onPrevious={list.previous}
-                  hasNext={list.hasNextPage && !list.loading}
-                  onNext={list.next}
+              {failedOnly ? (
+                <ContentImageTable
+                  rows={failedRows}
+                  loading={recentFailures.loading}
+                  busyKeys={actions.busyKeys}
+                  disabled={!language || !canWriteFiles}
+                  creditsPerImage={modelMeta.credits}
+                  hideUsedIn={type === "theme"}
+                  onTranslate={batch.open}
+                  onReplace={actions.replace}
+                  onClear={actions.clear}
+                  onView={setViewRow}
+                  getRowLiveStatus={getRowLiveStatus}
+                  mergeDisplayRow={mergeDisplayRow}
                 />
-              </div>
+              ) : (
+                <>
+                  <ContentImageResourceTable
+                    type={type}
+                    rows={list.rows}
+                    loading={list.loading}
+                    selectedIds={selectedResourceIds}
+                    onSelectedIdsChange={setSelectedResourceIds}
+                    showTranslationColumn={showTranslationColumn}
+                    failuresByResourceId={recentFailures.index.failuresByResourceId}
+                    getRowLiveStatus={(row) => {
+                      const imageRow = resourceListRowToContentImageRow(row);
+                      return imageRow ? getRowLiveStatus(imageRow) : null;
+                    }}
+                    onOpen={(id) => {
+                      if (!opensDetail) {
+                        const row = list.rows.find((item) => item.id === id);
+                        if (row) openResourcePreview(row);
+                        return;
+                      }
+                      navigate(imageResourceDetailPath(type, id, language));
+                    }}
+                    onPreviewImage={supportsPreview ? openResourcePreview : undefined}
+                  />
+                  <div className={listStyles.listPagination}>
+                    <Pagination
+                      hasPrevious={list.hasPrevious && !list.loading}
+                      onPrevious={list.previous}
+                      hasNext={list.hasNextPage && !list.loading}
+                      onNext={list.next}
+                    />
+                  </div>
+                </>
+              )}
             </ImageManageListShell>
           )}
         </BlockStack>
@@ -390,7 +446,34 @@ export default function ImageResourceListPage({ type }: { type: ImageResourceTyp
             : false
         }
         onTranslate={startPreviewTranslate}
-        onClose={() => setPreviewResource(null)}
+        onClose={() => {
+          setPreviewResource(null);
+          if (preview) clearPreview();
+        }}
+      />
+      <ContentImageCompareModal
+        open={Boolean(viewRow)}
+        originalUrl={viewRow?.imageUrl ?? ""}
+        translatedUrl={(viewRow ? mergeDisplayRow(viewRow) : null)?.translated?.imageAfterUrl}
+        liveStatus={viewRow ? getRowLiveStatus(viewRow) : null}
+        translateDisabled={!language || !canWriteFiles}
+        translateLoading={
+          viewRow ? actions.busyKeys.includes(imageRowKey(viewRow)) : false
+        }
+        onTranslate={() => {
+          if (!viewRow) return;
+          startViewImageTranslate({
+            remainingCredits: remaining,
+            creditsPerImage: modelMeta.credits,
+            t,
+            run: () => actions.translateOne(viewRow, model),
+            onSpent: (credits) => setRemaining((r) => (r == null ? r : Math.max(0, r - credits))),
+          });
+        }}
+        onClose={() => {
+          setViewRow(null);
+          if (preview) clearPreview();
+        }}
       />
       <ContentImageConfirmModal
         open={batch.rows.length > 0}

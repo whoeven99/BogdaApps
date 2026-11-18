@@ -34,10 +34,19 @@ import { ImageTranslationFailureHint } from "./components/ImageTranslationFailur
 import { useContentImageActions } from "./useContentImageActions";
 import { useBatchTranslate } from "./useBatchTranslate";
 import { useSwitcherPageImages } from "./useSwitcherPageImages";
-import { imageRowKey, type ContentImageRow } from "./contentImageClient";
+import {
+  contentImageRowMatchesPreview,
+  selectFailedContentRows,
+} from "~/lib/imageListDeepLink";
+import {
+  failedItemToRow,
+  imageRowKey,
+  type ContentImageRow,
+} from "./contentImageClient";
 import type { ImageManageShellData } from "./ImageResourceListPage";
 import { useImageTranslateQuotaOffer } from "./useImageTranslateQuotaOffer";
 import { startViewImageTranslate } from "./startViewImageTranslate";
+import { useImageListDeepLink, useOpenPreviewFromQuery } from "./useImageListDeepLink";
 
 export default function SwitcherImagePageDetail() {
   const data = useLoaderData() as ImageManageShellData;
@@ -104,6 +113,14 @@ export default function SwitcherImagePageDetail() {
   );
   const [clearRows, setClearRows] = useState<ContentImageRow[]>([]);
   const [viewRow, setViewRow] = useState<ContentImageRow | null>(null);
+  const { preview, failedOnly, setFailedOnly, clearPreview } = useImageListDeepLink();
+  const openPreviewRow = useCallback((row: ContentImageRow) => setViewRow(row), []);
+  useOpenPreviewFromQuery(
+    images.rows,
+    preview,
+    contentImageRowMatchesPreview,
+    openPreviewRow,
+  );
   useEffect(() => {
     setViewRow((current) => {
       if (!current) return current;
@@ -117,9 +134,16 @@ export default function SwitcherImagePageDetail() {
     ? displaySwitcherPagePath(pagePath, language, data.localeCodes ?? [], data.primaryLocale)
     : t("switcherImage.title");
   const q = query.trim().toLowerCase();
-  const visibleRows = q
+  const searchedRows = q
     ? images.rows.filter((row) => row.urlKey.toLowerCase().includes(q) || row.imageUrl.toLowerCase().includes(q))
     : images.rows;
+  const fallbackFailedRows = useMemo(
+    () => recentFailures.items.map(failedItemToRow),
+    [recentFailures.items],
+  );
+  const visibleRows = failedOnly
+    ? selectFailedContentRows(searchedRows, recentFailures.index.byRowKey, fallbackFailedRows)
+    : searchedRows;
 
   return (
     <>
@@ -133,7 +157,11 @@ export default function SwitcherImagePageDetail() {
               languageLabel={languageLabel}
               onChanged={setJob}
             />
-            <ImageTranslationFailureHint count={recentFailures.index.total} />
+            <ImageTranslationFailureHint
+              count={recentFailures.index.total}
+              active={failedOnly}
+              onToggle={() => setFailedOnly(!failedOnly)}
+            />
           </div>
           {!canWriteFiles ? <FilesAccessBanner /> : null}
           {data.targets.length === 0 ? (
@@ -162,7 +190,9 @@ export default function SwitcherImagePageDetail() {
               }
             >
               {!images.loading && visibleRows.length === 0 ? (
-                <span className={listStyles.emptyHint}>{t("switcherImage.emptyPage")}</span>
+                <span className={listStyles.emptyHint}>
+                  {t(failedOnly ? "contentImage.failed.empty" : "switcherImage.emptyPage")}
+                </span>
               ) : (
                 <ContentImageTable
                   rows={visibleRows}
@@ -218,7 +248,10 @@ export default function SwitcherImagePageDetail() {
             onSpent: (credits) => setRemaining((r) => (r == null ? r : Math.max(0, r - credits))),
           });
         }}
-        onClose={() => setViewRow(null)}
+        onClose={() => {
+          setViewRow(null);
+          if (preview) clearPreview();
+        }}
       />
       <AppSModal
         open={clearRows.length > 0}

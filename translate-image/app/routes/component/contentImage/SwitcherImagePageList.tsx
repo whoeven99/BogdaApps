@@ -18,7 +18,9 @@ import AppPageHeader from "~/ui/components/AppPageHeader";
 import AppSectionCard from "~/ui/components/AppSectionCard";
 import AppSubpageTitleBar from "~/ui/components/AppSubpageTitleBar";
 import listStyles from "~/ui/styles/appListPage.module.css";
+import ContentImageCompareModal from "./components/ContentImageCompareModal";
 import ContentImageConfirmModal from "./components/ContentImageConfirmModal";
+import ContentImageTable from "./components/ContentImageTable";
 import { ImagePageJobSection } from "./components/ImagePageJobSection";
 import { ImageTranslationFailureHint } from "./components/ImageTranslationFailureHint";
 import { ImageManageListShell } from "./components/ImageManageListShell";
@@ -29,9 +31,18 @@ import { useContentImageActions } from "./useContentImageActions";
 import { useBatchTranslate } from "./useBatchTranslate";
 import { useSwitcherPageList } from "./useSwitcherPageList";
 import { useRecentImageFailures } from "./useRecentImageFailures";
-import { fetchSwitcherImages } from "./contentImageClient";
+import { useImageRowLiveStatus } from "./useImageRowLiveStatus";
+import {
+  failedItemToRow,
+  fetchSwitcherImages,
+  imageRowKey,
+  type ContentImageRow,
+} from "./contentImageClient";
 import type { ImageManageShellData } from "./ImageResourceListPage";
 import { useImageTranslateQuotaOffer } from "./useImageTranslateQuotaOffer";
+import { startViewImageTranslate } from "./startViewImageTranslate";
+import { contentImageRowMatchesPreview } from "~/lib/imageListDeepLink";
+import { useImageListDeepLink, useOpenPreviewFromQuery } from "./useImageListDeepLink";
 
 function useDebounced(value: string, ms = 400): string {
   const [debounced, setDebounced] = useState(value);
@@ -62,6 +73,31 @@ export default function SwitcherImagePageList() {
     void recentFailures.reload();
   }, [list.reload, recentFailures.reload]);
   const { job, replace: setJob } = useContentImageJob(data.job, refreshLists, "content");
+  const { getRowLiveStatus, mergeDisplayRow } = useImageRowLiveStatus(
+    job,
+    language,
+    recentFailures.index,
+  );
+  const [viewRow, setViewRow] = useState<ContentImageRow | null>(null);
+  const { preview, failedOnly, setFailedOnly, clearPreview } = useImageListDeepLink();
+  const failedRows = useMemo(() => {
+    const rows = recentFailures.items.map(failedItemToRow);
+    const needle = query.trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter(
+      (row) =>
+        row.urlKey.toLowerCase().includes(needle) ||
+        row.imageUrl.toLowerCase().includes(needle) ||
+        (row.usedIn[0]?.title || "").toLowerCase().includes(needle),
+    );
+  }, [query, recentFailures.items]);
+  const openPreviewRow = useCallback((row: ContentImageRow) => setViewRow(row), []);
+  useOpenPreviewFromQuery(
+    failedRows,
+    preview,
+    contentImageRowMatchesPreview,
+    openPreviewRow,
+  );
   const actions = useContentImageActions({
     shop: data.shop,
     languageCode: language,
@@ -160,7 +196,11 @@ export default function SwitcherImagePageList() {
               languageLabel={languageLabel}
               onChanged={setJob}
             />
-            <ImageTranslationFailureHint count={recentFailures.index.total} />
+            <ImageTranslationFailureHint
+              count={recentFailures.index.total}
+              active={failedOnly}
+              onToggle={() => setFailedOnly(!failedOnly)}
+            />
           </div>
           {!canWriteFiles ? <FilesAccessBanner /> : null}
           {data.targets.length === 0 ? (
@@ -169,7 +209,7 @@ export default function SwitcherImagePageList() {
             </AppSectionCard>
           ) : (
             <ImageManageListShell
-              bulkBar={bulkBar}
+              bulkBar={failedOnly ? null : bulkBar}
               toolbar={
                 <ImageManageToolbar
                   searchPlaceholder={t("switcherImage.searchPlaceholder")}
@@ -185,21 +225,40 @@ export default function SwitcherImagePageList() {
                 />
               }
             >
-              <SwitcherImagePageTable
-                rows={list.rows}
-                loading={list.loading}
-                selectedIds={selectedPageIds}
-                onSelectedIdsChange={setSelectedPageIds}
-                onOpen={(id) => navigate(switcherImageDetailPath(id, language))}
-              />
-              <div className={listStyles.listPagination}>
-                <Pagination
-                  hasPrevious={list.hasPrevious && !list.loading}
-                  onPrevious={list.previous}
-                  hasNext={list.hasNextPage && !list.loading}
-                  onNext={list.next}
+              {failedOnly ? (
+                <ContentImageTable
+                  rows={failedRows}
+                  loading={recentFailures.loading}
+                  busyKeys={actions.busyKeys}
+                  disabled={!language || !canWriteFiles}
+                  creditsPerImage={modelMeta.credits}
+                  hideUsedIn
+                  onTranslate={batch.open}
+                  onReplace={actions.replace}
+                  onClear={actions.clear}
+                  onView={setViewRow}
+                  getRowLiveStatus={getRowLiveStatus}
+                  mergeDisplayRow={mergeDisplayRow}
                 />
-              </div>
+              ) : (
+                <>
+                  <SwitcherImagePageTable
+                    rows={list.rows}
+                    loading={list.loading}
+                    selectedIds={selectedPageIds}
+                    onSelectedIdsChange={setSelectedPageIds}
+                    onOpen={(id) => navigate(switcherImageDetailPath(id, language))}
+                  />
+                  <div className={listStyles.listPagination}>
+                    <Pagination
+                      hasPrevious={list.hasPrevious && !list.loading}
+                      onPrevious={list.previous}
+                      hasNext={list.hasNextPage && !list.loading}
+                      onNext={list.next}
+                    />
+                  </div>
+                </>
+              )}
             </ImageManageListShell>
           )}
         </BlockStack>
@@ -219,6 +278,30 @@ export default function SwitcherImagePageList() {
         onConfirm={batch.confirm}
         onBuyCredits={handleBuyCredits}
         onClose={batch.close}
+      />
+      <ContentImageCompareModal
+        open={Boolean(viewRow)}
+        originalUrl={viewRow?.imageUrl ?? ""}
+        translatedUrl={(viewRow ? mergeDisplayRow(viewRow) : null)?.translated?.imageAfterUrl}
+        liveStatus={viewRow ? getRowLiveStatus(viewRow) : null}
+        translateDisabled={!language || !canWriteFiles}
+        translateLoading={
+          viewRow ? actions.busyKeys.includes(imageRowKey(viewRow)) : false
+        }
+        onTranslate={() => {
+          if (!viewRow) return;
+          startViewImageTranslate({
+            remainingCredits: remaining,
+            creditsPerImage: modelMeta.credits,
+            t,
+            run: () => actions.translateOne(viewRow, model),
+            onSpent: (credits) => setRemaining((r) => (r == null ? r : Math.max(0, r - credits))),
+          });
+        }}
+        onClose={() => {
+          setViewRow(null);
+          if (preview) clearPreview();
+        }}
       />
     </>
   );

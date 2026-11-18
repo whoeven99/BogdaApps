@@ -261,3 +261,36 @@ export async function getSwitcherImage(shop: string, urlKey: string) {
     where: { shop_urlKey: { shop, urlKey } },
   });
 }
+
+/** 旧单图 URL 没有 pagePath 时，用采集记录找回 L2 路径。 */
+export async function resolveSwitcherImagePagePath(
+  shop: string,
+  urlKey: string,
+  language?: string | null,
+): Promise<string | null> {
+  const key = urlKey.trim();
+  if (!key) return null;
+  const image = await prisma.switcherImage.findUnique({
+    where: { shop_urlKey: { shop, urlKey: key } },
+    select: { lastPagePath: true },
+  });
+  if (image?.lastPagePath?.trim()) return image.lastPagePath.trim();
+  const locale = language?.trim();
+  const page = await prisma.switcherImagePage.findFirst({
+    where: {
+      shop,
+      urlKey: key,
+      ...(locale ? { targetCode: locale } : {}),
+    },
+    orderBy: { lastSeenAt: "desc" },
+    select: { pagePath: true },
+  });
+  if (page?.pagePath?.trim()) return page.pagePath.trim();
+  if (!locale) return null;
+  const anyPage = await prisma.switcherImagePage.findFirst({
+    where: { shop, urlKey: key },
+    orderBy: { lastSeenAt: "desc" },
+    select: { pagePath: true },
+  });
+  return anyPage?.pagePath?.trim() || null;
+}

@@ -546,7 +546,11 @@
       "metafield": "No metafield images in the last scan"
     },
     "failed": {
-      "hint": "{{count}} image(s) failed in recent batch jobs for this language. Open the resource to see status and translate again."
+      "hint": "{{count}} image(s) failed in recent batch jobs for this language.",
+      "viewList": "View failed images",
+      "showing": "Showing failed images ({{count}}).",
+      "showAll": "Show all",
+      "empty": "No failed images in recent jobs for this language."
     },
     "resourceTranslationCoverage": "{{translated}}/{{total}} translated",
     "resourceTranslationFailuresOnly": "{{count}} failed",

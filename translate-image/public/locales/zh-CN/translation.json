@@ -550,7 +550,11 @@
       "metafield": "上次扫描没有自定义字段图片"
     },
     "failed": {
-      "hint": "当前语言下有 {{count}} 张图在最近的批量任务中翻译失败。进入对应资源查看状态并重新翻译。"
+      "hint": "当前语言下有 {{count}} 张图在最近的批量任务中翻译失败。",
+      "viewList": "查看失败图片",
+      "showing": "正在显示失败图片（{{count}}）。",
+      "showAll": "显示全部",
+      "empty": "当前语言最近的任务里没有失败图片。"
     },
     "resourceTranslationCoverage": "已译 {{translated}}/{{total}}",
     "resourceTranslationFailuresOnly": "{{count}} 张失败",
