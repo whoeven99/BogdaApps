@@ -18,25 +18,31 @@ export default function AccountTranslationsCard({
   const times = availableTranslationTimes(remainingCredits);
   return (
     <div className="pricing-usage-card">
-      <Title level={4} style={{ margin: 0 }}>
-        {t("pricing.availableTranslations")}
-      </Title>
-      <div className="pricing-usage-card__metric-main">
+      <div className="pricing-usage-card__header">
+        <Title level={4} style={{ margin: 0 }}>
+          {t("pricing.availableTranslations")}
+        </Title>
+      </div>
+      <div className="pricing-usage-card__content">
         {loading ? (
           <Skeleton active title={false} paragraph={{ rows: 1, width: ["40%"] }} />
         ) : (
-          <div>
-            <span className="pricing-usage-card__balance-value">
-              {times.toLocaleString()}
-            </span>
-            <span className="pricing-usage-card__balance-suffix">
-              {t("pricing.times")}
-            </span>
+          <div className="pricing-usage-card__metric-main">
+            <div className="pricing-usage-card__balance">
+              <span className="pricing-usage-card__balance-value">
+                {times.toLocaleString()}
+              </span>
+              <span className="pricing-usage-card__balance-suffix">
+                {t("pricing.times")}
+              </span>
+            </div>
+            <div className="pricing-usage-card__actions">
+              <Button type="primary" onClick={onBuyCredits}>
+                {t("pricing.buyCredits")}
+              </Button>
+            </div>
           </div>
         )}
-        <Button type="primary" onClick={onBuyCredits}>
-          {t("pricing.buyCredits")}
-        </Button>
       </div>
     </div>
   );
