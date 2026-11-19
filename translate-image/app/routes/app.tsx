@@ -28,6 +28,7 @@ import {
   setChars,
   setIsNew,
   setPlan,
+  setRemaining,
   setShop,
   setTotalChars,
   setUpdateTime,
@@ -50,7 +51,11 @@ function GlobalCreditsPurchaseModal() {
     return () => window.removeEventListener(OPEN_CREDITS_PURCHASE_MODAL_EVENT, onOpen);
   }, []);
   return (
-    <AddCreaditsModal openModal={open} onClose={() => setOpen(false)} action="images" />
+    <AddCreaditsModal
+      openModal={open}
+      onClose={() => setOpen(false)}
+      action="quotacard"
+    />
   );
 }
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -241,6 +246,7 @@ export default function App() {
         totalChars: quota?.response?.purchasePoints,
       }),
     );
+    dispatch(setRemaining({ remaining: quota?.response?.remaining }));
     dispatch(setIsNew({ isNew: !quota?.response?.hasUsedTrial }));
     dispatch(setUserConfigIsLoading({ isLoading: false }));
   };

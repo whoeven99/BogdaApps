@@ -1,9 +1,9 @@
-import { Button, Flex, Modal, Space, Typography } from "antd";
+import { Text as PolarisText } from "@shopify/polaris";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
+import { AppSModal } from "~/ui/components/AppSModal";
 
-const { Title, Text } = Typography;
 const HAS_SHOWN_KEY = "ciwi-image-translation-freetrial-hasShow";
 
 function shouldShowTrialStartedModal({
@@ -36,60 +36,32 @@ const HasPayForFreePlanModal: React.FC = () => {
     setContent({ show: true });
   }, [isNew, plan?.isInFreePlanTime]);
 
+  const close = () => setContent({ show: false });
+
   return (
-    <Modal
+    <AppSModal
       open={content.show}
-      onCancel={() => setContent({ show: false })}
-      footer={null}
-      centered
-      width={600}
-      style={{
-        maxWidth: "80%",
-        border: "none",
-      }}
+      heading={t("Got a 5-day free trial")}
+      onClose={close}
+      primaryAction={{ content: t("Got it"), onAction: close }}
     >
-      <Space direction="vertical" style={{ width: "100%" }}>
-        <Title
-          style={{
-            margin: "0",
-            fontSize: "1.25rem",
-            fontWeight: 700,
-            marginBottom: 24,
-          }}
-        >
-          {t("Got a 5-day free trial")}
-        </Title>
-        <Text>
-          {t("You have received {{ plan }} Plan benefits", {
-            plan: plan?.type,
-          })}
-        </Text>
-        <ul style={{ paddingLeft: "20px", margin: 0 }}>
-          <li>
-            {t(
-              "Get 40 extra translations instantly,plus {{count}} more after 5 days",
-              { count: plan.id === 2 ? 100 : plan.id === 3 ? 300 : 800 },
-            )}
-          </li>
-          <li>{t("Clearer images with advanced AI models")}</li>
-          <li>{t("More accurate multilingual results")}</li>
-          <li>{t("Batch translate to save time")}</li>
-        </ul>
-        <Flex justify="center">
-          <Button
-            type="primary"
-            onClick={() => setContent({ show: false })}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginTop: 10,
-            }}
-          >
-            {t("Got it")}
-          </Button>
-        </Flex>
-      </Space>
-    </Modal>
+      <PolarisText as="p" variant="bodyMd">
+        {t("You have received {{ plan }} Plan benefits", {
+          plan: plan?.type,
+        })}
+      </PolarisText>
+      <ul style={{ paddingLeft: 20, margin: "12px 0 0" }}>
+        <li>
+          {t(
+            "Get 40 extra translations instantly,plus {{count}} more after 5 days",
+            { count: plan.id === 2 ? 100 : plan.id === 3 ? 300 : 800 },
+          )}
+        </li>
+        <li>{t("Clearer images with advanced AI models")}</li>
+        <li>{t("More accurate multilingual results")}</li>
+        <li>{t("Batch translate to save time")}</li>
+      </ul>
+    </AppSModal>
   );
 };
 

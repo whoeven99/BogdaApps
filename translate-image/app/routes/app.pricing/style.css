@@ -1,34 +1,162 @@
-.ant-ribbon-wrapper {
+.pricing-page {
   width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.pricing-page__header-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  text-align: end;
+}
+
+.pricing-page__next-payment {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--p-color-text-secondary);
+}
+
+.pricing-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--p-color-border);
+  background: var(--p-color-bg-surface);
+}
+
+.pricing-usage-card__metric-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pricing-usage-card__balance-value {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 36px;
+  color: var(--p-color-text);
+}
+
+.pricing-usage-card__balance-suffix {
+  margin-left: 8px;
+  color: var(--p-color-text-secondary);
+}
+
+.pricing-section {
+  padding: 8px 0 0;
+}
+
+.pricing-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.pricing-section__title {
+  margin: 0;
+  color: var(--p-color-text);
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 700;
 }
 
 .yearly_save {
-  background-color: rgb(255, 230, 0);
-  color: #fff;
+  background: var(--p-color-bg-surface-caution);
+  color: var(--p-color-text-caution);
   padding: 4px 12px;
   border-radius: 100px;
   text-align: center;
-  margin-left: 10px;
-  gap: 4px;
 }
 
-.free_trial {
+.pricing-plan-card {
+  height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(to right, rgb(254, 247, 246), rgb(253, 223, 217));
-  padding: 4px 8px;
-  border-radius: 8px;
-  gap: 4px;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--p-color-border);
+  border-radius: 12px;
+  background: var(--p-color-bg-surface);
+  min-width: 220px;
 }
 
+.pricing-plan-card--current {
+  border-color: var(--p-color-border-emphasis);
+}
 
-.flexBox{
+.pricing-plan-card__badge {
+  margin-bottom: 8px;
+}
+
+.pricing-plan-card__price-row {
+  margin: 12px 0;
+}
+
+.pricing-plan-card__price {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--p-color-text);
+}
+
+.pricing-plan-card__unit {
+  margin-left: 4px;
+  color: var(--p-color-text-secondary);
+}
+
+.pricing-plan-card__billing-note {
+  margin-bottom: 12px;
+  color: var(--p-color-text-secondary);
+  font-size: 13px;
+}
+
+.pricing-plan-card__cta {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
 }
-.blodSharedPlan {
-  font-weight: 500;
-  font-size: 24px;
+
+.pricing-plan-card__features {
+  flex: 1;
+}
+
+.pricing-plan-card__feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--p-color-text);
+}
+
+.pricing-pack-summary {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--p-color-border);
+  background: var(--p-color-bg-surface);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pricing-compare-title {
+  margin: 24px 0 12px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.pricing-faq-title {
+  margin: 24px 0 12px;
+  font-size: 18px;
+  font-weight: 700;
 }

@@ -1,33 +1,12 @@
-import { TitleBar } from "@shopify/app-bridge-react";
-import { Page } from "@shopify/polaris";
-import {
-  Space,
-  Row,
-  Col,
-  Card,
-  Progress,
-  Button,
-  Typography,
-  Alert,
-  Skeleton,
-  Popover,
-  Badge,
-  Flex,
-  Switch,
-  Table,
-  Collapse,
-  Modal,
-  CollapseProps,
-  Grid,
-} from "antd";
-import { CheckOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import { Text as PolarisText } from "@shopify/polaris";
 import { useEffect, useMemo, useState } from "react";
-import useReport from "scripts/eventReport";
-import { useTranslation } from "react-i18next";
-import { useDispatch, useSelector } from "react-redux";
-// import { OptionType } from "~/components/paymentModal";
 import { useFetcher } from "@remix-run/react/dist/components";
-const { Title, Text, Paragraph } = Typography;
+import { useTranslation } from "react-i18next";
+import useReport from "scripts/eventReport";
+import { availableTranslationTimes } from "~/lib/merchantTimes";
+import { AppSModal } from "~/ui/components/AppSModal";
+import { InFlowSelect } from "~/ui/components/InFlowSelect";
+
 export interface OptionType {
   key: string;
   name: string;
@@ -37,6 +16,7 @@ export interface OptionType {
     currencyCode: string;
   };
 }
+
 export const AddCreaditsModal = ({
   openModal,
   onClose,
@@ -50,7 +30,7 @@ export const AddCreaditsModal = ({
   productId?: string;
   imageId?: string;
 }) => {
-  const { reportClick, report } = useReport();
+  const { reportClick } = useReport();
   const payFetcher = useFetcher<any>();
   const orderFetcher = useFetcher<any>();
   const { t } = useTranslation();
@@ -67,33 +47,36 @@ export const AddCreaditsModal = ({
     return packs.map((pack, index) => ({
       key: `option-${index + 1}`,
       name: String(pack.shopifyPlanName || "").replace(/\s+extra times$/i, ""),
-      Credits: Math.floor(Number(pack.credits || 0) / 2000),
+      Credits: availableTranslationTimes(Number(pack.credits || 0)),
       price: {
         comparedPrice: Number(pack.priceAmount || 0),
         currencyCode: "USD",
       },
     }));
   }, [catalogFetcher.data]);
-  const fetcher = useFetcher();
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
+  const selected = creditOptions.find((item) => item.key === selectedOptionKey);
+
   useEffect(() => {
     if (openModal && catalogFetcher.state === "idle" && !catalogFetcher.data) {
       catalogFetcher.load("/api/billing/catalog");
     }
   }, [openModal, catalogFetcher]);
   useEffect(() => {
-    if (creditOptions.length > 0 && !creditOptions.some((item) => item.key === selectedOptionKey)) {
+    if (
+      creditOptions.length > 0 &&
+      !creditOptions.some((item) => item.key === selectedOptionKey)
+    ) {
       setSelectedOption(creditOptions[0].key);
     }
   }, [creditOptions, selectedOptionKey]);
+
   const handlePay = () => {
     reportClick("pricing_buy_credits");
     setBuyButtonLoading(true);
-    console.log(selectedOptionKey);
     const selectedOption = creditOptions.find(
       (item) => item.key === selectedOptionKey,
     );
-
     const payInfo = {
       name: selectedOption?.name,
       price: {
@@ -104,8 +87,6 @@ export const AddCreaditsModal = ({
       productId,
       imageId,
     };
-    console.log(payInfo);
-
     const formData = new FormData();
     formData.append("payInfo", JSON.stringify(payInfo));
     payFetcher.submit(formData, {
@@ -113,114 +94,78 @@ export const AddCreaditsModal = ({
       action: "/app",
     });
   };
-  useEffect(() => {
-    if (payFetcher.data) {
-      console.log(payFetcher.data);
 
-      if (payFetcher.data?.success) {
-        const order =
-          payFetcher.data?.response?.appPurchaseOneTimeCreate
-            ?.appPurchaseOneTime;
-        const confirmationUrl =
-          payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
-        const orderInfo = {
-          id: order?.id,
-          amount: order?.price.amount,
-          name: order?.name,
-          createdAt: order?.createdAt,
-          status: order?.status,
-          confirmationUrl: confirmationUrl,
-        };
-        const formData = new FormData();
-        formData.append("orderInfo", JSON.stringify(orderInfo));
-        orderFetcher.submit(formData, {
-          method: "post",
-          action: "/app",
-        });
-        open(confirmationUrl, "_top");
-      } else {
-        setBuyButtonLoading(false);
-      }
+  useEffect(() => {
+    if (!payFetcher.data) return;
+    if (payFetcher.data?.success) {
+      const order =
+        payFetcher.data?.response?.appPurchaseOneTimeCreate?.appPurchaseOneTime;
+      const confirmationUrl =
+        payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
+      const orderInfo = {
+        id: order?.id,
+        amount: order?.price.amount,
+        name: order?.name,
+        createdAt: order?.createdAt,
+        status: order?.status,
+        confirmationUrl,
+      };
+      const formData = new FormData();
+      formData.append("orderInfo", JSON.stringify(orderInfo));
+      orderFetcher.submit(formData, {
+        method: "post",
+        action: "/app",
+      });
+      open(confirmationUrl, "_top");
+    } else {
+      setBuyButtonLoading(false);
     }
   }, [payFetcher.data]);
+
   return (
-    <Modal
-      title={t("Buy Extra Image Translation Times")}
+    <AppSModal
       open={openModal}
-      width={900}
-      centered
-      onCancel={onClose}
-      footer={null}
+      heading={t("pricing.buyExtraTimes")}
+      onClose={onClose}
+      primaryAction={{
+        content: t("pricing.buyNow"),
+        onAction: handlePay,
+        loading: buyButtonLoading,
+        disabled: !selectedOptionKey || buyButtonLoading,
+      }}
+      secondaryActions={[
+        { content: t("pricing.maybeLater"), onAction: onClose },
+      ]}
     >
-      <Space direction="vertical" size="small" style={{ width: "100%" }}>
-        <Row gutter={[16, 16]}>
-          {creditOptions.map((option) => (
-            <Col key={option.key} xs={12} sm={12} md={6} lg={6} xl={6}>
-              <Card
-                hoverable
-                style={{
-                  textAlign: "center",
-                  borderColor:
-                    JSON.stringify(selectedOptionKey) ===
-                    JSON.stringify(option.key)
-                      ? "#007F61"
-                      : undefined,
-                  borderWidth:
-                    JSON.stringify(selectedOptionKey) ===
-                    JSON.stringify(option.key)
-                      ? "2px"
-                      : "1px",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  height: "150px",
-                }}
-                onClick={() => setSelectedOption(option.key)}
-              >
-                <Text
-                  style={{
-                    fontSize: "16px",
-                    fontWeight: 500,
-                    display: "block",
-                    marginBottom: "8px",
-                  }}
-                >
-                  {option.Credits.toLocaleString()} {t("extra times")}
-                </Text>
-                <Title
-                  level={3}
-                  style={{ margin: 0, color: "#007F61", fontWeight: 700 }}
-                >
-                  ${option.price.comparedPrice.toFixed(2)}
-                </Title>
-              </Card>
-            </Col>
-          ))}
-        </Row>
-        <Flex align="center" justify="center">
-          <Space direction="vertical" align="center">
-            <Text type="secondary" style={{ margin: "16px 0 8px 0" }}>
-              {t("Total pay")}: $
-              {selectedOptionKey
-                ? creditOptions
-                    .find((item) => item.key === selectedOptionKey)
-                    ?.price.comparedPrice.toFixed(2)
-                : "0.00"}
-            </Text>
-            <Button
-              type="primary"
-              size="large"
-              disabled={!selectedOptionKey}
-              loading={buyButtonLoading}
-              onClick={handlePay}
-            >
-              {t("Buy now")}
-            </Button>
-          </Space>
-        </Flex>
-      </Space>
-    </Modal>
+      <InFlowSelect
+        label={t("pricing.creditPack")}
+        labelHidden
+        options={creditOptions.map((option) => ({
+          value: option.key,
+          label: `${option.Credits.toLocaleString()} ${t("extra times")} · $${option.price.comparedPrice.toFixed(2)}`,
+        }))}
+        value={selectedOptionKey}
+        onChange={setSelectedOption}
+        menuPreferAbove
+      />
+      <div className="pricing-pack-summary">
+        <div>
+          <PolarisText as="p" variant="bodySm" tone="subdued">
+            {t("pricing.times")}
+          </PolarisText>
+          <PolarisText as="p" variant="headingMd" fontWeight="bold">
+            {selected?.Credits.toLocaleString() ?? "0"} {t("extra times")}
+          </PolarisText>
+        </div>
+        <div>
+          <PolarisText as="p" variant="bodySm" tone="subdued">
+            {t("pricing.totalPayment")}
+          </PolarisText>
+          <PolarisText as="p" variant="headingMd" fontWeight="bold">
+            ${selected?.price.comparedPrice.toFixed(2) ?? "0.00"}
+          </PolarisText>
+        </div>
+      </div>
+    </AppSModal>
   );
 };

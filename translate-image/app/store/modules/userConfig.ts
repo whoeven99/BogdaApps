@@ -12,6 +12,7 @@ interface UserConfigState {
   updateTime: string | null;
   chars: number | undefined;
   totalChars: number | undefined;
+  remaining: number | undefined;
   userConfigIsLoading: boolean;
   isNew: boolean | null;
 }
@@ -28,6 +29,7 @@ const initialState: UserConfigState = {
   updateTime: null,
   chars: 0,
   totalChars: 0,
+  remaining: 0,
   userConfigIsLoading: true,
   isNew: null,
 };
@@ -67,6 +69,12 @@ const userConfigSlice = createSlice({
     ) => {
       state.totalChars = action.payload.totalChars;
     },
+    setRemaining: (
+      state,
+      action: PayloadAction<{ remaining: number | undefined }>,
+    ) => {
+      state.remaining = action.payload.remaining;
+    },
     setUserConfigIsLoading: (
       state,
       action: PayloadAction<{ isLoading: boolean }>,
@@ -86,6 +94,7 @@ export const {
   setLocale,
   setChars,
   setTotalChars,
+  setRemaining,
   setUserConfigIsLoading,
   setIsNew,
 } = userConfigSlice.actions;
