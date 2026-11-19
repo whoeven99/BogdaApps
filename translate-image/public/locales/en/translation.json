@@ -122,13 +122,15 @@
   "What happens when I run out of credits?": "What happens when I run out of credits?",
   "You'll need to purchase extra credits to keep translating images. You won't lose access to features, only to credit-based actions.": "You'll need to purchase extra credits to keep translating images. You won't lose access to features, only to credit-based actions.",
   "Do unused credits carry over?": "Do unused credits carry over?",
-  "Plan credits reset at the end of each billing cycle. But if you cancel or downgrade, any unused credits stay active for 3 more months.": "Plan credits reset at the end of each billing cycle. But if you cancel or downgrade, any unused credits stay active for 3 more months.",
+  "Plan credits reset at the end of each billing cycle. But if you cancel or downgrade, any unused credits stay active for 3 more months.": "Plan credits reset at the end of each billing cycle. Extra credit packs never expire.",
+  "Plan credits reset at the end of each billing cycle. Extra credit packs never expire.": "Plan credits reset at the end of each billing cycle. Extra credit packs never expire.",
   "Do extra credits affect my plan or features?": "Do extra credits affect my plan or features?",
   "No. Plan credits come with your subscription and reset monthly. Extra credits are only used when plan credits run out, and they never expire. They don't unlock new features or raise limits.": "No. Plan credits come with your subscription and reset monthly. Extra credits are only used when plan credits run out, and they never expire. They don't unlock new features or raise limits.",
   "What happens if I upgrade my plan?": "What happens if I upgrade my plan?",
   "You get your new plan's credits and features right away. Any remaining credits from your previous plan won't carry over.": "You get your new plan's credits and features right away. Any remaining credits from your previous plan won't carry over.",
   "Will I lose credits if I cancel or downgrade?": "Will I lose credits if I cancel or downgrade?",
-  "No. Your unused credits stay available for 3 months. But you'll only have access to the features included in your new (lower) plan.": "No. Your unused credits stay available for 3 months. But you'll only have access to the features included in your new (lower) plan.",
+  "No. Your unused credits stay available for 3 months. But you'll only have access to the features included in your new (lower) plan.": "Unused plan credits are removed when the subscription ends. Extra credit packs stay.",
+  "Unused plan credits are removed when the subscription ends. Extra credit packs stay.": "Unused plan credits are removed when the subscription ends. Extra credit packs stay.",
   "Features": "Features",
   "Pricing": "Pricing",
   "Current plan: ": "Current plan: ",
@@ -180,6 +182,9 @@
   "Product image": "Product image",
   "Theme image": "Theme image",
   "Article image": "Article image",
+  "Page image": "Page image",
+  "Collection image": "Collection image",
+  "Other image": "Other image",
   "Image Translation": "Image Translation",
   "What types of images can the tool translate?": "What types of images can the tool translate?",
   "It supports product images, theme banners, blog post images, page images, and images in custom blocks.": "It supports product images, theme banners, blog post images, page images, and images in custom blocks.",
@@ -242,7 +247,30 @@
   },
   "Article images": "Article images",
   "Product images": "Product images",
+  "Page images": "Page images",
+  "Collection images": "Collection images",
+  "Other images": "Other images",
   "Theme images": "Theme images",
+  "Third-party images": "Third-party images",
+  "Third-party image": "Third-party image",
+  "Home": "Home",
+  "Language": "Language",
+  "Path": "Path",
+  "Images": "Images",
+  "Last seen": "Last seen",
+  "Image": "Image",
+  "Original image": "Original image",
+  "Translated": "Translated",
+  "Not translated": "Not translated",
+  "Clear": "Clear",
+  "thirdParty": {
+    "hint": "Open your storefront in this language, then refresh after the theme extension collects images.",
+    "searchPlaceholder": "Search path",
+    "emptyTitle": "No third-party images yet",
+    "empty": "Open your storefront in this language, browse a few pages, then refresh.",
+    "searchEmpty": "No matching paths.",
+    "pageEmpty": "No images on this path for the current language. Go back to the list."
+  },
   "Title": "Title",
   "Author": "Author",
   "Blog": "Blog",
@@ -252,5 +280,363 @@
   "Blog Title": "Blog Title",
   "Published Time": "Published Time",
   "Updata Time": "Updata Time",
-  "Image saving failed": "Image saving failed"
+  "Image saving failed": "Image saving failed",
+  "Model": "Model",
+  "Standard": "Standard",
+  "Advance": "Advance",
+  "imageTranslate": {
+    "sourceNotLoaded": "Source image is not loaded. Go back to the list and open it again.",
+    "scopeMissing": "This app needs Files access to save translated images. Grant access to continue.",
+    "grantAccess": "Grant access",
+    "grantAccessFailed": "Couldn't update Files access. Try again.",
+    "scopeDeclined": "Files access was not granted. Translated images can't be saved until you allow it.",
+    "error": {
+      "IMAGE_TRANSLATE_GEMINI_RATE_LIMIT": "The image translation service is busy. Wait a few minutes and try again.",
+      "IMAGE_TRANSLATE_GEMINI_UNAVAILABLE": "The image translation service is temporarily unavailable. Try again later.",
+      "IMAGE_TRANSLATE_GEMINI_FAILED": "Image generation failed. Please try again later.",
+      "IMAGE_TRANSLATE_GEMINI_BLOCKED": "This image couldn’t be translated because of content restrictions.",
+      "IMAGE_TRANSLATE_GEMINI_NO_IMAGE": "The model did not return a translated image. Try another image or model.",
+      "IMAGE_TRANSLATE_GEMINI_NOT_CONFIGURED": "Image translation is not configured on the server. Contact support.",
+      "IMAGE_TRANSLATE_INVALID_IMAGE_URL": "The image URL is invalid or unreachable.",
+      "IMAGE_TRANSLATE_UNSUPPORTED_FORMAT": "This image format is not supported.",
+      "IMAGE_TRANSLATE_IMAGE_TOO_LARGE": "This image is too large to translate.",
+      "IMAGE_TRANSLATE_IMAGE_FETCH_FAILED": "Could not download the original image.",
+      "IMAGE_TRANSLATE_SHOPIFY_SCOPE_MISSING": "Allow Ciwi to save translated images to Shopify Files.",
+      "IMAGE_TRANSLATE_SHOPIFY_UPLOAD_FAILED": "Could not upload the translated image to Shopify Files.",
+      "IMAGE_TRANSLATE_SAVE_FAILED": "The translated image could not be saved. Please try again.",
+      "IMAGE_TRANSLATE_GENERIC": "Image translation failed. Try again later."
+    },
+    "model": "Model",
+    "modelStandard": "Standard",
+    "modelAdvance": "Advance",
+    "creditsPerImage": "{{credits}} credits / image",
+    "savedToFiles": "Translated images are saved to Shopify Files.",
+    "insufficientCredits": "Not enough credits to translate images."
+  },
+  "v4": {
+    "createTask": {
+      "confirmAction": "Translate now",
+      "confirmBuyCreditsAndStart": "Buy credits and start full task",
+      "confirmBuyCreditsOnly": "Buy credits",
+      "confirmCompactList": "{{count}} selected · {{items}}",
+      "confirmCompactListEmpty": "Nothing selected",
+      "confirmCompactListMore": "{{count}} selected, including: {{items}}, plus {{more}} more",
+      "confirmCreditsAvailable": "Credits available",
+      "confirmCreditsRequired": "Credits needed",
+      "confirmEstimateComputing": "Calculating...",
+      "confirmEstimateUnavailable": "Not estimated",
+      "confirmEstimateUnavailableHint": "Not estimated yet. Click Precise estimate to get a more accurate credit estimate for this task.",
+      "confirmEstimateLoadingHint": "Getting the precise estimate. We will show the credit usage as soon as it is ready.",
+      "confirmEstimatePanelTitle": "Credits",
+      "confirmNoCreditsTitle": "Not enough credits",
+      "confirmPaidOfferDesc": "Buy more credits if you want to complete the full task now, or start the covered part with the current balance first.",
+      "confirmPaidOfferTitle": "Paid plan is already active",
+      "confirmPartialTitle": "Not enough credits — part can still start",
+      "confirmPricingFeatureCredits": "Plan credits\n3M",
+      "confirmPricingFeatureModel": "Available model\nGPT",
+      "confirmPricingFeatureSpeed": "Translation speed\nx2",
+      "confirmPricingOfferDesc": "Subscribe before creating this task, or skip the subscription and buy credits only.",
+      "confirmPricingOfferTitle": "Subscription",
+      "confirmPricingTitle": "Not enough credits",
+      "confirmReadyTitle": "Confirm translation task",
+      "confirmBasicTrialAndStart": "Start Basic trial",
+      "confirmSelectedPlanAndStart": "Continue with selected plan",
+      "confirmRecommendedPlan": "Recommended plan",
+      "confirmSelectedPlanSecondary": "Choose monthly plan",
+      "confirmStartNow": "Start translation",
+      "confirmStartPartial": "Start covered part first",
+      "confirmTaskDetailTitle": "Task setup",
+      "confirmTrialFeatureModel": "1,500,000 credits/month",
+      "confirmTrialFeatureModelValue": "$7.99/month",
+      "confirmTrialOfferTitle": "5-day free trial",
+      "confirmTrialTitle": "Not enough credits — free trial available",
+      "confirmViewPlans": "View plans",
+      "confirmPolishCredits": "Includes about {{credits}} credits for AI polish"
+    },
+    "job": {
+      "creditsShort": "{{formattedCount}} credits"
+    },
+    "notice": {
+      "quotaInsufficient": "Not enough credits. The task was paused automatically.",
+      "quotaInsufficientPartial": "Not enough credits. Some resources were translated and written back. Add credits and select Resume to continue.",
+      "quotaInsufficientPartialPolish": "Not enough credits. Some descriptions were polished and written back; the rest kept the translation. Add credits and select Resume to continue."
+    },
+    "stage": {
+      "init": "Initialize",
+      "translate": "Translate",
+      "polish": "Polish",
+      "writeback": "Write back"
+    },
+    "status": {
+      "CANCELLED": "Cancelled",
+      "COMPLETED": "Completed",
+      "CREATED": "Created",
+      "FAILED": "Failed",
+      "INIT_DONE": "Initialization complete",
+      "INIT_QUEUED": "Waiting to initialize",
+      "INITIALIZING": "Initializing",
+      "PAUSED": "Paused",
+      "POLISH_QUEUED": "Waiting to polish",
+      "POLISHING": "Polishing",
+      "stopping": "Stopping…",
+      "TRANSLATE_DONE": "Translation complete",
+      "TRANSLATE_QUEUED": "Waiting to translate",
+      "translateResumeQueued": "Queued to resume translation",
+      "TRANSLATING": "Translating",
+      "VERIFY_QUEUED": "Write-back complete",
+      "VERIFYING": "Write-back complete",
+      "WRITEBACK_QUEUED": "Waiting to write back",
+      "writebackResumeQueued": "Queued to resume write-back",
+      "WRITING_BACK": "Writing back to Shopify"
+    },
+    "tasks": {
+      "cancelled": "Cancelled",
+      "cancelTask": "Cancel task",
+      "collapse": "Collapse",
+      "createdHint": "{{count}} new task(s) were created below. Progress will keep updating here.",
+      "currentHelper": "Active, paused, and failed tasks are shown here first.",
+      "deleteConfirmDesc": "This removes the task record and its translation data. This cannot be undone.",
+      "deleteConfirmTitle": "Delete this task?",
+      "deleteRecord": "Delete record",
+      "ended": "Ended",
+      "historyHelper": "Completed and cancelled task records are kept here.",
+      "historyPageTitle": "History tasks · {{count}}",
+      "inProgress": "In progress: {{stage}}",
+      "justCreated": "Just created",
+      "noCurrent": "No tasks in progress",
+      "noCurrentDesc": "Select target languages and content above, then create your first translation task.",
+      "noHistory": "No history tasks",
+      "noHistoryDesc": "Completed or cancelled tasks will appear here.",
+      "openHistory": "View history ({{count}})",
+      "pause": "Pause",
+      "queuedForTranslate": "Queued for translation",
+      "resume": "Resume",
+      "syncLive": "Live sync",
+      "title": "Task list · {{count}}",
+      "view": "View",
+      "waiting": "Waiting"
+    }
+  },
+  "contentImage": {
+    "search": "Search",
+    "searchPlaceholder": "Search by title",
+    "column": {
+      "image": "Image",
+      "source": "Source",
+      "usedIn": "Used in",
+      "status": "Status",
+      "actions": "Actions",
+      "resource": "Resource",
+      "product": "Product",
+      "article": "Article",
+      "page": "Page",
+      "translation": "Translation"
+    },
+    "usedIn": {
+      "unused": "Not used"
+    },
+    "usedInCount": "{{title}} and {{count}} more",
+    "themeRow": {
+      "openPreview": "Open compare preview"
+    },
+    "source": {
+      "module": {
+        "theme": "Theme",
+        "collection": "Collection",
+        "other": "Other images"
+      },
+      "collection": "Collection · {{title}}",
+      "collectionFeatured": "Collection · {{title}} · Featured image",
+      "collectionDescription": "Collection · {{title}} · Description",
+      "themeMany": "{{title}} ({{count}} locations)"
+    },
+    "status": {
+      "translated": "Translated",
+      "notTranslated": "Not translated"
+    },
+    "action": {
+      "translate": "Translate",
+      "replace": "Upload translation",
+      "view": "View",
+      "clear": "Remove translation"
+    },
+    "compare": {
+      "heading": "Compare images",
+      "original": "Original",
+      "translated": "Translated"
+    },
+    "empty": "No Shopify images found in this content",
+    "noLanguage": "Add a target language first to translate images.",
+    "translateDone": "Image translated",
+    "cleared": "Image translation removed.",
+    "clearFailed": "Failed to clear translation",
+    "confirm": {
+      "taskDetailTitle": "Task details",
+      "targetLanguage": "Target language",
+      "imageCount": "Images",
+      "perImage": "Per image: {{credits}} credits",
+      "partial": "Your credits cover about {{count}} images. The task pauses when credits run out.",
+      "retranslate": "Retranslate images that are already translated",
+      "start": "Start translation"
+    },
+    "job": {
+      "failed": "{{count}} failed",
+      "status": {
+        "QUEUED": "Queued",
+        "RUNNING": "Translating",
+        "PAUSED": "Paused",
+        "COMPLETED": "Completed",
+        "CANCELLED": "Cancelled"
+      },
+      "pauseReason": {
+        "MANUAL": "Paused",
+        "QUOTA_INSUFFICIENT": "Paused: not enough credits",
+        "SCOPE_MISSING": "Paused: Shopify Files access is needed",
+        "SERVICE_ERROR": "Paused: image service is unavailable, try again later"
+      },
+      "notice": {
+        "scopeMissing": "Shopify Files access is needed to continue translating images.",
+        "serviceError": "Image service is unavailable. Try again later."
+      },
+      "created": "Image task created",
+      "active": "An image task is already running. Open it to view progress, or wait until it finishes.",
+      "activeOther": "A {{kind}} image task is already running. Only one image task can run at a time.",
+      "kind": {
+        "product": "Product images",
+        "content": "Content images"
+      },
+      "viewResult": "View results",
+      "title": "{{kind}} · {{language}}",
+      "imagesShort": "{{done}}/{{total}} images"
+    },
+    "home": {
+      "title": "Image translation",
+      "description": "Translate on-image text in products, articles, pages, collections, other Shopify Files, and theme assets—plus third-party images found on your storefront.",
+      "button": "Translate images",
+      "embedHint": "Translated images show on your storefront only when the Ciwi Switcher app embed is on."
+    },
+    "clearedMany": "Cleared {{count}} translations",
+    "clearManyPartial": "{{failed}} of {{count}} translations could not be cleared",
+    "clearConfirm": {
+      "heading": "Remove image translations",
+      "body": "Remove {{count}} image translations for {{language}}? Your storefront will show the original images again. Ciwi will try to delete the translated images it uploaded to Shopify Files."
+    },
+    "statusTab": {
+      "all": "All",
+      "active": "Active",
+      "draft": "Draft",
+      "archived": "Archived",
+      "unlisted": "Unlisted",
+      "published": "Published",
+      "unpublished": "Unpublished"
+    },
+    "storeStatus": {
+      "ACTIVE": "Active",
+      "DRAFT": "Draft",
+      "ARCHIVED": "Archived",
+      "UNLISTED": "Unlisted",
+      "PUBLISHED": "Published",
+      "UNPUBLISHED": "Unpublished",
+      "READY": "Ready",
+      "PROCESSING": "Processing",
+      "FAILED": "Failed",
+      "UPLOADED": "Uploaded"
+    },
+    "resourceEmpty": {
+      "product": "No products with images found",
+      "article": "No articles with images found",
+      "page": "No pages with images found",
+      "file": "No other Shopify Files images found",
+      "theme": "No images are referenced by the published theme",
+      "collection": "No collections with images found",
+      "metafield": "No metafield images in the last scan"
+    },
+    "failed": {
+      "hint": "{{count}} image(s) failed in recent batch jobs for this language.",
+      "viewList": "View failed images",
+      "showing": "Showing failed images ({{count}}).",
+      "showAll": "Show all",
+      "empty": "No failed images in recent jobs for this language."
+    },
+    "resourceTranslationCoverage": "{{translated}}/{{total}} translated",
+    "resourceTranslationFailuresOnly": "{{count}} failed",
+    "resourceTranslationFailureTooltip": "{{count}} image(s) failed in recent jobs. Open this resource to review.",
+    "collectFailed": "Couldn't load images for the selected resources. Try again.",
+    "noImagesInSelection": "No images found in the selected resources.",
+    "truncatedSelection": "Too many images. We'll translate the first 500 (up to 20 resources).",
+    "resourceMissing": "This resource was not found.",
+    "fileSearchPlaceholder": "Search by file name",
+    "jobResult": {
+      "missing": "This image task was not found.",
+      "emptyItems": "This task has no images to show. Already-translated images may have been skipped.",
+      "summaryLine": "{{done}}/{{total}} images · {{credits}} credits used",
+      "column": {
+        "preview": "Preview"
+      }
+    },
+    "item": {
+      "PENDING": "Pending",
+      "DONE": "Translated",
+      "FAILED": "Failed",
+      "SKIPPED": "Skipped"
+    },
+    "title": "Content images",
+    "rowStatus": {
+      "waitingInJob": "Waiting"
+    },
+    "resourceImageCount_one": "{{count}} image",
+    "resourceImageCount_other": "{{count}} images",
+    "insufficientCredits": "Not enough credits to translate images."
+  },
+  "productImage": {
+    "title": "Product images"
+  },
+  "articleImage": {
+    "title": "Article images"
+  },
+  "pageImage": {
+    "title": "Page images"
+  },
+  "collectionImage": {
+    "title": "Collection images"
+  },
+  "fileImage": {
+    "title": "Other images"
+  },
+  "themeImage": {
+    "title": "Theme images",
+    "page": {
+      "404": "404",
+      "index": "Home",
+      "product": "Product",
+      "collection": "Collection",
+      "page": "Page",
+      "blog": "Blog",
+      "article": "Article",
+      "cart": "Cart",
+      "search": "Search",
+      "password": "Password",
+      "list-collections": "Collections",
+      "gift_card": "Gift card",
+      "settings": "Theme settings",
+      "header-group": "Header",
+      "footer-group": "Footer"
+    },
+    "field": {
+      "image": "Image",
+      "mobile_image": "Mobile image",
+      "logo": "Logo"
+    }
+  },
+  "switcherImage": {
+    "title": "Third-party images",
+    "emptyPages": "No storefront pages with collected images yet. Open the storefront with the Ciwi Switcher embed on, then refresh.",
+    "emptyPage": "No images collected on this page yet.",
+    "searchPlaceholder": "Search by page path",
+    "column": {
+      "path": "Page path",
+      "coverage": "Translated"
+    },
+    "coverage": "{{translated}}/{{total}}"
+  }
 }

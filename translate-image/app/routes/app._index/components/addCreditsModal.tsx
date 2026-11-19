@@ -55,82 +55,37 @@ export const AddCreaditsModal = ({
   const orderFetcher = useFetcher<any>();
   const { t } = useTranslation();
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
-  const creditOptions: OptionType[] = [
-    {
-      key: "option-1",
-      name: "50",
-      Credits: 500000 / 2000 / 5,
+  const catalogFetcher = useFetcher<{
+    packs?: Array<{
+      shopifyPlanName: string | null;
+      credits: number;
+      priceAmount: number;
+    }>;
+  }>();
+  const creditOptions: OptionType[] = useMemo(() => {
+    const packs = catalogFetcher.data?.packs ?? [];
+    return packs.map((pack, index) => ({
+      key: `option-${index + 1}`,
+      name: String(pack.shopifyPlanName || "").replace(/\s+extra times$/i, ""),
+      Credits: Math.floor(Number(pack.credits || 0) / 2000),
       price: {
-        comparedPrice: 3.99,
+        comparedPrice: Number(pack.priceAmount || 0),
         currencyCode: "USD",
       },
-    },
-    {
-      key: "option-2",
-      name: "100",
-      Credits: 1000000 / 2000 / 5,
-      price: {
-        comparedPrice: 7.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-3",
-      name: "200",
-      Credits: 2000000 / 2000 / 5,
-      price: {
-        comparedPrice: 15.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-4",
-      name: "300",
-      Credits: 3000000 / 2000 / 5,
-      price: {
-        comparedPrice: 23.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-5",
-      name: "500",
-      Credits: 5000000 / 2000 / 5,
-      price: {
-        comparedPrice: 39.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-6",
-      name: "1000",
-      Credits: 10000000 / 2000 / 5,
-      price: {
-        comparedPrice: 79.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-7",
-      name: "2000",
-      Credits: 20000000 / 2000 / 5,
-      price: {
-        comparedPrice: 159.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-8",
-      name: "3000",
-      Credits: 30000000 / 2000 / 5,
-      price: {
-        comparedPrice: 239.99,
-        currencyCode: "USD",
-      },
-    },
-  ];
+    }));
+  }, [catalogFetcher.data]);
   const fetcher = useFetcher();
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
+  useEffect(() => {
+    if (openModal && catalogFetcher.state === "idle" && !catalogFetcher.data) {
+      catalogFetcher.load("/api/billing/catalog");
+    }
+  }, [openModal, catalogFetcher]);
+  useEffect(() => {
+    if (creditOptions.length > 0 && !creditOptions.some((item) => item.key === selectedOptionKey)) {
+      setSelectedOption(creditOptions[0].key);
+    }
+  }, [creditOptions, selectedOptionKey]);
   const handlePay = () => {
     reportClick("pricing_buy_credits");
     setBuyButtonLoading(true);

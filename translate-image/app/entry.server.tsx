@@ -14,6 +14,44 @@ import { ConfigProvider } from "antd";
 import { createCache, extractStyle, StyleProvider } from "@ant-design/cssinjs";
 import { renderHeadToString } from 'remix-island';
 import { Head } from './root'
+import {
+  BOOT_HTML_PROBE,
+  bootMark,
+  bootRequestShape,
+  startBootDocument,
+} from "./server/bootTrace.server";
+import { normalizeEnvValue } from "./config/runtimeEnv.server";
+import { startBillingReconcileLoop } from "./server/billing/reconcileLoop.server";
+import { startImageTranslateLoop } from "./server/contentImage/imageTranslateLoop.server";
+
+startBillingReconcileLoop();
+startImageTranslateLoop();
+
+const APP_BRIDGE_SRC = "https://cdn.shopify.com/shopifycloud/app-bridge.js";
+
+function escapeHtmlAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+/** Admin 嵌入页必须在首屏 HTML 里带 App Bridge，不能等 /app 鉴权成功后再注入。 */
+function appBridgeHeadTags(): string {
+  const apiKey = normalizeEnvValue(process.env.SHOPIFY_API_KEY);
+  if (!apiKey) {
+    bootMark("document warn", "SHOPIFY_API_KEY missing; App Bridge not injected");
+    return "";
+  }
+  return `<meta name="shopify-api-key" content="${escapeHtmlAttr(apiKey)}"/><script src="${APP_BRIDGE_SRC}"></script>`;
+}
+
+function ensureFrameAncestors(headers: Headers): void {
+  headers.delete("X-Frame-Options");
+  const csp = headers.get("Content-Security-Policy") ?? "";
+  if (csp.includes("frame-ancestors")) return;
+  headers.set(
+    "Content-Security-Policy",
+    "frame-ancestors https://admin.shopify.com https://*.myshopify.com https://admin.shop.dev https://*.spin.dev;",
+  );
+}
 
 export default async function handleRequest(
   request: Request,
@@ -73,10 +111,15 @@ export default async function handleRequest(
   }
 
   addDocumentResponseHeaders(request, responseHeaders);
+  ensureFrameAncestors(responseHeaders);
   const userAgent = request.headers.get("user-agent");
-  const callbackName = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
+  const isBotRequest = isbot(userAgent ?? "");
+  const callbackName = isBotRequest ? "onAllReady" : "onShellReady";
+  const trace = startBootDocument(request);
+  const shape = bootRequestShape(request);
 
   let instance = createInstance();
+  try {
   await instance
     .use(Backend)
     .use(initReactI18next)
@@ -90,7 +133,8 @@ export default async function handleRequest(
         },
       },
     });
-    
+  bootMark("document i18n", `${shape} ${trace.elapsed()}ms lng=${i18nCode}`);
+
   const cache = createCache();
 
   function MainApp() {
@@ -120,12 +164,24 @@ export default async function handleRequest(
 
   const styleText = extractStyle(cache);
 
-  const html = `<!DOCTYPE html><html lang="${language}">${head}${styleText}<body><div id="root">${markup}</div></body></html>`;
+  const appBridge = appBridgeHeadTags();
+  const html = `<!DOCTYPE html><html lang="${language}"><head>${head}${appBridge}${styleText}</head><body>${BOOT_HTML_PROBE}<div id="root">${markup}</div></body></html>`;
 
   responseHeaders.set("Content-Type", "text/html");
+  bootMark(
+    "document html",
+    `${shape} ${trace.elapsed()}ms status=${responseStatusCode} bytes=${html.length} shell=${callbackName} appBridge=${appBridge ? "yes" : "no"}`,
+  );
 
   return new Response(html, {
     status: responseStatusCode,
     headers: responseHeaders,
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    bootMark("document fail", `${shape} ${trace.elapsed()}ms ${message.slice(0, 200)}`);
+    throw error;
+  } finally {
+    trace.stop();
+  }
 }

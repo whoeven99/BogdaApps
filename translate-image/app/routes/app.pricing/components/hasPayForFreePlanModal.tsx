@@ -1,67 +1,45 @@
-import { useFetcher, useNavigate } from "@remix-run/react";
-import { Button, ConfigProvider, Flex, Modal, Space, Typography } from "antd";
+import { Button, Flex, Modal, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
-import { IsShowFreePlan } from "~/api/JavaServer";
-import { globalStore } from "~/globalStore";
 
 const { Title, Text } = Typography;
+const HAS_SHOWN_KEY = "ciwi-image-translation-freetrial-hasShow";
 
-interface HasPayForFreePlanModalProps {}
+function shouldShowTrialStartedModal({
+  isNew,
+  isInFreePlanTime,
+  hasShownLocal,
+}: {
+  isNew: boolean | null;
+  isInFreePlanTime: boolean;
+  hasShownLocal: boolean;
+}) {
+  return isNew === false && isInFreePlanTime === true && hasShownLocal !== true;
+}
 
-const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
+const HasPayForFreePlanModal: React.FC = () => {
   const { t } = useTranslation();
-
-  const [content, setContent] = useState<any>({
-    show: false,
-    plan: "",
-  });
-
+  const [content, setContent] = useState<{ show: boolean }>({ show: false });
   const { plan, isNew } = useSelector((state: any) => state.userConfig);
 
   useEffect(() => {
-    GetOrderStatus();
-  }, [isNew]);
-
-  const GetOrderStatus = async () => {
-    if (!isNew && isNew !== null) {
-      const hasShowModal = localStorage.getItem(
-        "ciwi-image-translation-freetrial-hasShow",
-      );
-      if (hasShowModal) {
-        return;
-      } else {
-        setTimeout(async () => {
-          const hasShowModalResponse = await IsShowFreePlan({
-            shop: globalStore?.shop || "",
-            server: globalStore?.server || "",
-          });
-          // console.log("hasShowModalResponse", hasShowModalResponse);
-          if (hasShowModalResponse?.success) {
-            if (hasShowModalResponse?.response) {
-              setContent({
-                show: true,
-                success: true,
-              });
-            }
-          }
-          localStorage.setItem("ciwi-image-translation-freetrial-hasShow", "1");
-        }, 100);
-      }
-    }
-  };
+    if (typeof window === "undefined") return;
+    const hasShownLocal = Boolean(localStorage.getItem(HAS_SHOWN_KEY));
+    const show = shouldShowTrialStartedModal({
+      isNew,
+      isInFreePlanTime: Boolean(plan?.isInFreePlanTime),
+      hasShownLocal,
+    });
+    if (!show) return;
+    localStorage.setItem(HAS_SHOWN_KEY, "1");
+    setContent({ show: true });
+  }, [isNew, plan?.isInFreePlanTime]);
 
   return (
-    // 添加 Modal 组件
     <Modal
       open={content.show}
-      onCancel={() =>
-        setContent({
-          ...content,
-          show: false,
-        })
-      }
+      onCancel={() => setContent({ show: false })}
       footer={null}
       centered
       width={600}
@@ -100,12 +78,7 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
         <Flex justify="center">
           <Button
             type="primary"
-            onClick={() =>
-              setContent({
-                ...content,
-                show: false,
-              })
-            }
+            onClick={() => setContent({ show: false })}
             style={{
               display: "flex",
               alignItems: "center",

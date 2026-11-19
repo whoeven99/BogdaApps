@@ -1,0 +1,14 @@
+s-modal.create-task-confirm-compact {
+  width: min(560px, calc(100vw - 32px));
+  max-width: min(560px, calc(100vw - 32px));
+}
+
+s-modal.create-task-confirm-compact::part(dialog),
+s-modal.create-task-confirm-compact::part(content) {
+  width: min(560px, calc(100vw - 32px));
+  max-width: min(560px, calc(100vw - 32px));
+}
+
+s-modal.create-task-confirm-compact::part(content) {
+  overflow: visible;
+}

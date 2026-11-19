@@ -6,13 +6,23 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import {
+  ensureRuntimeEnv,
+  normalizeEnvValue,
+} from "./config/runtimeEnv.server";
+import { SHOPIFY_ADMIN_API_VERSION } from "./lib/shopifyAdminApiVersion";
+import { omitWriteFilesScope } from "./lib/writeFilesScope";
+import { bootMark, bootStep } from "./server/bootTrace.server";
+import { getShopAdmin } from "./server/shop/shopAdminToken.server";
+
+ensureRuntimeEnv();
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY,
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
-  apiVersion: ApiVersion.January25,
-  scopes: process.env.SCOPES?.split(","),
-  appUrl: process.env.SHOPIFY_APP_URL || "",
+  apiKey: normalizeEnvValue(process.env.SHOPIFY_API_KEY),
+  apiSecretKey: normalizeEnvValue(process.env.SHOPIFY_API_SECRET),
+  apiVersion: SHOPIFY_ADMIN_API_VERSION as ApiVersion,
+  scopes: omitWriteFilesScope(normalizeEnvValue(process.env.SCOPES)),
+  appUrl: normalizeEnvValue(process.env.SHOPIFY_APP_URL),
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
@@ -26,9 +36,22 @@ const shopify = shopifyApp({
 });
 
 export default shopify;
-export const apiVersion = ApiVersion.January25;
+export const apiVersion = SHOPIFY_ADMIN_API_VERSION as ApiVersion;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
-export const authenticate = shopify.authenticate;
+const authenticateAdmin = (async (request: Request) => {
+  return bootStep("auth", request, async () => {
+    const ctx = await shopify.authenticate.admin(request);
+    bootMark(
+      "auth session",
+      `shop=${ctx.session.shop} online=${ctx.session.isOnline}`,
+    );
+    const admin = getShopAdmin({ shop: ctx.session.shop });
+    return { ...ctx, admin: admin as unknown as typeof ctx.admin };
+  });
+}) as typeof shopify.authenticate.admin;
+
+/** `admin.graphql` always uses an application-only token. */
+export const authenticate = { ...shopify.authenticate, admin: authenticateAdmin };
 export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;

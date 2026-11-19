@@ -1,0 +1,295 @@
+export type CreditPoolBalances = {
+  subscriptionCredits: number;
+  purchasedCredits: number;
+  trialCredits: number;
+};
+
+export type AccountBalanceFields = CreditPoolBalances & {
+  usedCredits: number;
+};
+
+export type QuotaAliasAccount = AccountBalanceFields & {
+  purchasePoints?: number;
+  usedPoints?: number;
+};
+
+export function hasMigratedPools(account: AccountBalanceFields): boolean {
+  return (
+    Math.max(0, account.subscriptionCredits | 0) +
+      Math.max(0, account.purchasedCredits | 0) +
+      Math.max(0, account.trialCredits | 0) +
+      Math.max(0, account.usedCredits | 0) >
+    0
+  );
+}
+
+export function quotaAliases(account: QuotaAliasAccount): {
+  purchasePoints: number;
+  usedPoints: number;
+  remaining: number;
+} {
+  if (hasMigratedPools(account)) {
+    const purchasePoints =
+      Math.max(0, account.subscriptionCredits | 0) +
+      Math.max(0, account.purchasedCredits | 0) +
+      Math.max(0, account.trialCredits | 0);
+    const usedPoints = Math.max(0, account.usedCredits | 0);
+    return {
+      purchasePoints,
+      usedPoints,
+      remaining: getRemainingCredits(account),
+    };
+  }
+  const purchasePoints = Math.max(0, Number(account.purchasePoints ?? 0));
+  const usedPoints = Math.max(0, Number(account.usedPoints ?? 0));
+  return {
+    purchasePoints,
+    usedPoints,
+    remaining: Math.max(0, purchasePoints - usedPoints),
+  };
+}
+
+export function getRemainingCredits(account: AccountBalanceFields): number {
+  const total =
+    Math.max(0, account.subscriptionCredits | 0) +
+    Math.max(0, account.purchasedCredits | 0) +
+    Math.max(0, account.trialCredits | 0);
+  return Math.max(0, total - Math.max(0, account.usedCredits | 0));
+}
+
+export function settlePoolsAtRenewal(account: AccountBalanceFields): CreditPoolBalances {
+  let remaining = Math.max(0, Math.floor(account.usedCredits));
+  const next: CreditPoolBalances = {
+    subscriptionCredits: Math.max(0, Math.floor(account.subscriptionCredits)),
+    purchasedCredits: Math.max(0, Math.floor(account.purchasedCredits)),
+    trialCredits: Math.max(0, Math.floor(account.trialCredits)),
+  };
+  const total = next.subscriptionCredits + next.purchasedCredits + next.trialCredits;
+  if (remaining <= 0 || remaining > total) return next;
+  for (const key of ["trialCredits", "subscriptionCredits", "purchasedCredits"] as const) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, next[key]);
+    next[key] -= take;
+    remaining -= take;
+  }
+  return next;
+}
+
+export function clearSubscriptionOnCancel(account: {
+  subscriptionCredits: number;
+  purchasedCredits: number;
+  creditsPerPeriod: number;
+}): { subscriptionCredits: number; purchasedCredits: number } {
+  const previous = Math.max(0, account.subscriptionCredits | 0);
+  const removed = Math.min(previous, Math.max(0, account.creditsPerPeriod | 0));
+  return {
+    subscriptionCredits: previous - removed,
+    purchasedCredits: Math.max(0, account.purchasedCredits | 0),
+  };
+}
+
+export function periodCreditsFromCatalog(
+  planType: string | null | undefined,
+  feeType: number | string | null | undefined,
+  rows: Array<{
+    kind?: string | null;
+    shopifyPlanName?: string | null;
+    billingInterval?: string | null;
+    credits?: number | null;
+  }>,
+): number {
+  const interval = Number(feeType) === 1 ? "ANNUAL" : "MONTHLY";
+  const name = String(planType || "");
+  const hit = (rows || []).find(
+    (row) =>
+      row.kind === "SUBSCRIPTION" &&
+      row.shopifyPlanName === name &&
+      row.billingInterval === interval,
+  );
+  return hit ? Math.max(0, Math.floor(Number(hit.credits) || 0)) : 0;
+}
+
+export const TRIAL_LOT_REFERENCE_ID = {
+  install: "install_credits",
+  bonus: "basic_first_pay_bonus",
+} as const;
+
+export const TRIAL_LOT_GRANT_KIND = {
+  install: "install_credits_expired",
+  bonus: "basic_first_pay_bonus_expired",
+  bonusRevoked: "basic_first_pay_bonus_revoked",
+} as const;
+
+export type TrialLotKind = "install" | "bonus";
+
+export type InstallTrialExpiryFields = {
+  usedCredits: number;
+  trialInstallCredits: number;
+  trialInstallExpiresAt: Date | string | null;
+  trialBonusCredits: number;
+  trialBonusExpiresAt: Date | string | null;
+};
+
+export type TrialLotSettlement = {
+  kind: TrialLotKind;
+  leftover: number;
+  consumed: number;
+  referenceId: (typeof TRIAL_LOT_REFERENCE_ID)[TrialLotKind];
+  grantKind: (typeof TRIAL_LOT_GRANT_KIND)[keyof typeof TRIAL_LOT_GRANT_KIND];
+  expiresAt: string | null;
+};
+
+export type SettleExpiredTrialOptions = {
+  forceLots?: readonly TrialLotKind[];
+};
+
+export type InstallTrialExpirySettlement = {
+  trialInstallCredits: number;
+  trialInstallExpiresAt: Date | string | null;
+  trialBonusCredits: number;
+  trialBonusExpiresAt: Date | string | null;
+  trialCredits: number;
+  usedCredits: number;
+  settled: boolean;
+  lots: TrialLotSettlement[];
+};
+
+function isDueTrialLot(
+  credits: number,
+  expiresAt: Date | string | null,
+  now: Date,
+): boolean {
+  if (credits <= 0 || !expiresAt) return false;
+  return now.getTime() >= new Date(expiresAt).getTime();
+}
+
+function shouldExpireTrialLot(
+  kind: TrialLotKind,
+  credits: number,
+  expiresAt: Date | string | null,
+  now: Date,
+  forceLots?: readonly TrialLotKind[],
+): boolean {
+  if (credits <= 0) return false;
+  if (forceLots?.includes(kind)) return true;
+  return isDueTrialLot(credits, expiresAt, now);
+}
+
+export function earliestTrialLotExpiresAt(
+  installCredits: number,
+  installExpiresAt: Date | string | null,
+  bonusCredits: number,
+  bonusExpiresAt: Date | string | null,
+): Date | null {
+  const dates: Date[] = [];
+  if (installCredits > 0 && installExpiresAt) dates.push(new Date(installExpiresAt));
+  if (bonusCredits > 0 && bonusExpiresAt) dates.push(new Date(bonusExpiresAt));
+  if (dates.length === 0) return null;
+  return dates.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
+}
+
+export function settleExpiredInstallTrialCredits(
+  account: InstallTrialExpiryFields,
+  now: Date = new Date(),
+  options?: SettleExpiredTrialOptions,
+): InstallTrialExpirySettlement {
+  const install = Math.max(0, account.trialInstallCredits | 0);
+  const bonus = Math.max(0, account.trialBonusCredits | 0);
+  const used = Math.max(0, account.usedCredits | 0);
+  const forceLots = options?.forceLots;
+  const expireInstall = shouldExpireTrialLot(
+    "install",
+    install,
+    account.trialInstallExpiresAt,
+    now,
+    forceLots,
+  );
+  const expireBonus = shouldExpireTrialLot(
+    "bonus",
+    bonus,
+    account.trialBonusExpiresAt,
+    now,
+    forceLots,
+  );
+  if (!expireInstall && !expireBonus) {
+    return {
+      trialInstallCredits: install,
+      trialInstallExpiresAt: account.trialInstallExpiresAt ?? null,
+      trialBonusCredits: bonus,
+      trialBonusExpiresAt: account.trialBonusExpiresAt ?? null,
+      trialCredits: install + bonus,
+      usedCredits: used,
+      settled: false,
+      lots: [],
+    };
+  }
+
+  const usedTrial = Math.min(used, install + bonus);
+  const attrInstall = Math.min(usedTrial, install);
+  const attrBonus = usedTrial - attrInstall;
+  const lots: TrialLotSettlement[] = [];
+  let nextInstall = install;
+  let nextInstallExp: Date | string | null = account.trialInstallExpiresAt ?? null;
+  let nextBonus = bonus;
+  let nextBonusExp: Date | string | null = account.trialBonusExpiresAt ?? null;
+  let nextUsed = used;
+
+  if (expireInstall) {
+    lots.push({
+      kind: "install",
+      consumed: attrInstall,
+      leftover: install - attrInstall,
+      referenceId: TRIAL_LOT_REFERENCE_ID.install,
+      grantKind: TRIAL_LOT_GRANT_KIND.install,
+      expiresAt: account.trialInstallExpiresAt
+        ? new Date(account.trialInstallExpiresAt).toISOString()
+        : null,
+    });
+    nextUsed -= attrInstall;
+    nextInstall = 0;
+    nextInstallExp = null;
+  }
+  if (expireBonus) {
+    lots.push({
+      kind: "bonus",
+      consumed: attrBonus,
+      leftover: bonus - attrBonus,
+      referenceId: TRIAL_LOT_REFERENCE_ID.bonus,
+      grantKind: forceLots?.includes("bonus")
+        ? TRIAL_LOT_GRANT_KIND.bonusRevoked
+        : TRIAL_LOT_GRANT_KIND.bonus,
+      expiresAt: account.trialBonusExpiresAt
+        ? new Date(account.trialBonusExpiresAt).toISOString()
+        : null,
+    });
+    nextUsed -= attrBonus;
+    nextBonus = 0;
+    nextBonusExp = null;
+  }
+
+  return {
+    trialInstallCredits: nextInstall,
+    trialInstallExpiresAt: nextInstallExp,
+    trialBonusCredits: nextBonus,
+    trialBonusExpiresAt: nextBonusExp,
+    trialCredits: nextInstall + nextBonus,
+    usedCredits: nextUsed,
+    settled: true,
+    lots,
+  };
+}
+
+export function splitLegacyRemaining(args: {
+  remaining: number;
+  plan: number;
+  periodCredits: number;
+}): { subscriptionCredits: number; purchasedCredits: number; usedCredits: number } {
+  const leftover = Math.max(0, Math.floor(args.remaining));
+  const period = Math.max(0, Math.floor(args.periodCredits));
+  const subscriptionCredits = Number(args.plan) > 1 ? Math.min(leftover, period) : 0;
+  return {
+    subscriptionCredits,
+    purchasedCredits: leftover - subscriptionCredits,
+    usedCredits: 0,
+  };
+}

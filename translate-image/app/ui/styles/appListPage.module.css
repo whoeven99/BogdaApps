@@ -1,0 +1,679 @@
+/* Shared list-page chrome (language, glossary, image translation). */
+
+.listTableAction {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* 工具栏内 InFlowSelect 菜单需盖过下方 Ant Table 表头 / fixed 列 */
+.listTableAction :global(.in-flow-select--open) {
+  position: relative;
+  z-index: 25;
+}
+
+.listToolbarFiltersElevated {
+  position: relative;
+  z-index: 10;
+  overflow: visible;
+}
+
+.listToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: var(--app-space-400);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(84, 103, 255, 0.06);
+  border: 1px solid var(--app-color-border-secondary);
+}
+
+.listToolbarMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.headerSecondaryLink {
+  margin-top: 4px;
+}
+
+.listToolbarFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.listToolbarBulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.modelField {
+  min-width: 260px;
+  max-width: 360px;
+  flex: 0 1 auto;
+}
+
+.rowModelField {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.tableTranslateBar {
+  margin-bottom: 12px;
+}
+
+.contentImageConfirmModelRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--app-color-border-secondary);
+}
+
+.modalConfirmModelField {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 320px;
+}
+
+.searchField {
+  flex: 1 1 200px;
+  min-width: 160px;
+  max-width: 360px;
+}
+
+/** 图片翻译列表：搜索 + 状态 + 语言 + 模块同一行（桌面不换行） */
+.listToolbarNowrap {
+  flex-wrap: nowrap;
+}
+
+.listToolbarNowrap .listToolbarMain {
+  flex-wrap: nowrap;
+}
+
+.imageManageToolbarRow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+.imageManageSearchField {
+  flex: 1 1 120px;
+  min-width: 100px;
+  max-width: 240px;
+}
+
+.imageManageStatusSelect {
+  flex: 0 0 108px;
+  min-width: 0;
+}
+
+.imageManageSwitchers {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.imageManageLangSelect {
+  flex: 0 0 120px;
+  min-width: 0;
+}
+
+.imageManageModuleSelect {
+  flex: 0 0 152px;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .listToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .listToolbarNowrap {
+    flex-wrap: wrap;
+  }
+
+  .listToolbarNowrap .listToolbarMain {
+    flex-wrap: wrap;
+  }
+
+  .listToolbar :global(.ant-btn) {
+    width: 100%;
+  }
+
+  .modelField,
+  .searchField {
+    max-width: none;
+    width: 100%;
+  }
+
+  .listToolbarMain {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .imageManageToolbarRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .imageManageSearchField {
+    grid-column: 1 / -1;
+    flex: none;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .imageManageStatusSelect {
+    grid-column: 1 / -1;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .imageManageSwitchers {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .imageManageLangSelect,
+  .imageManageModuleSelect {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .imageManageLangSelect :global(.in-flow-select),
+  .imageManageModuleSelect :global(.in-flow-select),
+  .imageManageStatusSelect :global(.in-flow-select) {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .imageManageLangSelect :global(.in-flow-select > button),
+  .imageManageModuleSelect :global(.in-flow-select > button),
+  .imageManageStatusSelect :global(.in-flow-select > button) {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .listTable {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .listTable :global(.ant-table) {
+    min-width: 520px;
+  }
+}
+
+.listTable :global(.ant-table-container) {
+  border: 1px solid var(--app-color-border-secondary);
+  border-radius: 14px;
+  overflow: visible;
+}
+
+.listTable :global(.ant-table),
+.listTable :global(.ant-table-content),
+.listTable :global(.ant-table-body) {
+  overflow: visible;
+}
+
+.listTable :global(.in-flow-select--open) {
+  z-index: 20;
+}
+
+.listTable :global(.ant-table-thead > tr > th) {
+  background: var(--app-color-surface-secondary);
+  color: var(--app-color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.listTable :global(.ant-table-tbody > tr > td) {
+  background: rgba(255, 255, 255, 0.72);
+  vertical-align: middle;
+  overflow: visible;
+}
+
+.listTable :global(.ant-table-tbody > tr:hover > td) {
+  background: rgba(84, 103, 255, 0.05) !important;
+}
+
+.jobResultPreviewBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  cursor: default;
+  font: inherit;
+  color: inherit;
+}
+
+.jobResultPreviewBtn:not(:disabled) {
+  cursor: pointer;
+}
+
+.jobResultPreviewBtn:not(:disabled):hover .jobResultPreviewCaption {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.jobResultPreviewPair {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.jobResultPreviewPlaceholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--p-color-bg-surface-secondary);
+  border: 1px dashed var(--app-color-border-secondary);
+  flex-shrink: 0;
+}
+
+.jobResultPreviewCaption {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--app-color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.jobResultStatusCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.listPagination {
+  display: flex;
+  justify-content: center;
+  padding: var(--app-space-400) 0 0;
+}
+
+.segmentGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.segmentChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-color-border-secondary);
+  background: var(--app-color-surface);
+  color: var(--app-color-text);
+  font-size: var(--app-font-size-body-small);
+  font-weight: 600;
+  line-height: 1.35;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.segmentChip:hover {
+  background: var(--app-color-surface-hover);
+}
+
+.segmentChipSelected {
+  border-color: rgba(66, 84, 232, 0.45);
+  background: var(--app-accent-primary-soft);
+  color: var(--app-color-text-info);
+}
+
+.imagePreviewTrigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+}
+
+.imagePreviewTrigger:hover .imageThumb {
+  border-color: var(--app-accent-primary);
+}
+
+.imagePreviewTrigger:focus-visible {
+  outline: 2px solid var(--app-accent-primary);
+  outline-offset: 2px;
+  border-radius: var(--app-radius-sm);
+}
+
+.imagePreviewThumbOnly {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--app-radius-sm);
+}
+
+.imagePreviewThumbOnly:hover .imageThumb {
+  border-color: var(--app-accent-primary);
+}
+
+.imagePreviewThumbOnly:focus-visible {
+  outline: 2px solid var(--app-accent-primary);
+  outline-offset: 2px;
+}
+
+.cellSecondaryText {
+  color: var(--app-color-text-secondary);
+  font-size: var(--app-font-size-body);
+  line-height: 1.35;
+}
+
+.imageThumb {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--app-radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--app-color-border-secondary);
+  background: var(--app-color-surface-secondary);
+}
+
+.imageThumbPlaceholder {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-color-surface-secondary);
+  border: 1px solid var(--app-color-border-secondary);
+}
+
+:global(.image-list-skeleton-thumb) {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-color-border-secondary);
+  background: var(--app-color-surface-secondary);
+  animation: v4-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.listSkeletonTextStack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.resourceLink {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--app-accent-primary);
+  font: inherit;
+  font-size: var(--app-font-size-body);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: start;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.resourceLink:hover {
+  color: var(--app-accent-primary-hover);
+}
+
+/** 目录资源行（产品 / 文章 / 页面）：非链接色，hover 下划线。 */
+.resourceRowTitle {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--p-color-text, var(--app-color-text));
+  font: inherit;
+  font-size: var(--app-font-size-body);
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: start;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-decoration: none;
+}
+
+.resourceRowTitle:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.resourceRowMeta {
+  color: var(--app-color-text-secondary);
+  font-size: var(--app-font-size-body-small);
+  line-height: 1.35;
+}
+
+.resourceRowIcon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-color-border-secondary);
+  background: var(--app-color-surface-secondary)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' viewBox='0 0 20 20'%3E%3Cpath fill='%236d7175' d='M4 3h8l4 4v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z'/%3E%3Cpath fill='%23fff' d='M12 3v4h4'/%3E%3C/svg%3E")
+    center / 20px 20px no-repeat;
+}
+
+/** 扁平行（单张图）：标题用正文色，非蓝色链接。 */
+.imageRowTitle {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--p-color-text, var(--app-color-text));
+  font: inherit;
+  font-size: var(--app-font-size-body);
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.imageRowTitle:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cellRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cellTextStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cellFileName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--app-font-size-body);
+  line-height: 1.35;
+}
+
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow: visible;
+  position: relative;
+}
+
+.rowActionsStacked {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: 6px;
+}
+
+.rowActionsStacked :global(.ant-btn) {
+  width: 100%;
+  justify-content: center;
+  margin-inline: 0 !important;
+}
+
+.imageRowCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.imageRowCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--app-color-border-secondary);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.imageRowCardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.imageRowCardCheck {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.imageRowCardThumbRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+
+.imageRowCardThumbRow .imagePreviewTrigger {
+  flex: 1;
+  min-width: 0;
+}
+
+.emptyHint {
+  display: block;
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--app-color-text-secondary);
+  font-size: var(--app-font-size-body);
+  line-height: 1.5;
+}
+
+.creditsSummary {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--app-color-surface-secondary);
+  border: 1px solid var(--app-color-border-secondary);
+  font-size: var(--app-font-size-body-small);
+  line-height: 1.5;
+  color: var(--app-color-text);
+}

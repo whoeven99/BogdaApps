@@ -9,7 +9,25 @@ import Backend from "i18next-http-backend";
 import { createCache, StyleProvider } from "@ant-design/cssinjs";
 import { ConfigProvider } from "antd";
 
+function bootClient(stage: string, extra = "") {
+  const body = JSON.stringify({
+    stage,
+    path: window.location.pathname,
+    extra: extra.slice(0, 300),
+  });
+  try {
+    navigator.sendBeacon("/boot-log", body);
+  } catch {
+    /* 探针失败不影响页面 */
+  }
+  console.info("[boot]", stage, extra);
+}
+
+bootClient("bundle");
+
 async function hydrate() {
+  bootClient("hydrate-start");
+  try {
   await i18next
     .use(Backend) // Setup your backend
     .use(LanguageDetector)
@@ -33,6 +51,7 @@ async function hydrate() {
         caches: [],
       },
     });
+  bootClient("i18n-ready");
   startTransition(() => {
     const cache = createCache();
     hydrateRoot(
@@ -53,7 +72,13 @@ async function hydrate() {
         </StyleProvider>
       </I18nextProvider>,
     );
+    bootClient("hydrate-called");
   });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    bootClient("hydrate-fail", message);
+    throw error;
+  }
 }
 
 if (window.requestIdleCallback) {

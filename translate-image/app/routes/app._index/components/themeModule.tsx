@@ -1,16 +1,31 @@
 import { Card, Row, Col, Button, Typography, Flex } from "antd";
-import {
-  PictureOutlined,
-  BgColorsOutlined,
-  FileImageOutlined,
-  AuditOutlined,
-} from "@ant-design/icons";
+import { AppstoreOutlined, FileImageOutlined, FileTextOutlined, GlobalOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { useFetcher, useNavigate } from "@remix-run/react";
 import useReport from "scripts/eventReport";
 
 const { Title } = Typography;
+
+const MODULE_PATH: Record<string, string> = {
+  product: "/app/product",
+  article: "/app/article",
+  page: "/app/page",
+  collection: "/app/collection",
+  file: "/app/file",
+  theme: "/app/theme",
+  "third-party": "/app/third-party",
+};
+
+function ModuleIcon({ itemKey, icon }: { itemKey: string; icon: string }) {
+  if (itemKey === "third-party") return <GlobalOutlined style={{ fontSize: 48 }} />;
+  if (itemKey === "page") return <FileTextOutlined style={{ fontSize: 48 }} />;
+  if (itemKey === "collection") return <AppstoreOutlined style={{ fontSize: 48 }} />;
+  if (itemKey === "file") return <FileImageOutlined style={{ fontSize: 48 }} />;
+  return (
+    <i className="iconfont" style={{ fontSize: 48 }} dangerouslySetInnerHTML={{ __html: icon }} />
+  );
+}
 
 export default function ThemeModule({ shop }: { shop: string }) {
   const { reportClick, report } = useReport();
@@ -34,6 +49,26 @@ export default function ThemeModule({ shop }: { shop: string }) {
       title: t("Article image"),
       icon: "&#xe615;",
       key: "article",
+    },
+    {
+      title: t("Page image"),
+      icon: "page",
+      key: "page",
+    },
+    {
+      title: t("Collection image"),
+      icon: "collection",
+      key: "collection",
+    },
+    {
+      title: t("Other image"),
+      icon: "file",
+      key: "file",
+    },
+    {
+      title: t("Third-party images"),
+      icon: "global",
+      key: "third-party",
     },
     // {
     //   title: "Alt Text generate",
@@ -63,17 +98,7 @@ export default function ThemeModule({ shop }: { shop: string }) {
       },
       "dashboard_manage_image",
     );
-    switch (item.key) {
-      case "product":
-        navigate("/app/product");
-        break;
-      case "article":
-        navigate("/app/article");
-        break;
-      case "theme":
-        navigate("/app/theme");
-        break;
-    }
+    navigate(MODULE_PATH[item.key] ?? "/app/product");
   };
   const handleTranslate = (item: any) => {
     fetcher.submit(
@@ -96,17 +121,7 @@ export default function ThemeModule({ shop }: { shop: string }) {
       },
       "dashboard_translate_image",
     );
-    switch (item.key) {
-      case "product":
-        navigate("/app/product");
-        break;
-      case "article":
-        navigate("/app/article");
-        break;
-      case "theme":
-        navigate("/app/theme");
-        break;
-    }
+    navigate(MODULE_PATH[item.key] ?? "/app/product");
   };
 
   useEffect(() => {
@@ -147,11 +162,7 @@ export default function ThemeModule({ shop }: { shop: string }) {
                   justifyContent: "center",
                 }}
               >
-                <i
-                  className="iconfont"
-                  style={{ fontSize: 48 }}
-                  dangerouslySetInnerHTML={{ __html: item.icon }}
-                />
+                <ModuleIcon itemKey={item.key} icon={item.icon} />
               </div>
 
               {/* 底部按钮 */}

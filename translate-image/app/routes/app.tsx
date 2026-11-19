@@ -3,12 +3,11 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "@remix-run/node";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   json,
   Link,
   Outlet,
-  useFetcher,
   useLoaderData,
   useLocation,
   useRouteError,
@@ -18,17 +17,10 @@ import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
-import {
-  GetUnTranslatedWords,
-  GetUserSubscriptionPlan,
-  GetUserWords,
-  GoogleAnalyticClickReport,
-  InsertOrUpdateOrder,
-  IsInFreePlanTime,
-  IsOpenFreePlan,
-  storageTranslateImage,
-  UserAdd,
-} from "~/api/JavaServer";
+import { GoogleAnalyticClickReport } from "~/api/JavaServer";
+import { fetchLocalQuota } from "~/api/pictureClient";
+import { resolveShouldCreateTestCharge } from "~/server/billing/chargeGuardApply.server";
+import { ensureAccount } from "~/server/billing/quota.server";
 import { globalStore } from "~/globalStore";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -41,48 +33,57 @@ import {
   setUpdateTime,
   setUserConfigIsLoading,
 } from "~/store/modules/userConfig";
-import { mutationAppPurchaseOneTimeCreate } from "~/api/admin";
+import { mutationAppPurchaseOneTimeCreate } from "~/api/admin.server";
 import { ConfigProvider } from "antd";
+import { FilesAccessBanner } from "~/lib/FilesAccessBanner";
+import { useResumeFilesGrant } from "~/lib/filesAccess";
+import { hasWriteFilesScope } from "~/lib/writeFilesScope";
+import { bootMark } from "~/server/bootTrace.server";
+import { AddCreaditsModal } from "~/routes/app._index/components/addCreditsModal";
+import { OPEN_CREDITS_PURCHASE_MODAL_EVENT } from "~/utils/creditsPurchaseModal";
+
+function GlobalCreditsPurchaseModal() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(OPEN_CREDITS_PURCHASE_MODAL_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_CREDITS_PURCHASE_MODAL_EVENT, onOpen);
+  }, []);
+  return (
+    <AddCreaditsModal openModal={open} onClose={() => setOpen(false)} action="images" />
+  );
+}
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
-  const { shop } = adminAuthResult.session;
+  const { shop, scope } = adminAuthResult.session;
+  bootMark("app loader", `shop=${shop}`);
+  try {
+    await ensureAccount(shop);
+  } catch (err) {
+    console.warn(`[app.loader] billing bootstrap failed shop=${shop}`, err);
+  }
 
   return {
     shop,
-    server: process.env.SERVER_URL,
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    canWriteFiles: hasWriteFilesScope(scope),
   };
 };
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const adminAuthResult = await authenticate.admin(request);
-    const { shop, accessToken } = adminAuthResult.session;
+    const { shop } = adminAuthResult.session;
+    const sessionEmail = (adminAuthResult.session as { email?: string | null }).email ?? null;
     const { admin } = adminAuthResult;
     const formData = await request.formData();
-    const init = JSON.parse(formData.get("init") as string);
     const theme = JSON.parse(formData.get("theme") as string);
     const payInfo = JSON.parse(formData.get("payInfo") as string);
     const orderInfo = JSON.parse(formData.get("orderInfo") as string);
     const googleAnalytics = JSON.parse(
       formData.get("googleAnalytics") as string,
     );
-    if (init) {
-      try {
-        const response = await UserAdd({
-          shop,
-          accessToken: accessToken as string,
-        });
-        return json({ response });
-      } catch (error) {
-        console.error("Error loading app:", error);
-        return json({
-          success: false,
-          response: null,
-        });
-      }
-    }
     if (theme) {
       try {
         const response = await admin.graphql(
@@ -142,13 +143,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         const res = await mutationAppPurchaseOneTimeCreate({
           shop,
-          accessToken: accessToken as string,
           name: payInfo.name,
           price: payInfo.price,
           returnUrl,
-          test:
-            process.env.NODE_ENV === "development" ||
-            process.env.NODE_ENV === "test",
+          test: await resolveShouldCreateTestCharge(shop, sessionEmail),
         });
         return json({
           success: true,
@@ -168,21 +166,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (orderInfo) {
-      try {
-        const orderData = await InsertOrUpdateOrder({
-          shop,
-          id: orderInfo.id,
-          amount: orderInfo.amount,
-          name: orderInfo.name,
-          createdAt: orderInfo.createdAt,
-          status: orderInfo.status,
-          confirmationUrl: orderInfo.confirmationUrl,
-        });
-        return json({ data: orderData });
-      } catch (error) {
-        console.error("Error orderInfo app:", error);
-        return json({ error: "Error orderInfo app" }, { status: 500 });
-      }
+      return json({ data: { skipped: true } });
     }
 
     if (googleAnalytics) {
@@ -219,115 +203,57 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 export default function App() {
-  const { apiKey, shop, server } = useLoaderData<typeof loader>();
+  const { apiKey, shop, canWriteFiles } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const location = useLocation();
-  const initFetcher = useFetcher<any>();
+  useResumeFilesGrant();
   const { plan, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
 
-  useEffect(() => {
-    initFetcher.submit(
-      { init: JSON.stringify(true) },
-      {
-        method: "post",
-        action: "/app",
-      },
-    );
-    globalStore.shop = shop as string;
-    globalStore.server = server as string;
-  }, []);
-  useEffect(() => {
-    if (initFetcher.data) {
-      getWords();
-    }
-  }, [initFetcher.data]);
-  useEffect(() => {
-    if (!plan?.id) {
-      getPlan();
-    }
-    if (!chars || !totalChars) {
-      getWords();
-    }
-    if (isNew === null) {
-      checkFreeUsed();
-    }
-  }, [location]); // 监听 URL 的变化
-  const getPlan = async () => {
-    const getUserSubscriptionPlan = await GetUserSubscriptionPlan({
-      shop: shop,
-      server: server as string,
-    });
-    const isInFreePlanTime = await IsInFreePlanTime({
-      shop: shop,
-      server: server as string,
-    });
-    let data: any = {
-      id: 1,
-      type: "Free",
-      feeType: 0,
-      isInFreePlanTime: false,
-    };
-
-    if (getUserSubscriptionPlan?.success) {
-      data = {
-        ...data,
-        id: getUserSubscriptionPlan?.response?.userSubscriptionPlan || 1,
-        type: getUserSubscriptionPlan?.response?.planType || "Free",
-        feeType: getUserSubscriptionPlan?.response?.feeType || 0,
-      };
-
-      if (getUserSubscriptionPlan?.response?.currentPeriodEnd) {
-        const updateTime = new Date(
-          getUserSubscriptionPlan?.response?.currentPeriodEnd,
-        )
-          .toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          })
-          .replace(/\//g, "-");
-        dispatch(setUpdateTime({ updateTime: updateTime }));
-      }
-    }
-    if (isInFreePlanTime?.success) {
-      data = { ...data, isInFreePlanTime: isInFreePlanTime?.response || false };
-    }
+  const applyQuota = async () => {
+    const quota = await fetchLocalQuota();
+    if (!quota?.success) return;
     dispatch(
       setPlan({
-        plan: data,
+        plan: {
+          id: quota?.response?.plan || 1,
+          type: quota?.response?.planType || "Free",
+          feeType: quota?.response?.feeType || 0,
+          isInFreePlanTime: Boolean(quota?.response?.isInFreePlanTime),
+        },
       }),
     );
-  };
-  const getWords = async () => {
-    const data = await GetUserWords({
-      shop,
-      server: server as string,
-    });
-
-    if (data?.success) {
-      dispatch(setChars({ chars: data?.response?.usedPoints }));
-      dispatch(
-        setTotalChars({
-          totalChars: data?.response?.purchasePoints,
-        }),
-      );
-      dispatch(setUserConfigIsLoading({ isLoading: false }));
+    if (quota?.response?.currentPeriodEnd) {
+      const updateTime = new Date(quota.response.currentPeriodEnd)
+        .toLocaleDateString("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+        .replace(/\//g, "-");
+      dispatch(setUpdateTime({ updateTime }));
     }
+    dispatch(setChars({ chars: quota?.response?.usedPoints }));
+    dispatch(
+      setTotalChars({
+        totalChars: quota?.response?.purchasePoints,
+      }),
+    );
+    dispatch(setIsNew({ isNew: !quota?.response?.hasUsedTrial }));
+    dispatch(setUserConfigIsLoading({ isLoading: false }));
   };
 
-  const checkFreeUsed = async () => {
-    // true 开过 / false 没开过 有订单记录就返回true
-    const data = await IsOpenFreePlan({
-      shop,
-      server: server as string,
-    });
-    if (data?.success) {
-      dispatch(setIsNew({ isNew: !data?.response }));
+  useEffect(() => {
+    globalStore.shop = shop as string;
+    void applyQuota();
+  }, []);
+  useEffect(() => {
+    if (!plan?.id || !chars || !totalChars || isNew === null) {
+      void applyQuota();
     }
-  };
+  }, [location]);
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
       <ConfigProvider
@@ -362,11 +288,21 @@ export default function App() {
           {/* <Link to="/app/management">Image Manage</Link> */}
           <Link to="/app/article">{t("Article images")}</Link>
           <Link to="/app/product">{t("Product images")}</Link>
+          <Link to="/app/page">{t("Page images")}</Link>
+          <Link to="/app/collection">{t("Collection images")}</Link>
+          <Link to="/app/file">{t("Other images")}</Link>
           <Link to="/app/theme">{t("Theme images")}</Link>
+          <Link to="/app/third-party">{t("Third-party images")}</Link>
           {/* <Link to="/app/management">{t("Managements")}</Link> */}
           <Link to="/app/pricing">{t("Pricing")}</Link>
         </NavMenu>
+        {!canWriteFiles ? (
+          <div style={{ padding: 16 }}>
+            <FilesAccessBanner apiKey={apiKey} shop={shop} />
+          </div>
+        ) : null}
         <Outlet />
+        <GlobalCreditsPurchaseModal />
       </ConfigProvider>
     </AppProvider>
   );

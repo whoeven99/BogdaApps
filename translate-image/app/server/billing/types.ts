@@ -1,0 +1,37 @@
+export const APP_SUBSCRIPTION_STATUS = {
+  PENDING: "PENDING",
+  ACTIVE: "ACTIVE",
+  CANCELLED: "CANCELLED",
+  EXPIRED: "EXPIRED",
+} as const;
+export type AppSubscriptionStatus =
+  (typeof APP_SUBSCRIPTION_STATUS)[keyof typeof APP_SUBSCRIPTION_STATUS];
+
+export const PLAN_KIND = {
+  SUBSCRIPTION: "SUBSCRIPTION",
+  ONE_TIME_PACK: "ONE_TIME_PACK",
+} as const;
+export type PlanKind = (typeof PLAN_KIND)[keyof typeof PLAN_KIND];
+
+export const BILLING_INTERVAL = {
+  MONTHLY: "MONTHLY",
+  ANNUAL: "ANNUAL",
+} as const;
+export type BillingInterval =
+  (typeof BILLING_INTERVAL)[keyof typeof BILLING_INTERVAL];
+
+export const BILLING_LOG_EVENT = {
+  TRIAL_GRANTED: "TRIAL_GRANTED",
+  TRIAL_EXPIRED: "TRIAL_EXPIRED",
+  SUBSCRIPTION_ACTIVATED: "SUBSCRIPTION_ACTIVATED",
+  SUBSCRIPTION_RENEWED: "SUBSCRIPTION_RENEWED",
+  SUBSCRIPTION_CANCELLED: "SUBSCRIPTION_CANCELLED",
+  TOKEN_PACK_PURCHASED: "TOKEN_PACK_PURCHASED",
+  CHARGE_GUARD_DENIED: "CHARGE_GUARD_DENIED",
+  /** 入账失败飞书 6h 去重（无 Redis 时）；creditsDelta=0 */
+  FEISHU_FAILURE_NOTIFIED: "FEISHU_FAILURE_NOTIFIED",
+  /** 卸载飞书 24h 去重（无 Redis 时）；creditsDelta=0 */
+  UNINSTALL_FEISHU_NOTIFIED: "UNINSTALL_FEISHU_NOTIFIED",
+} as const;
+export type BillingLogEvent =
+  (typeof BILLING_LOG_EVENT)[keyof typeof BILLING_LOG_EVENT];

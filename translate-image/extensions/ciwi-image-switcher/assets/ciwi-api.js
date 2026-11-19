@@ -1,9 +1,47 @@
-export function switchUrl(blockId) {
+/**
+ * 店面图片走 App Proxy → /api/storefront/picture/*。
+ * Proxy 前缀由 Liquid `ciwi_app_proxy_base` 写入；缺省再按扩展 CDN handle 推断。
+ * 不要把测试 subpath 写死成默认值。
+ */
+const DEFAULT_STOREFRONT_APP_PROXY_BASE = "/apps/ciwi-image";
+const TEST_STOREFRONT_APP_PROXY_BASE = "/apps/ciwi-image-test";
+const STOREFRONT_APP_PROXY_BASE_RE = /^\/apps\/[a-z0-9-]+$/i;
+
+function sanitizeStorefrontApiBase(value) {
+  const raw = String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
+  return STOREFRONT_APP_PROXY_BASE_RE.test(raw) ? raw : "";
+}
+
+function inferStorefrontApiBaseFromAssetUrl(url) {
+  return String(url || "").includes("ciwi-image-translation-test")
+    ? TEST_STOREFRONT_APP_PROXY_BASE
+    : DEFAULT_STOREFRONT_APP_PROXY_BASE;
+}
+
+function resolveStorefrontApiBase() {
+  if (typeof document !== "undefined") {
+    const fromInput = sanitizeStorefrontApiBase(
+      document.querySelector('input[name="ciwi_app_proxy_base"]')?.value,
+    );
+    if (fromInput) return fromInput;
+  }
+  try {
+    if (typeof import.meta?.url === "string" && import.meta.url) {
+      return inferStorefrontApiBaseFromAssetUrl(import.meta.url);
+    }
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_STOREFRONT_APP_PROXY_BASE;
+}
+
+function switchUrl(blockId) {
   if (blockId === "AZXdIQ0pzK2ZsWlZqW__17209211813463636621") {
     return "https://springbackendprod.azurewebsites.net";
-  } else {
-    return "https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net";
   }
+  return "https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net";
 }
 
 async function fetchJson(url, options = {}) {
@@ -18,15 +56,11 @@ async function fetchJson(url, options = {}) {
   return { status: res.status, data };
 }
 
-export async function GetProductImageData({
-  blockId,
-  shopName,
-  id,
-  languageCode,
-}) {
+export async function GetProductImageData({ shopName, id, languageCode }) {
   try {
+    const base = resolveStorefrontApiBase();
     const { data } = await fetchJson(
-      `${switchUrl(blockId)}/pcUserPic/selectPictureDataByShopNameAndProductIdAndLanguageCode?shopName=${shopName}`,
+      `${base}/picture/selectPictureDataByShopNameAndProductIdAndLanguageCode?shopName=${encodeURIComponent(shopName)}`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -35,25 +69,66 @@ export async function GetProductImageData({
         }),
       },
     );
-    console.log("产品后端返回数据", data);
-
     return data;
   } catch (err) {
     console.error("Error GetProductImageData:", err);
   }
 }
 
-export async function GetShopImageData({ shopName, languageCode, blockId }) {
+export async function GetShopImageData({ shopName, languageCode }) {
   try {
+    const base = resolveStorefrontApiBase();
     const { data } = await fetchJson(
-      `${switchUrl(blockId)}/pcUserPic/selectPicturesByShopNameAndLanguageCode?shopName=${shopName}&languageCode=${languageCode}`,
+      `${base}/picture/selectPicturesByShopNameAndLanguageCode?shopName=${encodeURIComponent(shopName)}&languageCode=${encodeURIComponent(languageCode)}`,
       {
         method: "POST",
+        body: JSON.stringify({ languageCode }),
       },
     );
     return data;
   } catch (err) {
-    console.error(`${shop} Error GetProductImageData:`, err);
+    console.error("Error GetShopImageData:", err);
+  }
+}
+
+export async function CollectSwitcherImageData({ shopName, images, pagePath, languageCode }) {
+  try {
+    if (!Array.isArray(images) || images.length === 0) {
+      return { success: true, errorCode: null, errorMsg: null, response: { accepted: true } };
+    }
+    const base = resolveStorefrontApiBase();
+    const { data } = await fetchJson(
+      `${base}/picture/collect?shopName=${encodeURIComponent(shopName)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ shopName, images, pagePath, languageCode }),
+      },
+    );
+    return data;
+  } catch (err) {
+    console.error("Error CollectSwitcherImageData:", err);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "collect_failed",
+      response: null,
+    };
+  }
+}
+
+export async function GetContentImageData({ shopName, urlKeys, languageCode }) {
+  try {
+    const base = resolveStorefrontApiBase();
+    const { data } = await fetchJson(
+      `${base}/picture/getPictureDataByUrlKeys?shopName=${encodeURIComponent(shopName)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ shopName, urlKeys, languageCode }),
+      },
+    );
+    return data;
+  } catch (err) {
+    console.error("Error GetContentImageData:", err);
   }
 }
 

@@ -1,5 +1,4 @@
 import fs from "fs";
-import { ApiVersion } from "@shopify/shopify-api";
 import { shopifyApiProject, ApiType } from "@shopify/api-codegen-preset";
 import type { IGraphQLConfig } from "graphql-config";
 
@@ -8,7 +7,7 @@ function getConfig() {
     projects: {
       default: shopifyApiProject({
         apiType: ApiType.Admin,
-        apiVersion: ApiVersion.July25,
+        apiVersion: "2026-07",
         documents: [
           "./app/**/*.{js,ts,jsx,tsx}",
           "./app/.server/**/*.{js,ts,jsx,tsx}",

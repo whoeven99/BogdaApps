@@ -3,6 +3,7 @@ import { redirect } from "@remix-run/node";
 import { Form, useLoaderData } from "@remix-run/react";
 
 import { login } from "../../shopify.server";
+import { bootMark, bootRequestShape } from "~/server/bootTrace.server";
 
 import styles from "./styles.module.css";
 
@@ -10,9 +11,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
   if (url.searchParams.get("shop")) {
+    bootMark("index redirect", bootRequestShape(request));
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
+  bootMark("index form", bootRequestShape(request));
   return { showForm: Boolean(login) };
 };
 
