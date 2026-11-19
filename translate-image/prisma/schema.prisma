@@ -217,6 +217,7 @@ model ImageTranslateJob {
   failed         Int       @default(0)
   skipped        Int       @default(0)
   creditsUsed    Int       @default(0)
+  emailSent      Boolean   @default(false)
   claimedBy      String?
   heartbeatAt    DateTime?
   finishedAt     DateTime?
@@ -226,6 +227,7 @@ model ImageTranslateJob {
   @@index([shop, createdAt])
   @@index([shop, kind, createdAt])
   @@index([status, updatedAt])
+  @@index([status, emailSent, finishedAt])
 }
 
 model ImageTranslateJobItem {

@@ -30,6 +30,10 @@ import {
   type ItemOutcome,
   type JobPauseReason,
 } from "./imageTranslateJobStore.server";
+import {
+  retryPendingJobCompleteEmails,
+  scheduleJobCompleteEmail,
+} from "./jobCompleteEmail.server";
 
 const LOG = "[imageTranslate]";
 const STALE_MS = 10 * 60 * 1000;
@@ -142,6 +146,7 @@ async function processJob(job: ImageTranslateJobRow): Promise<void> {
     const item = await nextPendingItem(job.id);
     if (!item) {
       await completeRunningJob(job.id);
+      scheduleJobCompleteEmail(job.id);
       console.log(`${LOG} completed job=${job.id}`);
       return;
     }
@@ -165,13 +170,18 @@ async function processJob(job: ImageTranslateJobRow): Promise<void> {
 async function runImageTranslateTick(): Promise<void> {
   while (running.size < maxJobs()) {
     const job = await claimImageTranslateJob(`web-${process.pid}`, STALE_MS);
-    if (!job) return;
+    if (!job) break;
     running.add(job.id);
     void processJob(job)
       .catch((err) =>
         console.error(`${LOG} job crashed job=${job.id} ${formatImageTranslateErrorLog(err)}`),
       )
       .finally(() => running.delete(job.id));
+  }
+  try {
+    await retryPendingJobCompleteEmails();
+  } catch (err) {
+    console.error(`${LOG} complete-email retry ${formatImageTranslateErrorLog(err)}`);
   }
 }
 

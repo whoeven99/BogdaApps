@@ -24,6 +24,7 @@ import {
   type ImageTranslateJobKind,
   type JobItemInput,
 } from "./imageTranslateJobItems";
+import { scheduleJobCompleteEmail } from "./jobCompleteEmail.server";
 
 export {
   CONTENT_IMAGE_JOB_MAX_ITEMS,
@@ -239,6 +240,8 @@ export async function createContentImageJob(args: {
         productId: item.productId,
       })),
     });
+  } else {
+    scheduleJobCompleteEmail(job.id);
   }
   return { ok: true, data: toSummary(job) };
 }
