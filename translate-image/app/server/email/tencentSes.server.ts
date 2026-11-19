@@ -5,6 +5,11 @@
 
 import { ses } from "tencentcloud-sdk-nodejs-ses";
 import { maskEmail } from "./emailFormat";
+import { isSesFrequencyLimitError } from "./emailRecipientCooldown";
+import {
+  isEmailRecipientInCooldown,
+  setEmailRecipientCooldown,
+} from "./emailRecipientCooldown.server";
 
 const LOG = "[tencentSes]";
 
@@ -62,6 +67,15 @@ export async function sendTencentTemplateEmail(params: {
   if (!client) {
     logDetail("send-skipped", {
       reason: "tencent_ses_credentials_missing",
+      templateId: params.templateId,
+      to: maskEmail(to),
+    });
+    return false;
+  }
+
+  if (await isEmailRecipientInCooldown(to)) {
+    logDetail("send-skipped", {
+      reason: "ses_frequency_cooldown",
       templateId: params.templateId,
       to: maskEmail(to),
     });
@@ -131,14 +145,19 @@ export async function sendTencentTemplateEmail(params: {
               "requestId" in e ? String((e as { requestId?: unknown }).requestId) : undefined,
           }
         : undefined;
+    const frequencyLimited = isSesFrequencyLimitError(e);
     logDetail("after-sdk-call-failed", {
       sendSuccess: false,
       templateId: params.templateId,
       to: maskEmail(to),
       elapsedMs: Date.now() - startedAt,
       tencentError,
+      frequencyLimited,
       errorMessage: e instanceof Error ? e.message : String(e),
     });
+    if (frequencyLimited) {
+      await setEmailRecipientCooldown(to);
+    }
     console.error(
       `${LOG} send failed templateId=${params.templateId} to=${maskEmail(to)}`,
       e instanceof Error ? e.message : e,
