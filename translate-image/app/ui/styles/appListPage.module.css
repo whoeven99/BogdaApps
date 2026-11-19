@@ -29,8 +29,8 @@
   margin-bottom: var(--app-space-400);
   padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(84, 103, 255, 0.06);
-  border: 1px solid var(--app-color-border-secondary);
+  background: var(--p-color-bg-surface-secondary);
+  border: 1px solid var(--p-color-border);
 }
 
 .listToolbarMain {
