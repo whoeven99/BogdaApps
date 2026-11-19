@@ -14,6 +14,16 @@ export type ImageTranslateErrorCode =
 const SUMMARY_MAX = 800;
 const LOG_MAX = 1500;
 
+/** `/timeout/` 匹配不到 `ETIMEDOUT`，换票失败必须显式认这个码。 */
+export function isTimeoutLikeDetail(detail: string): boolean {
+  const d = String(detail || "").toLowerCase();
+  return /timeout|timed out|\baborted\b|etimedout|und_err_connect_timeout/.test(d);
+}
+
+export function isGeminiUnavailableDetail(detail: string): boolean {
+  return /\b(502|503|504)\b/.test(detail) || isTimeoutLikeDetail(detail);
+}
+
 export class ImageTranslateError extends Error {
   readonly code: ImageTranslateErrorCode;
   readonly detail: string;

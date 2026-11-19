@@ -5,10 +5,12 @@
 
 import { ses } from "tencentcloud-sdk-nodejs-ses";
 import { maskEmail } from "./emailFormat";
-import { isSesFrequencyLimitError } from "./emailRecipientCooldown";
+import { isSesFrequencyLimitError, isSesInvalidTemplateError } from "./emailRecipientCooldown";
 import {
   isEmailRecipientInCooldown,
+  isEmailTemplateInCooldown,
   setEmailRecipientCooldown,
+  setEmailTemplateCooldown,
 } from "./emailRecipientCooldown.server";
 
 const LOG = "[tencentSes]";
@@ -67,6 +69,15 @@ export async function sendTencentTemplateEmail(params: {
   if (!client) {
     logDetail("send-skipped", {
       reason: "tencent_ses_credentials_missing",
+      templateId: params.templateId,
+      to: maskEmail(to),
+    });
+    return false;
+  }
+
+  if (await isEmailTemplateInCooldown(params.templateId)) {
+    logDetail("send-skipped", {
+      reason: "ses_invalid_template_cooldown",
       templateId: params.templateId,
       to: maskEmail(to),
     });
@@ -146,6 +157,7 @@ export async function sendTencentTemplateEmail(params: {
           }
         : undefined;
     const frequencyLimited = isSesFrequencyLimitError(e);
+    const invalidTemplate = isSesInvalidTemplateError(e);
     logDetail("after-sdk-call-failed", {
       sendSuccess: false,
       templateId: params.templateId,
@@ -153,10 +165,14 @@ export async function sendTencentTemplateEmail(params: {
       elapsedMs: Date.now() - startedAt,
       tencentError,
       frequencyLimited,
+      invalidTemplate,
       errorMessage: e instanceof Error ? e.message : String(e),
     });
     if (frequencyLimited) {
       await setEmailRecipientCooldown(to);
+    }
+    if (invalidTemplate) {
+      await setEmailTemplateCooldown(params.templateId);
     }
     console.error(
       `${LOG} send failed templateId=${params.templateId} to=${maskEmail(to)}`,

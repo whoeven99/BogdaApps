@@ -1,7 +1,7 @@
 import { createPrivateKey, createSign } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { ImageTranslateError, summarizeError } from "./imageTranslateError";
-import type { ImageTranslateModelId } from "./imageTranslateModels";
+import { ImageTranslateError, isTimeoutLikeDetail, summarizeError } from "./imageTranslateError.ts";
+import type { ImageTranslateModelId } from "./imageTranslateModels.ts";
 
 /**
  * Vertex AI Gemini 改图（Nano Banana）。凭证只走服务账号：
@@ -25,9 +25,10 @@ function isShortRetryHttpStatus(status: number): boolean {
 }
 
 function isGeminiTimeoutMessage(detail: string): boolean {
-  const d = detail.toLowerCase();
-  return /timeout|timed out|\baborted\b/.test(d);
+  return isTimeoutLikeDetail(detail);
 }
+
+export const GOOGLE_TOKEN_TIMEOUT_MS = 10_000;
 
 async function sleepShortRetry(
   kind: string,
@@ -40,6 +41,39 @@ async function sleepShortRetry(
   );
   await sleepImpl(GEMINI_SHORT_RETRY_WAIT_MS);
   return next;
+}
+
+export async function fetchGoogleTokenWithRetries(
+  fetchImpl: typeof fetch,
+  sleepImpl: (ms: number) => Promise<void>,
+  tokenUri: string,
+  body: string,
+): Promise<Response> {
+  let shortTries = 0;
+  for (;;) {
+    try {
+      const res = await fetchImpl(tokenUri, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        signal: AbortSignal.timeout(GOOGLE_TOKEN_TIMEOUT_MS),
+      });
+      const retryHttp = res.status === 502 || res.status === 503 || res.status === 504;
+      if (retryHttp && shortTries < GEMINI_SHORT_RETRY_ATTEMPTS - 1) {
+        shortTries = await sleepShortRetry(String(res.status), shortTries, sleepImpl);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (err instanceof ImageTranslateError) throw err;
+      const detail = summarizeError(err);
+      if (isTimeoutLikeDetail(detail) && shortTries < GEMINI_SHORT_RETRY_ATTEMPTS - 1) {
+        shortTries = await sleepShortRetry("token-timeout", shortTries, sleepImpl);
+        continue;
+      }
+      throw new ImageTranslateError("GEMINI_FAILED", detail, { cause: err });
+    }
+  }
 }
 
 /** 429 退避：无 Retry-After 时 5s → 10s → 20s；有 header 则用它。`attempt` 为已完成的 429 次数（0-based）。 */
@@ -160,7 +194,11 @@ export async function getGoogleCloudAccessToken(fetchImpl: typeof fetch = fetch)
   return getAccessToken(account, fetchImpl);
 }
 
-async function getAccessToken(account: ServiceAccount, fetchImpl: typeof fetch): Promise<string> {
+async function getAccessToken(
+  account: ServiceAccount,
+  fetchImpl: typeof fetch,
+  sleepImpl: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+): Promise<string> {
   if (
     cachedToken &&
     cachedToken.email === account.client_email &&
@@ -169,32 +207,28 @@ async function getAccessToken(account: ServiceAccount, fetchImpl: typeof fetch):
     return cachedToken.token;
   }
   const tokenUri = account.token_uri || DEFAULT_TOKEN_URI;
-  const res = await fetchImpl(tokenUri, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-      assertion: signJwt(account, tokenUri),
-    }).toString(),
-  });
-  const body = (await res.json().catch(() => ({}))) as {
+  const body = new URLSearchParams({
+    grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    assertion: signJwt(account, tokenUri),
+  }).toString();
+  const res = await fetchGoogleTokenWithRetries(fetchImpl, sleepImpl, tokenUri, body);
+  const json = (await res.json().catch(() => ({}))) as {
     access_token?: string;
     expires_in?: number;
     error?: unknown;
     error_description?: unknown;
   };
-  if (!res.ok || !body.access_token) {
-    throw new ImageTranslateError(
-      "GEMINI_NOT_CONFIGURED",
-      `token HTTP ${res.status} ${String(body.error_description || body.error || "")}`.trim(),
-    );
+  if (!res.ok || !json.access_token) {
+    const detail = `token HTTP ${res.status} ${String(json.error_description || json.error || "")}`.trim();
+    if (res.status >= 500) throw new ImageTranslateError("GEMINI_FAILED", detail);
+    throw new ImageTranslateError("GEMINI_NOT_CONFIGURED", detail);
   }
   cachedToken = {
     email: account.client_email,
-    token: body.access_token,
-    expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
+    token: json.access_token,
+    expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000,
   };
-  return body.access_token;
+  return json.access_token;
 }
 
 function generateContentUrl(cfg: GeminiImageConfig, model: string): string {
@@ -326,7 +360,7 @@ export async function geminiTranslateImage(
   if (!cfg) throw new ImageTranslateError("GEMINI_NOT_CONFIGURED");
   const fetchImpl = args.fetchImpl ?? fetch;
   const sleepImpl = args.sleepImpl ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-  const token = await getAccessToken(cfg.account, fetchImpl);
+  const token = await getAccessToken(cfg.account, fetchImpl, sleepImpl);
   const imageConfig: Record<string, string> = { aspectRatio: args.aspectRatio };
   if (!MODELS_WITHOUT_IMAGE_SIZE.has(args.model)) imageConfig.imageSize = OUTPUT_IMAGE_SIZE;
   const payload = {

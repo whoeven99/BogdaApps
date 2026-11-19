@@ -4,6 +4,8 @@ import {
   ImageTranslateError,
   describeImageTranslateError,
   formatImageTranslateErrorLog,
+  isGeminiUnavailableDetail,
+  isTimeoutLikeDetail,
   summarizeError,
 } from "../app/server/picture/imageTranslateError.ts";
 
@@ -49,4 +51,28 @@ test("plain Error still formats a single line", () => {
     code: "GEMINI_FAILED",
     detail: "HTTP 404",
   });
+});
+
+test("isTimeoutLikeDetail matches ETIMEDOUT and Node fetch timeout", () => {
+  assert.equal(isTimeoutLikeDetail("ETIMEDOUT"), true);
+  assert.equal(isTimeoutLikeDetail("errCode=ETIMEDOUT errno=ETIMEDOUT"), true);
+  assert.equal(
+    isTimeoutLikeDetail("name=FetchError request to https://oauth2.googleapis.com/token failed"),
+    false,
+  );
+  assert.equal(isTimeoutLikeDetail("Connect Timeout Error"), true);
+  assert.equal(isTimeoutLikeDetail("UND_ERR_CONNECT_TIMEOUT"), true);
+  assert.equal(isTimeoutLikeDetail("aborted"), true);
+  assert.equal(isTimeoutLikeDetail("HTTP 404"), false);
+});
+
+test("GEMINI_FAILED + ETIMEDOUT is unavailable detail", () => {
+  assert.equal(
+    isGeminiUnavailableDetail(
+      "name=FetchError request to https://oauth2.googleapis.com/token failed, reason: errCode=ETIMEDOUT",
+    ),
+    true,
+  );
+  assert.equal(isGeminiUnavailableDetail("HTTP 502"), true);
+  assert.equal(isGeminiUnavailableDetail("HTTP 404"), false);
 });
