@@ -105,7 +105,10 @@
     "totalPayment": "应付",
     "buyNow": "立即购买",
     "maybeLater": "稍后再说",
-    "buyExtraTimes": "购买额外图像翻译次数"
+    "buyExtraTimes": "购买额外图像翻译次数",
+    "compare": {
+      "scrollHint": "左右滑动查看全部套餐"
+    }
   },
   "starter_features1": "10个免费图片翻译",
   "starter_features2": "机器翻译",

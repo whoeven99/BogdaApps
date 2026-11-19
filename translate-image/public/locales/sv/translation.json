@@ -92,7 +92,10 @@
     "current_plan": "I bruk",
     "try_free": "Prova gratis",
     "get_start": "Kom igång",
-    "for_large_teams": "För stora team"
+    "for_large_teams": "För stora team",
+    "compare": {
+      "scrollHint": "Svep för att se alla planer"
+    }
   },
   "starter_features1": "10 gratis bildöversättningar",
   "starter_features2": "Maskinöversättning",

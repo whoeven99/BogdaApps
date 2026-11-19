@@ -20,6 +20,7 @@ test("pricing CSS has TSF shell geometry classes", () => {
   assert.match(text, /\.pricing-plan-card--recommended/);
   assert.match(text, /\.pricing-plan-card__hero/);
   assert.match(text, /\.pricing-comparison-table/);
+  assert.match(text, /\.pricing-comparison-scroll-hint/);
 });
 
 test("pricing route wraps plans row and compare/faq in sections", () => {
@@ -29,6 +30,9 @@ test("pricing route wraps plans row and compare/faq in sections", () => {
   const plansSection = text.slice(plansStart, text.indexOf("</section>", plansStart));
   assert.match(plansSection, /<Row[\s\S]*gutter=\{\[16, 16\]\}/);
   assert.match(text, /pricing-section pricing-section--compact/);
+  assert.match(text, /pricing-comparison-scroll-hint/);
+  assert.match(text, /pricing\.compare\.scrollHint/);
+  assert.match(text, /scroll=\{\{\s*x:\s*comparisonTableScrollX\s*\}\}/);
   assert.equal(text.includes('className="pricing-compare-title"'), false);
   assert.equal(text.includes('className="pricing-faq-title"'), false);
 });

@@ -234,6 +234,14 @@
   flex-wrap: wrap;
 }
 
+.pricing-comparison-scroll-hint {
+  display: none;
+  margin: 0;
+  color: var(--app-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .pricing-comparison-table-wrap {
   max-width: 100%;
 }
@@ -254,6 +262,24 @@
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--app-color-border-secondary);
+}
+
+.pricing-comparison-table .ant-table-content,
+.pricing-comparison-table .ant-table-body {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pricing-comparison-table .pricing-comparison-table__feature {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.pricing-comparison-table .pricing-comparison-table__plan {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: keep-all;
 }
 
 @media (max-width: 768px) {
@@ -277,5 +303,9 @@
   .pricing-plan-card__hero {
     min-height: 0;
     padding-inline-end: 96px;
+  }
+
+  .pricing-comparison-scroll-hint {
+    display: block;
   }
 }

@@ -102,7 +102,10 @@
     "totalPayment": "Total payment",
     "buyNow": "Buy now",
     "maybeLater": "Maybe later",
-    "buyExtraTimes": "Buy extra image translation times"
+    "buyExtraTimes": "Buy extra image translation times",
+    "compare": {
+      "scrollHint": "Swipe to see all plans"
+    }
   },
   "starter_features1": "10 free image translations",
   "starter_features2": "Machine translation",

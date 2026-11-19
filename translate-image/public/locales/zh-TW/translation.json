@@ -92,7 +92,10 @@
     "current_plan": "正在使用中",
     "try_free": "免費試用",
     "get_start": "開始使用",
-    "for_large_teams": "對於大型團隊"
+    "for_large_teams": "對於大型團隊",
+    "compare": {
+      "scrollHint": "左右滑動檢視全部方案"
+    }
   },
   "starter_features1": "10張免費圖片翻譯",
   "starter_features2": "機器翻譯",

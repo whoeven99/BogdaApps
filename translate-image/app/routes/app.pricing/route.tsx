@@ -497,16 +497,26 @@ const Index = () => {
     [],
   );
 
+  const comparisonFeatureColWidth = 156;
+  const comparisonPlanColWidth = 188;
+  const comparisonTableScrollX =
+    comparisonFeatureColWidth + comparisonPlanColWidth * 4;
+
   const columns = [
     {
       title: t("Features"),
       dataIndex: "features",
       key: "features",
+      width: comparisonFeatureColWidth,
+      fixed: "left" as const,
+      className: "pricing-comparison-table__feature",
     },
     {
       title: "Free",
       dataIndex: "free",
       key: "free",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -522,6 +532,8 @@ const Index = () => {
       title: "Basic",
       dataIndex: "basic",
       key: "basic",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -537,6 +549,8 @@ const Index = () => {
       title: "Pro",
       dataIndex: "pro",
       key: "pro",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -552,6 +566,8 @@ const Index = () => {
       title: "Premium",
       dataIndex: "premium",
       key: "premium",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -832,6 +848,9 @@ const Index = () => {
           <div className="pricing-section__header">
             <div className="pricing-section__title-wrap">
               <h2 className="pricing-section__title">{t("Compare plans")}</h2>
+              <p className="pricing-comparison-scroll-hint">
+                {t("pricing.compare.scrollHint")}
+              </p>
             </div>
           </div>
           <div className="pricing-comparison-table-wrap">
@@ -840,6 +859,7 @@ const Index = () => {
               dataSource={tableData}
               columns={columns}
               pagination={false}
+              scroll={{ x: comparisonTableScrollX }}
             />
           </div>
         </section>

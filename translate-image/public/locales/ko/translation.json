@@ -92,7 +92,10 @@
     "current_plan": "사용 중",
     "try_free": "무료로 체험해보세요",
     "get_start": "시작하기",
-    "for_large_teams": "대규모 팀의 경우"
+    "for_large_teams": "대규모 팀의 경우",
+    "compare": {
+      "scrollHint": "밀어 모든 플랜 보기"
+    }
   },
   "starter_features1": "10개의 무료 이미지 번역",
   "starter_features2": "기계 번역",

@@ -92,7 +92,10 @@
     "current_plan": "In gebruik",
     "try_free": "Gratis proberen",
     "get_start": "Aan de slag",
-    "for_large_teams": "Voor grote teams"
+    "for_large_teams": "Voor grote teams",
+    "compare": {
+      "scrollHint": "Veeg om alle abonnementen te zien"
+    }
   },
   "starter_features1": "10 gratis beeldvertalingen",
   "starter_features2": "Machinevertaling",
