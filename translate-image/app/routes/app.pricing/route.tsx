@@ -649,10 +649,17 @@ const Index = () => {
           remainingCredits={Number(remaining ?? 0)}
           onBuyCredits={handleAddCredits}
         />
-        <section className="pricing-section">
+        <section className="pricing-section" id="pricing-plans">
           <div className="pricing-section__header">
-            <h2 className="pricing-section__title">{t("pricing.plans")}</h2>
-            <Flex align="center" gap={8} wrap="wrap">
+            <div className="pricing-section__title-wrap">
+              <h2 className="pricing-section__title">{t("pricing.plans")}</h2>
+            </div>
+            <Flex
+              className="pricing-section__billing-toggle"
+              align="center"
+              gap={8}
+              wrap="wrap"
+            >
               <Text type="secondary">{t("pricing.monthly")}</Text>
               <Switch checked={yearly} onChange={handleSetYearlyReport} />
               <Text strong>{t("Yearly")}</Text>
@@ -661,8 +668,7 @@ const Index = () => {
               </div>
             </Flex>
           </div>
-        </section>
-        <Row gutter={[16, 16]}>
+          <Row gutter={[16, 16]}>
           <Col xs={24} sm={24} md={12} lg={6} style={{ display: "flex" }}>
             <div
               className={
@@ -678,12 +684,14 @@ const Index = () => {
                   </AppStatusBadge>
                 </div>
               ) : null}
-              <Title level={5} style={{ margin: 0 }}>
-                {t("Free")}
-              </Title>
-              <div className="pricing-plan-card__price-row">
-                <span className="pricing-plan-card__price">$0</span>
-                <span className="pricing-plan-card__unit">{t("/month")}</span>
+              <div className="pricing-plan-card__hero">
+                <Title level={4} style={{ margin: 0 }}>
+                  {t("Free")}
+                </Title>
+                <div className="pricing-plan-card__price-row">
+                  <span className="pricing-plan-card__price">$0</span>
+                  <span className="pricing-plan-card__unit">{t("/month")}</span>
+                </div>
               </div>
               <div className="pricing-plan-card__cta">
                 <AppButton
@@ -728,11 +736,13 @@ const Index = () => {
                 style={{ display: "flex" }}
               >
                 <div
-                  className={
+                  className={`pricing-plan-card ${
                     item.disabled
-                      ? "pricing-plan-card pricing-plan-card--current"
-                      : "pricing-plan-card"
-                  }
+                      ? "pricing-plan-card--current"
+                      : item.isRecommended && plan.type === "Free" && plan.id
+                        ? "pricing-plan-card--recommended"
+                        : ""
+                  }`}
                 >
                   {item.disabled ? (
                     <div className="pricing-plan-card__badge">
@@ -747,21 +757,23 @@ const Index = () => {
                       </AppStatusBadge>
                     </div>
                   ) : null}
-                  <Title level={5} style={{ margin: 0 }}>
-                    {yearly ? item.yearlyTitle : item.title}
-                  </Title>
-                  <div className="pricing-plan-card__price-row">
-                    <span className="pricing-plan-card__price">
-                      ${yearly ? item.yearlyPrice : item.monthlyPrice}
-                    </span>
-                    <span className="pricing-plan-card__unit">{t("/month")}</span>
+                  <div className="pricing-plan-card__hero">
+                    <Title level={4} style={{ margin: 0 }}>
+                      {yearly ? item.yearlyTitle : item.title}
+                    </Title>
+                    <div className="pricing-plan-card__price-row">
+                      <span className="pricing-plan-card__price">
+                        ${yearly ? item.yearlyPrice : item.monthlyPrice}
+                      </span>
+                      <span className="pricing-plan-card__unit">{t("/month")}</span>
+                    </div>
+                    {yearly ? (
+                      <div
+                        className="pricing-plan-card__billing-note"
+                        dangerouslySetInnerHTML={{ __html: item.subtitle }}
+                      />
+                    ) : null}
                   </div>
-                  {yearly ? (
-                    <div
-                      className="pricing-plan-card__billing-note"
-                      dangerouslySetInnerHTML={{ __html: item.subtitle }}
-                    />
-                  ) : null}
                   <div className="pricing-plan-card__cta">
                     <AppButton
                       id={startId}
@@ -815,19 +827,35 @@ const Index = () => {
             );
           })}
         </Row>
-        <h2 className="pricing-compare-title">{t("Compare plans")}</h2>
-        <Table
-          dataSource={tableData}
-          columns={columns}
-          pagination={false}
-        />
-        <h2 className="pricing-faq-title">{t("FAQs")}</h2>
-        <Collapse
-          items={collapseData}
-          onChange={() => {
-            reportClick("pricing_faq_click");
-          }}
-        />
+        </section>
+        <section className="pricing-section pricing-section--compact">
+          <div className="pricing-section__header">
+            <div className="pricing-section__title-wrap">
+              <h2 className="pricing-section__title">{t("Compare plans")}</h2>
+            </div>
+          </div>
+          <div className="pricing-comparison-table-wrap">
+            <Table
+              className="pricing-comparison-table"
+              dataSource={tableData}
+              columns={columns}
+              pagination={false}
+            />
+          </div>
+        </section>
+        <section className="pricing-section pricing-section--compact">
+          <div className="pricing-section__header">
+            <div className="pricing-section__title-wrap">
+              <h2 className="pricing-section__title">{t("FAQs")}</h2>
+            </div>
+          </div>
+          <Collapse
+            items={collapseData}
+            onChange={() => {
+              reportClick("pricing_faq_click");
+            }}
+          />
+        </section>
       </Space>
       </div>
       <HasPayForFreePlanModal />
