@@ -19,6 +19,8 @@
   "Total pay": "总付款",
   "Buy now": "立即支付",
   "Image Translation Plugin": "图片翻译插件",
+  "Plugin enabled": "插件已启用",
+  "Enable plugin": "启用插件",
   "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.": "插件已启用——产品图片和替代文字将根据您网站的语言设置以正确的语言显示。",
   "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.": "启用该插件，以确保每种已发布语言的产品图片和替代文本都能正确显示。",
   "Manage": "管理",

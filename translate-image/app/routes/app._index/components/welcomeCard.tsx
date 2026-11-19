@@ -1,18 +1,7 @@
-import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import {
-  Badge,
-  Button,
-  Card,
-  ConfigProvider,
-  Flex,
-  Skeleton,
-  Typography,
-} from "antd";
+import { Banner } from "@shopify/polaris";
+import { useFetcher } from "@remix-run/react";
 import { useTranslation } from "react-i18next";
-// import useReport from "scripts/eventReport";
-import { useState, useEffect } from "react";
 import useReport from "scripts/eventReport";
-const { Text } = Typography;
 
 interface WelcomeCardProps {
   switcherOpen: boolean;
@@ -25,13 +14,10 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   blockUrl,
   shop,
 }) => {
-  const { reportClick, report } = useReport();
+  const { reportClick } = useReport();
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const fetcher = useFetcher<any>();
-  const graphqlFetcher = useFetcher<any>();
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  //   const { report, trackExposure, fetcherState } = useReport();
+
   const handleSetting = () => {
     reportClick("dashboard_open_setting");
     window.open(blockUrl, "_blank");
@@ -45,61 +31,16 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
       },
     );
   };
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
+
+  const action = { content: switcherOpen ? t("Manage") : t("Enable"), onAction: handleSetting };
+
   return (
-    <Card
-      styles={{
-        header: { borderBottom: "none" },
-        body: {
-          padding: "12px 24px 12px 24px",
-        },
-      }}
-    >
-      <Flex align="center" justify="space-between" gap={8}>
-        <Flex
-          gap={8}
-          vertical
-          // style={{ width: "100%", justifyContent: "space-between" }}
-          style={{ flex: 1 }}
-        >
-          <Flex align="center" gap={10}>
-            <h4 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
-              {t("Image Translation Plugin")}
-            </h4>
-            {switcherOpen ? (
-              <Badge color="hsl(102, 53%, 61%)" />
-            ) : (
-              <Badge color="#f50" />
-            )}
-          </Flex>
-          <Text style={{ fontSize: "14px" }}>
-            {switcherOpen
-              ? t(
-                  "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.",
-                )
-              : t(
-                  "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.",
-                )}
-          </Text>
-        </Flex>
-        <Button
-          onClick={handleSetting}
-          type="default"
-          style={{ width: "auto"}}
-        >
-          {switcherOpen ? t("Manage") : t("Enable")}
-        </Button>
-      </Flex>
-    </Card>
+    <Banner
+      title={switcherOpen ? t("Plugin enabled") : t("Enable plugin")}
+      tone={switcherOpen ? "success" : "warning"}
+      action={switcherOpen ? undefined : action}
+      secondaryAction={switcherOpen ? action : undefined}
+    />
   );
 };
 

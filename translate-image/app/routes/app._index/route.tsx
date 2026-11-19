@@ -1,21 +1,19 @@
 import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { Space, Typography } from "antd";
-import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
+import { Link, useFetcher, useLoaderData } from "@remix-run/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import WelcomeCard from "./components/welcomeCard";
-import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
-import ThemeModule from "./components/themeModule";
 import HomeImageJobSection from "./components/HomeImageJobSection";
-import { FaqComponent } from "./components/faqComponent";
 import { bootMark } from "~/server/bootTrace.server";
 import { getCurrentContentImageJob } from "~/server/contentImage/contentImageJobs.server";
 import type { ContentImageJob } from "~/routes/component/contentImage/contentImageClient";
-const { Title, Text } = Typography;
+
+const { Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -36,13 +34,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 const Index = () => {
   const { language, shop, ciwiSwitcherBlocksId, ciwiSwitcherId, job } =
     useLoaderData<typeof loader>();
-  const { reportClick, report } = useReport();
+  const { reportClick } = useReport();
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
   const [switcherOpen, setSwitcherOpen] = useState(true);
   const [switcherLoading, setSwitcherLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
   const blockUrl = useMemo(
     () =>
       `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiSwitcherId}/star_rating`,
@@ -53,7 +48,6 @@ const Index = () => {
   const themeFetcher = useFetcher<any>();
   const printedRef = useRef(false);
   useEffect(() => {
-    setIsLoading(false);
     fetcher.submit(
       {
         log: `${shop} 目前在主页面, 页面语言为${language}}`,
@@ -66,7 +60,7 @@ const Index = () => {
   }, []);
   useEffect(() => {
     if (switcherLoading) return;
-    if (printedRef.current) return; // 防止重复打印
+    if (printedRef.current) return;
 
     printedRef.current = true;
     fetcher.submit(
@@ -80,7 +74,6 @@ const Index = () => {
     );
   }, [switcherLoading]);
   useEffect(() => {
-    setIsLoading(false);
     themeFetcher.submit(
       {
         theme: JSON.stringify(true),
@@ -90,18 +83,11 @@ const Index = () => {
         action: "/app",
       },
     );
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
   }, []);
   useEffect(() => {
     if (themeFetcher.data) {
-      // console.log(themeFetcher.data);
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
-      // console.log("switcherData",switcherData);
-
       const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
       const blocks = jsonString
         ? JSON.parse(jsonString).current?.blocks
@@ -131,11 +117,6 @@ const Index = () => {
   return (
     <Page>
       <TitleBar title={t("Image & Alt Text Translation")} />
-      <ScrollNotice
-        text={t(
-          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
-        )}
-      />
       <Space
         direction="vertical"
         size="large"
@@ -144,24 +125,21 @@ const Index = () => {
           overflowX: "hidden",
         }}
       >
-        <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          {/* <QuotaCard /> */}
+        {switcherLoading ? null : (
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
           />
-          <HomeImageJobSection initialJob={(job as ContentImageJob | null) ?? null} />
-          <ThemeModule shop={shop} />
-          <FaqComponent />
-          {/* <ImageTable shop={shop} /> */}
-          {/* <ImageTranslatePanel images={[]} translatedImage={""} /> */}
-        </Space>
+        )}
+        <HomeImageJobSection
+          initialJob={(job as ContentImageJob | null) ?? null}
+        />
       </Space>
       <Text
         style={{
-          display: "flex", // 使用 flexbox 来布局
-          justifyContent: "center", // 水平居中
+          display: "flex",
+          justifyContent: "center",
           margin: "16px 0",
         }}
       >
@@ -188,7 +166,6 @@ const Index = () => {
 };
 
 export const handleContactSupport = () => {
-  // 声明 tidioChatApi 类型
   interface Window {
     tidioChatApi?: {
       open: () => void;
