@@ -222,18 +222,6 @@
   color: var(--p-color-text);
 }
 
-.pricing-pack-summary {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--p-color-border);
-  background: var(--p-color-bg-surface);
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
 .pricing-comparison-scroll-hint {
   display: none;
   margin: 0;

@@ -37,6 +37,16 @@ test("pricing route wraps plans row and compare/faq in sections", () => {
   assert.equal(text.includes('className="pricing-faq-title"'), false);
 });
 
+test("credits modal uses pack cards instead of InFlowSelect", () => {
+  const text = readFileSync(
+    join(root, "app/routes/app._index/components/addCreditsModal.tsx"),
+    "utf8",
+  );
+  assert.match(text, /pricing-credit-pack/);
+  assert.match(text, /size="large"/);
+  assert.equal(text.includes("InFlowSelect"), false);
+});
+
 test("usage card uses header/content/balance/actions", () => {
   const text = card();
   assert.match(text, /pricing-usage-card__header/);

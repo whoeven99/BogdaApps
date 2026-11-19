@@ -1,11 +1,11 @@
-import { Text as PolarisText } from "@shopify/polaris";
+import { Skeleton } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "@remix-run/react/dist/components";
 import { useTranslation } from "react-i18next";
 import useReport from "scripts/eventReport";
 import { availableTranslationTimes } from "~/lib/merchantTimes";
 import { AppSModal } from "~/ui/components/AppSModal";
-import { InFlowSelect } from "~/ui/components/InFlowSelect";
+import "./addCreditsModal.css";
 
 export interface OptionType {
   key: string;
@@ -56,6 +56,8 @@ export const AddCreaditsModal = ({
   }, [catalogFetcher.data]);
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
   const selected = creditOptions.find((item) => item.key === selectedOptionKey);
+  const catalogLoading =
+    openModal && catalogFetcher.state !== "idle" && !catalogFetcher.data;
 
   useEffect(() => {
     if (openModal && catalogFetcher.state === "idle" && !catalogFetcher.data) {
@@ -127,45 +129,49 @@ export const AddCreaditsModal = ({
       open={openModal}
       heading={t("pricing.buyExtraTimes")}
       onClose={onClose}
+      size="large"
       primaryAction={{
         content: t("pricing.buyNow"),
         onAction: handlePay,
         loading: buyButtonLoading,
-        disabled: !selectedOptionKey || buyButtonLoading,
+        disabled: !selected || buyButtonLoading,
       }}
-      secondaryActions={[
-        { content: t("pricing.maybeLater"), onAction: onClose },
-      ]}
+      secondaryActions={[{ content: t("Cancel"), onAction: onClose }]}
     >
-      <InFlowSelect
-        label={t("pricing.creditPack")}
-        labelHidden
-        options={creditOptions.map((option) => ({
-          value: option.key,
-          label: `${option.Credits.toLocaleString()} ${t("extra times")} · $${option.price.comparedPrice.toFixed(2)}`,
-        }))}
-        value={selectedOptionKey}
-        onChange={setSelectedOption}
-        menuPreferAbove
-      />
-      <div className="pricing-pack-summary">
-        <div>
-          <PolarisText as="p" variant="bodySm" tone="subdued">
-            {t("pricing.times")}
-          </PolarisText>
-          <PolarisText as="p" variant="headingMd" fontWeight="bold">
-            {selected?.Credits.toLocaleString() ?? "0"} {t("extra times")}
-          </PolarisText>
-        </div>
-        <div>
-          <PolarisText as="p" variant="bodySm" tone="subdued">
-            {t("pricing.totalPayment")}
-          </PolarisText>
-          <PolarisText as="p" variant="headingMd" fontWeight="bold">
-            ${selected?.price.comparedPrice.toFixed(2) ?? "0.00"}
-          </PolarisText>
-        </div>
-      </div>
+      {catalogLoading ? (
+        <Skeleton active title={false} paragraph={{ rows: 4 }} />
+      ) : (
+        <>
+          <div className="pricing-credit-packs">
+            {creditOptions.map((option) => {
+              const isSelected = option.key === selectedOptionKey;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={
+                    isSelected
+                      ? "pricing-credit-pack pricing-credit-pack--selected"
+                      : "pricing-credit-pack"
+                  }
+                  onClick={() => setSelectedOption(option.key)}
+                >
+                  <span className="pricing-credit-pack__times">
+                    {option.Credits.toLocaleString()} {t("pricing.times")}
+                  </span>
+                  <span className="pricing-credit-pack__price">
+                    ${option.price.comparedPrice.toFixed(2)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="pricing-credit-packs__total">
+            {t("pricing.totalPayment")}: $
+            {selected?.price.comparedPrice.toFixed(2) ?? "0.00"}
+          </p>
+        </>
+      )}
     </AppSModal>
   );
 };

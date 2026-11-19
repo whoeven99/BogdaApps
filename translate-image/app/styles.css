@@ -41,18 +41,6 @@ body {
   z-index: 2;
 }
 
-.pricing-pack-summary {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--p-color-border);
-  background: var(--p-color-bg-surface);
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
 @media (max-width: 768px) {
   .in-flow-select--open {
     z-index: 40;

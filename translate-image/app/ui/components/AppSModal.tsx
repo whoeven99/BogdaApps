@@ -14,7 +14,7 @@ type Props = {
   heading: string;
   onClose: () => void;
   children: ReactNode;
-  size?: string;
+  size?: "small" | "large" | "fullScreen";
   className?: string;
   primaryAction?: AppSModalAction | null;
   secondaryActions?: AppSModalAction[];
@@ -27,6 +27,7 @@ export function AppSModal({
   heading,
   onClose,
   children,
+  size,
   primaryAction,
   secondaryActions,
   footerStart,
@@ -46,6 +47,7 @@ export function AppSModal({
       open={open}
       onClose={onClose}
       title={heading}
+      size={size}
       primaryAction={
         primaryAction
           ? {
