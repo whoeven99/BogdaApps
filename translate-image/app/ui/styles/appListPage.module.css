@@ -144,6 +144,37 @@
   min-width: 0;
 }
 
+.imageJobChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 4px 12px 4px 6px;
+  border: 1px solid var(--p-color-border);
+  border-radius: 999px;
+  background: var(--p-color-bg-fill, #ffffff);
+  color: var(--p-color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: start;
+}
+
+.imageJobChip:hover {
+  background: var(--p-color-bg-surface-hover, #f3f3f3);
+}
+
+.imageJobChipMeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--p-color-text-secondary);
+}
+
 @media (max-width: 768px) {
   .listToolbar {
     flex-direction: column;

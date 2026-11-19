@@ -14,6 +14,7 @@ import AppStatusBadge from "~/ui/components/AppStatusBadge";
 import AppSubpageTitleBar, { useAppHomeBackAction } from "~/ui/components/AppSubpageTitleBar";
 import listStyles from "~/ui/styles/appListPage.module.css";
 import { ImageJobMiniStageTrack } from "~/routes/app.translate-v4/components/V4JobCardParts";
+import { v4Colors } from "~/routes/app.translate-v4/v4Styles";
 import ContentImageCompareModal from "~/routes/component/contentImage/components/ContentImageCompareModal";
 import {
   controlContentImageJob,
@@ -203,7 +204,18 @@ export default function ImageJobResultPage() {
               credits: fmt(detail.creditsUsed),
             })}
           </Text>
-          {active ? <ImageJobMiniStageTrack segments={miniStageSegments} /> : null}
+          {active ? (
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: v4Colors.cardSubdued,
+                border: `1px solid ${v4Colors.cardBorder}`,
+              }}
+            >
+              <ImageJobMiniStageTrack segments={miniStageSegments} />
+            </div>
+          ) : null}
           <Table<ContentImageJobItem>
             className={listStyles.listTable}
             rowKey="id"

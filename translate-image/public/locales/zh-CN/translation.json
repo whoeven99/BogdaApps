@@ -524,7 +524,9 @@
       },
       "viewResult": "查看结果",
       "title": "{{kind}} · {{language}}",
-      "imagesShort": "{{done}}/{{total}} 张"
+      "imagesShort": "{{done}}/{{total}} 张",
+      "chip": "{{language}} · {{done}}/{{total}}",
+      "chipAria": "打开图片任务：{{status}} · {{language}} · {{done}}/{{total}}"
     },
     "home": {
       "title": "图片翻译",

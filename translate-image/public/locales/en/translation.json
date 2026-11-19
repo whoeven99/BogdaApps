@@ -520,7 +520,9 @@
       },
       "viewResult": "View results",
       "title": "{{kind}} · {{language}}",
-      "imagesShort": "{{done}}/{{total}} images"
+      "imagesShort": "{{done}}/{{total}} images",
+      "chip": "{{language}} · {{done}}/{{total}}",
+      "chipAria": "Open image task: {{status}} · {{language}} · {{done}}/{{total}}"
     },
     "home": {
       "title": "Image translation",
