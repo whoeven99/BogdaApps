@@ -21,44 +21,95 @@
 .pricing-usage-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   padding: 20px;
-  border-radius: 12px;
-  border: 1px solid var(--p-color-border);
-  background: var(--p-color-bg-surface);
+  border-radius: 20px;
+  border: 1px solid var(--p-color-border-info, var(--p-color-border));
+  box-shadow: var(--app-shadow-card);
+  background: linear-gradient(
+      180deg,
+      var(--p-color-bg-surface-info, #eaf4ff) 0%,
+      var(--p-color-bg-fill, #ffffff) 72%
+    );
+}
+
+.pricing-usage-card__header {
+  margin-bottom: 16px;
+}
+
+.pricing-usage-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .pricing-usage-card__metric-main {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
+.pricing-usage-card__balance {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .pricing-usage-card__balance-value {
+  color: var(--p-color-text);
   font-size: 28px;
   font-weight: 700;
-  line-height: 36px;
-  color: var(--p-color-text);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .pricing-usage-card__balance-suffix {
-  margin-left: 8px;
   color: var(--p-color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pricing-usage-card__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .pricing-section {
-  padding: 8px 0 0;
+  padding: 22px 24px 24px;
+  border-radius: 24px;
+  border: 1px solid var(--p-color-border);
+  background: var(--p-color-bg-fill, #ffffff);
+  box-shadow: var(--app-shadow-card-strong);
+}
+
+.pricing-section--compact {
+  padding-top: 18px;
 }
 
 .pricing-section__header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.pricing-section__title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min-content;
+  flex: 1 1 auto;
+}
+
+.pricing-section__billing-toggle {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .pricing-section__title {
@@ -67,6 +118,7 @@
   font-size: 18px;
   line-height: 24px;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .yearly_save {
@@ -78,61 +130,94 @@
 }
 
 .pricing-plan-card {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 20px;
-  border: 1px solid var(--p-color-border);
-  border-radius: 12px;
-  background: var(--p-color-bg-surface);
+  gap: 12px;
   min-width: 220px;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid var(--p-color-border-secondary, var(--p-color-border));
+  background: var(--p-color-bg-fill, #ffffff);
+  box-shadow: var(--app-shadow-card);
 }
 
 .pricing-plan-card--current {
-  border-color: var(--p-color-border-emphasis);
+  background: var(--p-color-bg-surface-selected, var(--app-color-surface-selected));
+}
+
+.pricing-plan-card--recommended {
+  border-color: var(--p-color-border-emphasis, var(--p-color-border));
+  box-shadow: var(--app-shadow-card-strong);
 }
 
 .pricing-plan-card__badge {
-  margin-bottom: 8px;
+  position: absolute;
+  top: 20px;
+  inset-inline-end: 20px;
+  z-index: 1;
+}
+
+.pricing-plan-card__hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 84px;
+  padding-inline-end: 112px;
 }
 
 .pricing-plan-card__price-row {
-  margin: 12px 0;
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .pricing-plan-card__price {
-  font-size: 28px;
+  font-size: 32px;
+  line-height: 1;
   font-weight: 700;
   color: var(--p-color-text);
 }
 
 .pricing-plan-card__unit {
-  margin-left: 4px;
+  margin-inline-start: 6px;
   color: var(--p-color-text-secondary);
+  white-space: nowrap;
 }
 
 .pricing-plan-card__billing-note {
-  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--app-color-surface-secondary);
   color: var(--p-color-text-secondary);
   font-size: 13px;
+  line-height: 20px;
 }
 
 .pricing-plan-card__cta {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 16px;
+  width: 100%;
+}
+
+.pricing-plan-card__cta .Polaris-Button {
+  width: 100%;
 }
 
 .pricing-plan-card__features {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .pricing-plan-card__feature {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 10px;
   font-size: 13px;
   color: var(--p-color-text);
 }
@@ -149,14 +234,48 @@
   flex-wrap: wrap;
 }
 
-.pricing-compare-title {
-  margin: 24px 0 12px;
-  font-size: 18px;
-  font-weight: 700;
+.pricing-comparison-table-wrap {
+  max-width: 100%;
 }
 
-.pricing-faq-title {
-  margin: 24px 0 12px;
-  font-size: 18px;
-  font-weight: 700;
+.pricing-comparison-table .ant-table-thead > tr > th {
+  background: var(--p-color-bg-surface-secondary);
+  color: var(--p-color-text);
+  font-weight: 600;
+  padding: 10px 12px;
+}
+
+.pricing-comparison-table .ant-table-tbody > tr > td {
+  color: var(--p-color-text);
+  padding: 10px 12px;
+}
+
+.pricing-comparison-table .ant-table-container {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--app-color-border-secondary);
+}
+
+@media (max-width: 768px) {
+  .pricing-section {
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+
+  .pricing-section__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .pricing-section__title-wrap,
+  .pricing-section__billing-toggle {
+    flex: none;
+    width: 100%;
+  }
+
+  .pricing-plan-card__hero {
+    min-height: 0;
+    padding-inline-end: 96px;
+  }
 }

@@ -18,6 +18,8 @@
   --app-font-size-body: 14px;
   --app-font-size-body-small: 13px;
   --app-space-400: var(--p-space-400, 16px);
+  --app-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.04);
+  --app-shadow-card-strong: 0 18px 40px rgba(15, 23, 42, 0.08);
 }
 
 @media (min-width: 48em) {
