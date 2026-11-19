@@ -2,6 +2,24 @@
     font-size: 24px !important; 
 } */
 
+:root {
+  --app-color-bg: var(--p-color-bg, #f1f1f1);
+  --app-color-surface: var(--p-color-bg-fill, #ffffff);
+  --app-color-surface-secondary: var(--p-color-bg-surface-secondary, #f3f3f3);
+  --app-color-surface-hover: var(--p-color-bg-surface-hover, #f6f6f7);
+  --app-color-surface-selected: var(--p-color-bg-surface-selected, #eef1ff);
+  --app-color-surface-info: var(--p-color-bg-surface-info, #eaf4ff);
+  --app-color-border: var(--p-color-border, #e1e3e5);
+  --app-color-border-secondary: var(--p-color-border-secondary, #e1e3e5);
+  --app-color-text: var(--p-color-text, #202223);
+  --app-color-text-secondary: var(--p-color-text-secondary, #616161);
+  --app-color-text-tertiary: var(--p-color-text-tertiary, #8c9196);
+  --app-color-text-info: var(--p-color-text-info, #005bd3);
+  --app-font-size-body: 14px;
+  --app-font-size-body-small: 13px;
+  --app-space-400: var(--p-space-400, 16px);
+}
+
 @media (min-width: 48em) {
   .Polaris-Page__Content {
     padding-top: 0px !important;

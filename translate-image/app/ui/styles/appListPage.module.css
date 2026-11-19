@@ -301,13 +301,27 @@
 }
 
 .listTable :global(.ant-table-tbody > tr > td) {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--app-color-surface);
   vertical-align: middle;
   overflow: visible;
 }
 
 .listTable :global(.ant-table-tbody > tr:hover > td) {
-  background: rgba(84, 103, 255, 0.05) !important;
+  background: var(--app-color-surface-hover) !important;
+}
+
+.jobProgressCard {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--app-color-surface-secondary);
+  border: 1px solid var(--app-color-border);
+}
+
+.jobProgressCardMeta {
+  margin: 0 0 10px;
+  color: var(--app-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .jobResultPreviewBtn {
@@ -660,7 +674,7 @@
   padding: 12px;
   border-radius: 14px;
   border: 1px solid var(--app-color-border-secondary);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--app-color-surface);
 }
 
 .imageRowCardBody {
