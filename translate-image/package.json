@@ -57,6 +57,7 @@
     "react-i18next": "^16.0.0",
     "react-redux": "^9.2.0",
     "remix-island": "^0.2.0",
+    "tencentcloud-sdk-nodejs-ses": "^4.1.271",
     "vite-tsconfig-paths": "^5.0.1",
     "zustand": "^5.0.8"
   },
