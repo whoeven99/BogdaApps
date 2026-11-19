@@ -5,6 +5,7 @@ import type { PlanRecord } from "./plans/planCatalog.server";
 import { findPackPlanByName, findSubscriptionPlan } from "./plans/planCatalog.server";
 import { ensureAccount } from "./quota.server";
 import { resolveAmountUsd } from "./billingFeishuFormat";
+import { schedulePurchaseEmail } from "./email/billingEmail.server";
 import { schedulePurchaseFeishu } from "./lifecycleFeishuNotify.server";
 import { BILLING_LOG_EVENT } from "./types.server";
 
@@ -88,6 +89,7 @@ export async function applyTokenPackPurchase(params: {
     credits: plan.credits,
     amountUsd: params.amountUsd ?? resolveAmountUsd(null, plan.priceAmount),
   });
+  schedulePurchaseEmail({ shop, purchasedCredits: plan.credits });
   return true;
 }
 

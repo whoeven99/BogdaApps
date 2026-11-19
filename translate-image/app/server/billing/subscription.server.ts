@@ -2,7 +2,12 @@ import type { Account, AppSubscription, Prisma } from "@prisma/client";
 import prisma from "~/db.server";
 import { settlePoolsAtRenewal, clearSubscriptionOnCancel } from "./accountBalance";
 import { getAnnualCreditCycleIndex } from "./annualCreditCycle";
-import { appendBillingLog } from "./billingLog.server";
+import { appendBillingLog, claimBillingLogFlag } from "./billingLog.server";
+import {
+  scheduleRenewalEmail,
+  scheduleSubscribeEmail,
+} from "./email/billingEmail.server";
+import { shouldSendRenewalEmail } from "~/server/email/emailFormat";
 import { JAVA_SNAPSHOT_SUBSCRIPTION_GID } from "./billingState";
 import {
   grantBasicFirstPayBonusIfEligible,
@@ -169,6 +174,29 @@ export async function archivePeriodAndRenew(params: {
   ]);
   await maybeGrantBasicFirstPayBonus(shop, next.planKey, subscription.trialEndsAt);
   scheduleRenewalFeishu({ shop, billingLogId: renewedLog.id });
+  const renewalCountAfter = await prisma.billingLog.count({
+    where: {
+      shop,
+      eventType: BILLING_LOG_EVENT.SUBSCRIPTION_RENEWED,
+      referenceId: subscription.shopifySubscriptionId,
+    },
+  });
+  const priorRenewalCount = Math.max(0, renewalCountAfter - 1);
+  const hadTrial = subscription.trialEndsAt != null;
+  if (shouldSendRenewalEmail({ hadTrial, priorRenewalCount })) {
+    if (await claimBillingLogFlag(renewedLog.id, "renewalEmailSent")) {
+      scheduleRenewalEmail({
+        shop,
+        shopifyPlanName: next.shopifyPlanName,
+        billingInterval: next.billingInterval,
+        creditsPerPeriod: next.creditsPerPeriod,
+      });
+    }
+  } else {
+    console.info(
+      `[imgEmail] renewal skipped shop=${shop} hadTrial=${hadTrial} prior=${priorRenewalCount}`,
+    );
+  }
 }
 
 export async function applyActiveSubscription(
@@ -301,6 +329,16 @@ export async function applyActiveSubscription(
       inTrial: Boolean(trialEndsAt && trialEndsAt.getTime() > Date.now()),
       first: activatedCount <= 1,
     });
+    if (!skipAdd) {
+      scheduleSubscribeEmail({
+        shop,
+        shopifyPlanName,
+        billingInterval,
+        creditsPerPeriod,
+        periodStart: period.currentPeriodStart,
+        periodEnd: period.currentPeriodEnd,
+      });
+    }
     return { outcome: "activated" };
   }
 

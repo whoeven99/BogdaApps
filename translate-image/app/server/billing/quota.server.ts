@@ -66,6 +66,9 @@ export async function ensureAccount(shop: string) {
       });
     }
     scheduleInstallFeishu(shop);
+    void import("./email/billingEmail.server")
+      .then((mod) => mod.scheduleWelcomeEmail(shop))
+      .catch((err) => console.error("[imgEmail] welcome schedule failed", err));
   }
   const row = await prisma.account.findUniqueOrThrow({ where: { shop } });
   if (row.hasUsedTrial) return row;
