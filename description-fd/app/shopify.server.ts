@@ -6,8 +6,11 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
 import { withAppOnlyAdmin } from "./server/shopify/appOnlyAdmin.server";
 import { hasAppOnlyCredentials } from "./server/shopify/shopAdminToken.server";
+
+ensureRuntimeEnv();
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,

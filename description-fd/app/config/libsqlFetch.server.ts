@@ -1,7 +1,6 @@
 /**
- * remix-serve 会用 @remix-run/web-fetch 覆盖 global.fetch。
- * @libsql/client 首次查询传入 Request 对象时，Remix 的 fetch 把它当成 URL 字符串，
- * 报 Invalid URL。这里拆成 url 字符串再请求。
+ * remix-serve 会覆盖 global.fetch；libsql 传入 Request 时会变成 Invalid URL。
+ * 把 Request 拆成 URL 字符串再请求。
  */
 function isRequestLike(input: RequestInfo | URL): input is Request {
   return (
