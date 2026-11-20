@@ -140,6 +140,8 @@ const Index = () => {
   const [brandSlogan, setBrandSlogan] = useState<string>("");
   const [language, setLanguage] = useState<string>("English");
   const [updateValue, setUpdateValue] = useState<string>("");
+  const resultPageType = data[0]?.pageType || "product";
+  const resultContentType = data[0]?.contentType || "description";
 
   const productFetcher = useFetcher<any>();
   const productsFetcher = useFetcher<any>();
@@ -154,6 +156,8 @@ const Index = () => {
       if (productsFetcher.data.success) {
         setMenuItems(productsFetcher.data.response);
         setActiveItem(productsFetcher.data.response[0]?.id);
+        setLoading(false);
+      } else {
         setLoading(false);
       }
     }
@@ -176,26 +180,31 @@ const Index = () => {
   }, [productFetcher.data]);
 
   useEffect(() => {
-    setTemplate("");
-    setTemplates([]);
+    let cancelled = false;
     const fetchTemplates = async () => {
       const response = await GetTemplateByShopName({
         server: server as string,
         shop: shop as string,
-        pageType: data[0]?.pageType || "",
-        contentType: data[0]?.contentType || "",
+        pageType: resultPageType,
+        contentType: resultContentType,
       });
-
-      setTemplates(response);
-      setTemplate(response[0]?.id.toString());
+      const list =
+        Array.isArray(response) && response.length > 0
+          ? response
+          : [{ id: 0, templateTitle: "Default structure", templateClass: false }];
+      if (cancelled) return;
+      setTemplates(list);
+      setTemplate(String(list[0].id));
     };
-    fetchTemplates();
-  }, [data]);
+    void fetchTemplates();
+    return () => {
+      cancelled = true;
+    };
+  }, [resultPageType, resultContentType, server, shop]);
 
   useEffect(() => {
     if (activeItem) {
       setTableLoading(true);
-      setData([]);
       productFetcher.submit(
         {
           productId: activeItem,
@@ -206,26 +215,31 @@ const Index = () => {
         },
       );
       const UpdateData = async () => {
-        const response = await GetProductsByListId({
-          server: server as string,
-          shop: shop as string,
-          listId: [activeItem],
-        });
-        if (response.success) {
-          const row = Array.isArray(response.response) ? response.response[0] : null;
-          const html = row?.generateContent || "";
-          setData([
-            {
-              ...(row || { id: activeItem }),
-              generateContent: html,
-            },
-          ]);
-          setUpdateValue(html);
-          targetEditor?.commands.setContent(html);
+        try {
+          const response = await GetProductsByListId({
+            server: server as string,
+            shop: shop as string,
+            listId: [activeItem],
+          });
+          if (response.success) {
+            const row = Array.isArray(response.response)
+              ? response.response[0]
+              : null;
+            const html = row?.generateContent || "";
+            setData([
+              {
+                ...(row || { id: activeItem }),
+                generateContent: html,
+              },
+            ]);
+            setUpdateValue(html);
+            targetEditor?.commands.setContent(html);
+          }
+        } finally {
+          setTableLoading(false);
         }
-        setTableLoading(false);
       };
-      UpdateData();
+      void UpdateData();
     }
   }, [activeItem]);
 
@@ -268,6 +282,8 @@ const Index = () => {
           action: "/getProductInfoByIds",
         },
       );
+    } else {
+      setLoading(false);
     }
   };
 
@@ -638,22 +654,7 @@ const Index = () => {
                   /> */}
                 </InlineStack>
               </Box>
-              {templates.length > 0 ? (
-                <IndexTable
-                  // condensed={useBreakpoints().smDown}
-                  // resourceName={resourceName}
-                  itemCount={data.length}
-                  selectable={false}
-                  headings={[
-                    { title: "Module" },
-                    { title: "Original Content" },
-                    { title: "Generated Content" },
-                    { title: "Action" },
-                  ]}
-                >
-                  {rowMarkup}
-                </IndexTable>
-              ) : (
+              {tableLoading ? (
                 <div
                   style={{
                     display: "flex",
@@ -671,6 +672,19 @@ const Index = () => {
                     <Spinner />
                   </BlockStack>
                 </div>
+              ) : (
+                <IndexTable
+                  itemCount={data.length}
+                  selectable={false}
+                  headings={[
+                    { title: "Module" },
+                    { title: "Original Content" },
+                    { title: "Generated Content" },
+                    { title: "Action" },
+                  ]}
+                >
+                  {rowMarkup}
+                </IndexTable>
               )}
             </Box>
           </InlineStack>
