@@ -17,6 +17,7 @@ import {
   buildUnauthenticatedAppOnlyAdmin,
   replaceWebhookAdminIfPresent,
 } from "./server/shopify/shopifyAuthWrap";
+import { ensureJobRunner } from "./server/generateJob/runner.server";
 
 ensureRuntimeEnv();
 
@@ -79,3 +80,5 @@ export const unauthenticated = { ...shopify.unauthenticated, admin: unauthentica
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;
+
+ensureJobRunner();

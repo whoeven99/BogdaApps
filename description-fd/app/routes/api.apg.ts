@@ -16,7 +16,6 @@ import {
   getUserData,
   requestStop,
 } from "../server/generateJob/job.server";
-import { ensureJobRunner } from "../server/generateJob/runner.server";
 import { generateDescriptionCopy } from "../server/ai/generateDescription.server";
 import { QuotaError } from "../server/billing/quota.server";
 import { loadProductsByIds } from "../server/shopify/productsByIds.server";
@@ -54,7 +53,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
   await ensureAccount(shop);
-  ensureJobRunner();
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 

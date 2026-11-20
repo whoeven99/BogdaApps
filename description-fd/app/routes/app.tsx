@@ -18,14 +18,12 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import { useEffect } from "react";
 import { ensureAccount } from "app/server/billing/ensureAccount.server";
-import { ensureJobRunner } from "app/server/generateJob/runner.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   await ensureAccount(session.shop);
-  ensureJobRunner();
 
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",

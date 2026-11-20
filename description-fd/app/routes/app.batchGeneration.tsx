@@ -28,7 +28,6 @@ import {
   GetProductsByListId,
 } from "app/api/JavaServer";
 import { enqueueBatchJob } from "app/server/generateJob/job.server";
-import { ensureJobRunner } from "app/server/generateJob/runner.server";
 import { ensureAccount } from "app/server/billing/ensureAccount.server";
 import CardSkeleton from "app/components/cardSkeleton";
 import DetailProgress from "app/components/detailProgress";
@@ -64,7 +63,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     await ensureAccount(shop);
-    ensureJobRunner();
     const result = await enqueueBatchJob({
       shop: shop as string,
       language: batchGenerationData.language,
