@@ -1,4 +1,4 @@
-import { SHOPIFY_ADMIN_API_VERSION } from "../../lib/shopifyAdminApiVersion";
+import { buildShopifyAdminGraphqlUrl } from "../../lib/shopifyAdminApiVersion";
 import { createShopAppTokenProvider } from "./shopAppToken.server";
 import { isShopInstalled } from "./offlineSessionToken.server";
 
@@ -8,9 +8,6 @@ export type ShopAdminGraphql = (
   query: string,
   options?: { variables?: GraphqlVariables },
 ) => Promise<Response>;
-
-const MEMORY_TTL_MS = 50 * 60 * 1000;
-const memory = new Map<string, { token: string; expiresAt: number }>();
 
 function env(name: string): string {
   return String(process.env[name] ?? "").trim();
@@ -22,7 +19,14 @@ function shopifyApiKey(): string {
 
 let provider: ReturnType<typeof createShopAppTokenProvider> | null = null;
 
+export function hasAppOnlyCredentials(): boolean {
+  return Boolean(shopifyApiKey() && env("SHOPIFY_APP_ONLY_KEY_ID") && env("SHOPIFY_APP_ONLY_PRIVATE_KEY"));
+}
+
 function getProvider() {
+  if (!hasAppOnlyCredentials()) {
+    throw new Error("SHOPIFY_APP_ONLY_KEY_ID / SHOPIFY_APP_ONLY_PRIVATE_KEY are not set");
+  }
   if (!provider) {
     provider = createShopAppTokenProvider({
       clientId: shopifyApiKey(),
@@ -39,17 +43,13 @@ function getProvider() {
   return provider;
 }
 
-function graphqlUrl(shop: string): string {
-  return `https://${shop}/admin/api/${SHOPIFY_ADMIN_API_VERSION}/graphql.json`;
-}
-
 async function fetchGraphql(
   shop: string,
   accessToken: string,
   query: string,
   variables?: GraphqlVariables,
 ): Promise<Response> {
-  return fetch(graphqlUrl(shop), {
+  return fetch(buildShopifyAdminGraphqlUrl(shop), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -60,32 +60,16 @@ async function fetchGraphql(
 }
 
 async function resolveToken(shop: string): Promise<string> {
-  const now = Date.now();
-  const cached = memory.get(shop);
-  if (cached && cached.expiresAt - 60_000 > now) {
-    return cached.token;
-  }
   const issued = await getProvider().getToken(shop);
-  memory.set(shop, {
-    token: issued.accessToken,
-    expiresAt: Math.min(issued.expiresAt, now + MEMORY_TTL_MS),
-  });
   return issued.accessToken;
 }
 
-export function hasAppOnlyCredentials(): boolean {
-  return Boolean(shopifyApiKey() && env("SHOPIFY_APP_ONLY_KEY_ID") && env("SHOPIFY_APP_ONLY_PRIVATE_KEY"));
-}
-
 export async function getShopAdminGraphql(shop: string): Promise<ShopAdminGraphql> {
-  if (!hasAppOnlyCredentials()) {
-    throw new Error("SHOPIFY_APP_ONLY_KEY_ID / SHOPIFY_APP_ONLY_PRIVATE_KEY are not set");
-  }
+  getProvider();
   return async (query, options) => {
     let token = await resolveToken(shop);
     let response = await fetchGraphql(shop, token, query, options?.variables);
     if (response.status === 401) {
-      memory.delete(shop);
       getProvider().invalidate(shop);
       token = await resolveToken(shop);
       response = await fetchGraphql(shop, token, query, options?.variables);

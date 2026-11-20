@@ -10,15 +10,20 @@ import {
   ensureRuntimeEnv,
   normalizeEnvValue,
 } from "./config/runtimeEnv.server";
-import { withAppOnlyAdmin } from "./server/shopify/appOnlyAdmin.server";
-import { hasAppOnlyCredentials } from "./server/shopify/shopAdminToken.server";
+import { SHOPIFY_ADMIN_API_VERSION } from "./lib/shopifyAdminApiVersion";
+import { getShopAdminGraphql } from "./server/shopify/shopAdminToken.server";
+import { isShopInstalled } from "./server/shopify/offlineSessionToken.server";
+import {
+  buildUnauthenticatedAppOnlyAdmin,
+  replaceWebhookAdminIfPresent,
+} from "./server/shopify/shopifyAuthWrap";
 
 ensureRuntimeEnv();
 
 const shopify = shopifyApp({
   apiKey: normalizeEnvValue(process.env.SHOPIFY_API_KEY),
   apiSecretKey: normalizeEnvValue(process.env.SHOPIFY_API_SECRET),
-  apiVersion: ApiVersion.January25,
+  apiVersion: SHOPIFY_ADMIN_API_VERSION as ApiVersion,
   scopes: normalizeEnvValue(process.env.SCOPES).split(",").filter(Boolean),
   appUrl: normalizeEnvValue(process.env.SHOPIFY_APP_URL),
   authPathPrefix: "/auth",
@@ -34,20 +39,43 @@ const shopify = shopifyApp({
 });
 
 export default shopify;
-export const apiVersion = ApiVersion.January25;
+export const apiVersion = SHOPIFY_ADMIN_API_VERSION as ApiVersion;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 
 const authenticateAdmin = (async (request: Request) => {
   const ctx = await shopify.authenticate.admin(request);
-  if (!hasAppOnlyCredentials()) {
-    console.warn("[app-only] credentials missing; using session GraphQL");
-    return ctx;
-  }
-  return withAppOnlyAdmin(ctx);
+  const graphql = await getShopAdminGraphql(ctx.session.shop);
+  return { ...ctx, admin: { ...ctx.admin, graphql } };
 }) as typeof shopify.authenticate.admin;
 
-export const authenticate = { ...shopify.authenticate, admin: authenticateAdmin };
-export const unauthenticated = shopify.unauthenticated;
+const authenticateWebhook = (async (request: Request) => {
+  const ctx = await shopify.authenticate.webhook(request);
+  return replaceWebhookAdminIfPresent(ctx, (shop) => ({
+    graphql: async (query: string, options?: { variables?: Record<string, unknown> }) => {
+      const graphql = await getShopAdminGraphql(shop);
+      return graphql(query, options);
+    },
+  }));
+}) as typeof shopify.authenticate.webhook;
+
+const unauthenticatedAdmin = (async (shop: string) =>
+  buildUnauthenticatedAppOnlyAdmin({
+    shop,
+    isInstalled: isShopInstalled,
+    createAdmin: (normalized) => ({
+      graphql: async (query: string, options?: { variables?: Record<string, unknown> }) => {
+        const graphql = await getShopAdminGraphql(normalized);
+        return graphql(query, options);
+      },
+    }),
+  })) as typeof shopify.unauthenticated.admin;
+
+export const authenticate = {
+  ...shopify.authenticate,
+  admin: authenticateAdmin,
+  webhook: authenticateWebhook,
+};
+export const unauthenticated = { ...shopify.unauthenticated, admin: unauthenticatedAdmin };
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;

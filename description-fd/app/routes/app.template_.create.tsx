@@ -55,7 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     shop: session.shop,
-    server: process.env.SERVER_URL,
+    server: "",
   };
 };
 

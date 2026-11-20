@@ -1,4 +1,13 @@
 import { htmlToPlainText } from "../../lib/generatedDescriptionJson.server";
+import prisma from "../../db.server";
+import {
+  billableCredits,
+  deductShopCredits,
+  QUOTA_INSUFFICIENT,
+  QuotaError,
+  remainingCredits,
+} from "../billing/quota.server";
+import { loadTemplatePrompt, type TemplateSource } from "../template/template.server";
 import { generateDescriptionJson } from "./descriptionAiClient.server";
 
 type AdminGraphql = (
@@ -7,6 +16,7 @@ type AdminGraphql = (
 ) => Promise<Response>;
 
 export type GenerateDescriptionInput = {
+  shop: string;
   admin: { graphql: AdminGraphql };
   resourceId: string;
   pageType: string;
@@ -19,6 +29,8 @@ export type GenerateDescriptionInput = {
   brandSlogan?: string;
   additionalInformation?: string;
   model: string;
+  templateId?: number;
+  templateSource?: TemplateSource;
 };
 
 type ResourceContext = {
@@ -104,6 +116,11 @@ async function loadCollectionContext(admin: { graphql: AdminGraphql }, id: strin
 }
 
 export async function generateDescriptionCopy(input: GenerateDescriptionInput) {
+  const account = await prisma.account.findUnique({ where: { shop: input.shop } });
+  if (!account || remainingCredits(account) < 1) {
+    throw new QuotaError("Insufficient credits", QUOTA_INSUFFICIENT);
+  }
+
   const includeTitle = writesTitle(input.pageType, input.contentType);
   const context =
     input.pageType === "collection"
@@ -115,6 +132,11 @@ export async function generateDescriptionCopy(input: GenerateDescriptionInput) {
       ? "plain-text SEO meta description (about 120-160 characters, no HTML)"
       : "HTML body description for Shopify";
 
+  const templatePrompt =
+    input.templateId && input.templateSource
+      ? await loadTemplatePrompt(input.shop, input.templateId, input.templateSource)
+      : "";
+
   const system = [
     `You write Shopify ${input.pageType} copy.`,
     `Return JSON only with keys "title" and "description". No markdown.`,
@@ -125,6 +147,7 @@ export async function generateDescriptionCopy(input: GenerateDescriptionInput) {
     `Language: ${input.language || "English"}.`,
     `Tone: ${input.languageStyle || "formal"}.`,
     input.brandStyle ? `Brand style: ${input.brandStyle}.` : "",
+    templatePrompt ? `Follow this template structure:\n${templatePrompt}` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -143,6 +166,13 @@ export async function generateDescriptionCopy(input: GenerateDescriptionInput) {
     { role: "system", content: system },
     { role: "user", content: user },
   ]);
+
+  const amount = billableCredits(generated.promptTokens, generated.completionTokens);
+  await deductShopCredits({
+    shop: input.shop,
+    amount,
+    uniqueKey: `generate:${input.shop}:${input.resourceId}:${Date.now()}`,
+  });
 
   return {
     id: context.id,

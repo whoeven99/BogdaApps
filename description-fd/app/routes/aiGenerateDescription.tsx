@@ -1,9 +1,10 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { generateDescriptionCopy } from "../server/ai/generateDescription.server";
+import { QuotaError } from "../server/billing/quota.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const resourceId = String(formData.get("productId") || formData.get("id") || "");
   const pageType = String(formData.get("pageType") || "product");
@@ -20,6 +21,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const response = await generateDescriptionCopy({
+      shop: session.shop,
       admin,
       resourceId,
       pageType,
@@ -32,6 +34,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       brandSlogan: String(formData.get("brandSlogan") || ""),
       additionalInformation: String(formData.get("additionalInformation") || ""),
       model: String(formData.get("model") || "ChatGPT"),
+      templateId: Number(formData.get("templateId") || 0) || undefined,
+      templateSource:
+        formData.get("templateType") == null
+          ? undefined
+          : String(formData.get("templateType")) === "true" ||
+              String(formData.get("templateType")) === "user"
+            ? "user"
+            : "official",
     });
     return {
       success: true,
@@ -43,7 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.error("aiGenerateDescription error", error);
     return {
       success: false,
-      errorCode: "GENERATE_FAILED",
+      errorCode: error instanceof QuotaError ? error.code : "GENERATE_FAILED",
       errorMessage: error instanceof Error ? error.message : "Failed to generate description",
       response: null,
     };

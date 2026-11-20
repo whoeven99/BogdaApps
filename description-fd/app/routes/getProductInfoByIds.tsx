@@ -1,43 +1,27 @@
 import { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "app/shopify.server";
+import { loadProductsByIds } from "app/server/shopify/productsByIds.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const { shop } = session;
   const formData = await request.formData();
   const productIds = formData.get("productIds");
-  const productIdsArray = productIds?.toString()?.split(",");
-  const query = productIdsArray
-    ?.map((id) => `id:${id.split("gid://shopify/Product/")[1]}`)
-    .join(" OR ");
+  const productIdsArray = productIds
+    ?.toString()
+    ?.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean) ?? [];
   try {
-    const response = await admin.graphql(
-      `#graphql
-          query products($query: String!) {
-            products(query: $query, first: 20) {
-                nodes {
-                    id
-                    title
-                }
-            }
-          }`,
-      {
-        variables: {
-          query: query,
-        },
-      },
-    );
-    const responseJson = await response.json();
+    const nodes = await loadProductsByIds(admin, productIdsArray);
     return {
       success: true,
       errorCode: null,
       errorMessage: null,
-      response: Array.isArray(responseJson?.data?.products?.nodes)
-        ? responseJson.data.products.nodes
-        : [],
+      response: nodes,
     };
-  } catch (error: any) {
-    console.error(`${shop} getProductInfoById error`);
+  } catch (error: unknown) {
+    console.error(`${shop} getProductInfoByIds error`);
     console.error("error: ", error);
     return {
       success: false,

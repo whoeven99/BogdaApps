@@ -23,11 +23,13 @@ import {
   TextField,
 } from "@shopify/polaris";
 import {
-  BatchGenerateDescription,
   GetTemplateByShopName,
   GetUserData,
   GetProductsByListId,
 } from "app/api/JavaServer";
+import { enqueueBatchJob } from "app/server/generateJob/job.server";
+import { ensureJobRunner } from "app/server/generateJob/runner.server";
+import { ensureAccount } from "app/server/billing/ensureAccount.server";
 import CardSkeleton from "app/components/cardSkeleton";
 import DetailProgress from "app/components/detailProgress";
 import { authenticate } from "app/shopify.server";
@@ -39,13 +41,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     return {
       shop: session?.shop,
-      server: process.env.SERVER_URL,
+      server: "",
     };
   } catch (error) {
     console.error(error);
     return {
       shop: "",
-      server: process.env.SERVER_URL,
+      server: "",
     };
   }
 };
@@ -61,7 +63,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   console.log(`${shop} batchGenerationData`, batchGenerationData);
 
   try {
-    const response = await BatchGenerateDescription({
+    await ensureAccount(shop);
+    ensureJobRunner();
+    const result = await enqueueBatchJob({
       shop: shop as string,
       language: batchGenerationData.language,
       productIds: batchGenerationData.productIds,
@@ -70,14 +74,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       languageStyle: batchGenerationData.languageStyle,
       brandStyle: batchGenerationData.brandStyle,
       templateId: Number(batchGenerationData.template),
-      templateType: batchGenerationData.templateType,
+      templateSource: batchGenerationData.templateType ? "user" : "official",
       model: batchGenerationData.model,
       seoKeywords: batchGenerationData.seoKeywords,
       brandWord: batchGenerationData.brandWord,
       brandSlogan: batchGenerationData.brandSlogan,
     });
-
-    return response;
+    const productIds = batchGenerationData.productIds || [];
+    if (!result.ok) {
+      return {
+        success: false,
+        error: null,
+        errorMsg: null,
+        response: {
+          allCount: productIds.length,
+          unfinishedCount: productIds.length,
+          taskModel: `product ${batchGenerationData.contentType}`,
+          taskStatus: 4,
+        },
+      };
+    }
+    return {
+      success: true,
+      error: null,
+      errorMsg: null,
+      response: {
+        allCount: productIds.length,
+        unfinishedCount: productIds.length,
+        taskModel: `product ${batchGenerationData.contentType}`,
+        taskStatus: 2,
+      },
+    };
   } catch (error) {
     console.error(error);
     // return { error: "Failed to generate description" };

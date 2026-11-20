@@ -1,73 +1,55 @@
-import axios from "axios";
+async function sessionHeaders(): Promise<HeadersInit> {
+  const shopify = (globalThis as { shopify?: { idToken?: () => Promise<string> } }).shopify;
+  const token = await shopify?.idToken?.().catch(() => "");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function postApg(intent: string, fields: Record<string, string | number | boolean | null | undefined> = {}) {
+  const form = new FormData();
+  form.set("intent", intent);
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) continue;
+    form.set(key, String(value));
+  }
+  const response = await fetch("/api/apg", {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+    headers: await sessionHeaders(),
+  });
+  return response.json();
+}
+
+async function getApg(intent: string) {
+  const response = await fetch(`/api/apg?intent=${encodeURIComponent(intent)}`, {
+    credentials: "same-origin",
+    headers: await sessionHeaders(),
+  });
+  return response.json();
+}
 
 export const GetProductsByListId = async ({
-  server,
-  shop,
   listId,
 }: {
-  server: string;
-  shop: string;
+  server?: string;
+  shop?: string;
   listId: string[];
 }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/product/getProductsByListId?shopName=${shop}`,
-      listId,
-    );
-    return response.data;
+    return await postApg("productsByIds", { productIds: listId.join(",") });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error getProductsByListId",
-    };
+    return { success: false, message: "Error getProductsByListId" };
   }
 };
 
-export const SaveOrUpdateProduct = async ({
-  server,
-  shop,
-  productId,
-}: {
-  server: string;
-  shop: string;
-  productId: string;
-}) => {
-  try {
-    const response = await axios.post(
-      `${server}/apg/product/saveOrUpdateProduct?shopName=${shop}`,
-      {
-        productId: productId,
-      },
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    return {
-      success: false,
-      message: "Error saveOrUpdateProduct",
-    };
-  }
+export const SaveOrUpdateProduct = async () => {
+  return { success: true, response: null };
 };
 
-export const GenerateDescription = async ({
-  server,
-  shop,
-  pageType,
-  contentType,
-  productId,
-  languageStyle,
-  brandStyle,
-  templateId,
-  templateType,
-  model,
-  language,
-  seoKeywords,
-  brandWord,
-  brandSlogan,
-}: {
-  server: string;
-  shop: string;
+export const GenerateDescription = async (input: {
+  server?: string;
+  shop?: string;
   pageType: string;
   contentType: string;
   productId: string;
@@ -82,81 +64,29 @@ export const GenerateDescription = async ({
   brandSlogan?: string;
 }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/descriptionGeneration/generateDescription?shopName=${shop}`,
-      {
-        pageType: pageType,
-        contentType: contentType,
-        productId: productId,
-        textTone: languageStyle,
-        brandTone: brandStyle,
-        templateId: templateId,
-        templateType: templateType,
-        model: model,
-        language: language,
-        seoKeywords: seoKeywords,
-        brandWord: brandWord,
-        brandSlogan: brandSlogan,
-      },
-    );
-    if (response.data?.success) {
-      return {
-        ...response.data,
-        response: {
-          wordCount: response.data.response.wordCount,
-          wordGap: response.data.response.wordGap || 25,
-          keywordStrong: response.data.response.keywordStrong,
-          keywordPercent: response.data.response.keywordPercent,
-          keywordCompare: response.data.response.keywordCompare,
-          textPercent: response.data.response.textPercent,
-          ctrIncrease: response.data.response.ctrIncrease,
-          description: response.data.response.generateText.replace(
-            /\n/g,
-            "<br/>",
-          ),
-          pageType: pageType,
-          contentType: contentType,
-        },
-      };
-    }
-    // return{
-    //   success: true,
-    //   error: null,
-    //   errorMsg: null,
-    //   response: {
-    //     description: "test",
-    //     pageType: pageType,
-    //     contentType: contentType,
-    //   },
-    // };
-    return response.data;
+    return await postApg("generate", {
+      pageType: input.pageType,
+      contentType: input.contentType,
+      productId: input.productId,
+      languageStyle: input.languageStyle,
+      brandStyle: input.brandStyle,
+      templateId: input.templateId,
+      templateType: input.templateType,
+      model: input.model,
+      language: input.language,
+      seoKeywords: input.seoKeywords,
+      brandWord: input.brandWord,
+      brandSlogan: input.brandSlogan,
+    });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error GenerateDescription",
-    };
+    return { success: false, message: "Error GenerateDescription" };
   }
 };
 
-export const BatchGenerateDescription = async ({
-  // server,
-  shop,
-  productIds,
-  pageType,
-  contentType,
-  languageStyle,
-  brandStyle,
-  templateId,
-  templateType,
-  model,
-  language,
-  seoKeywords,
-  brandWord,
-  brandSlogan,
-}: {
-  // server: string;
-  shop: string;
+export const BatchGenerateDescription = async (input: {
+  server?: string;
+  shop?: string;
   productIds: string[];
   pageType: string;
   contentType: string;
@@ -171,49 +101,20 @@ export const BatchGenerateDescription = async ({
   brandSlogan?: string;
 }) => {
   try {
-    const response = await axios.put(
-      `${process.env.SERVER_URL}/apg/userGeneratedTask/batchGenerateDescription?shopName=${shop}`,
-      {
-        productIds: productIds,
-        textTone: languageStyle,
-        brandTone: brandStyle,
-        templateId: templateId,
-        templateType: templateType,
-        model: model,
-        language: language,
-        seoKeywords: seoKeywords,
-        brandWord: brandWord,
-        brandSlogan: brandSlogan,
-        pageType: pageType,
-        contentType: contentType,
-      },
-    );
-    if (response.data?.success) {
-      return {
-        success: true,
-        error: null,
-        errorMsg: null,
-        response: {
-          allCount: productIds.length,
-          unfinishedCount: productIds.length,
-          taskModel: `${pageType} ${contentType}`,
-          taskStatus: 2,
-        },
-      };
-    } else {
-      return {
-        success: false,
-        error: null,
-        errorMsg: null,
-        response: {
-          allCount: productIds.length,
-          unfinishedCount: productIds.length,
-          taskModel: `${pageType} ${contentType}`,
-          taskStatus: 4,
-        },
-      };
-    }
-    return response.data;
+    return await postApg("enqueue", {
+      productIds: JSON.stringify(input.productIds),
+      pageType: input.pageType,
+      contentType: input.contentType,
+      languageStyle: input.languageStyle,
+      brandStyle: input.brandStyle,
+      templateId: input.templateId,
+      templateType: input.templateType,
+      model: input.model,
+      language: input.language,
+      seoKeywords: input.seoKeywords,
+      brandWord: input.brandWord,
+      brandSlogan: input.brandSlogan,
+    });
   } catch (error) {
     console.log(error);
     return {
@@ -221,9 +122,9 @@ export const BatchGenerateDescription = async ({
       error: null,
       errorMsg: null,
       response: {
-        allCount: productIds.length,
-        unfinishedCount: productIds.length,
-        taskModel: `${pageType} ${contentType}`,
+        allCount: input.productIds.length,
+        unfinishedCount: input.productIds.length,
+        taskModel: `${input.pageType} ${input.contentType}`,
         taskStatus: 4,
       },
     };
@@ -231,62 +132,20 @@ export const BatchGenerateDescription = async ({
 };
 
 export const GetTemplateByShopName = async ({
-  server,
-  shop,
   pageType,
   contentType,
 }: {
-  server: string;
-  shop: string;
+  server?: string;
+  shop?: string;
   pageType: string | null;
   contentType: string;
 }) => {
   try {
-    let response: any = [];
-    const res = await axios.post(
-      `${server}/apg/template/getTemplateByShopName?shopName=${shop}`,
-      // {
-      //   templateModel: pageType,
-      //   templateSubtype: contentType,
-      // },
-    );
-
-    if (res.data.success) {
-      const rows = Array.isArray(res.data.response) ? res.data.response : [];
-      if (pageType === null && contentType === "description") {
-        response = rows.filter(
-          (item: any) => item.templateSubtype === "description",
-        );
-      } else if (pageType === null && contentType === "seo") {
-        response = rows.filter(
-          (item: any) => item.templateSubtype === "seo",
-        );
-      } else if (pageType === "product" && contentType === "description") {
-        response = rows.filter(
-          (item: any) =>
-            item.templateModel === "product" &&
-            item.templateSubtype === "description",
-        );
-      } else if (pageType === "collection" && contentType === "description") {
-        response = rows.filter(
-          (item: any) =>
-            item.templateModel === "collection" &&
-            item.templateSubtype === "description",
-        );
-      } else if (pageType === "product" && contentType === "seo") {
-        response = rows.filter(
-          (item: any) =>
-            item.templateModel === "product" && item.templateSubtype === "seo",
-        );
-      } else if (pageType === "collection" && contentType === "seo") {
-        response = rows.filter(
-          (item: any) =>
-            item.templateModel === "collection" &&
-            item.templateSubtype === "seo",
-        );
-      }
-    }
-    return Array.isArray(response) ? response : [];
+    const rows = await postApg("listPicked", {
+      pageType,
+      contentType,
+    });
+    return Array.isArray(rows) ? rows : [];
   } catch (error) {
     console.log(error);
     return [];
@@ -294,150 +153,86 @@ export const GetTemplateByShopName = async ({
 };
 
 export const GetAllTemplateData = async ({
-  server,
-  shop,
   pageType,
   contentType,
   templateType,
   templateClass,
 }: {
-  server: string;
-  shop: string;
+  server?: string;
+  shop?: string;
   pageType: string | null;
   contentType: string;
   templateType: string | null;
   templateClass: boolean;
 }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/template/getAllTemplateData?shopName=${shop}`,
-      {
-        templateModel: pageType,
-        templateSubtype: contentType,
-        templateType: templateType,
-        templateClass: templateClass,
-      },
-    );
-    return response.data;
+    return await postApg("listCatalog", {
+      pageType,
+      contentType,
+      templateType,
+      templateClass,
+    });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error GenerateDescription",
-    };
+    return { success: false, message: "Error GenerateDescription" };
   }
 };
 
 export const AddOfficialOrUserTemplate = async ({
-  server,
-  shop,
   templateId,
   templateType,
 }: {
-  server: string;
-  shop: string;
+  server?: string;
+  shop?: string;
   templateId: number;
   templateType: boolean;
 }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/template/addOfficialOrUserTemplate?shopName=${shop}`,
-      {
-        templateId: templateId,
-        templateType: templateType,
-      },
-    );
-    return response.data;
+    return await postApg("addPick", { templateId, templateType });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error AddOfficialTemplate",
-    };
+    return { success: false, message: "Error AddOfficialTemplate" };
   }
 };
 
 export const DeleteUserTemplate = async ({
-  server,
-  shop,
   id,
   templateClass,
 }: {
-  server: string;
-  shop: string;
+  server?: string;
+  shop?: string;
   id: number;
   templateClass: boolean;
 }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/template/deleteUserTemplate?shopName=${shop}`,
-      {
-        id: id,
-        templateClass: templateClass,
-      },
-    );
-    return response.data;
+    return await postApg("deleteTemplate", { id, templateClass });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error DeleteUserTemplate",
-    };
+    return { success: false, message: "Error DeleteUserTemplate" };
   }
 };
 
-export const GetUserData = async ({
-  server,
-  shop,
-}: {
-  server: string;
-  shop: string;
-}) => {
+export const GetUserData = async (_args?: { server?: string; shop?: string }) => {
   try {
-    const response = await axios.get(
-      `${server}/apg/userGeneratedTask/getUserData?shopName=${shop}`,
-    );
-    return response.data;
+    return await postApg("progress");
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error GetUserData",
-    };
+    return { success: false, message: "Error GetUserData" };
   }
 };
 
-export const StopBatchGenerateDescription = async ({
-  shop,
-}: {
-  shop: string;
-}) => {
+export const StopBatchGenerateDescription = async (_args?: { shop?: string }) => {
   try {
-    const response = await axios.put(
-      `${process.env.SERVER_URL}/apg/userGeneratedTask/stopBatchGenerateDescription?shopName=${shop}`,
-    );
-    return response.data;
+    return await postApg("stop");
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error StopBatchGenerateDescription",
-    };
+    return { success: false, message: "Error StopBatchGenerateDescription" };
   }
 };
 
-export const CreateUserTemplate = async ({
-  server,
-  shop,
-  templateData,
-  templateDescription,
-  templateTitle,
-  templateType = "",
-  templateModel,
-  templateSubtype,
-}: {
-  server: string;
-  shop: string;
+export const CreateUserTemplate = async (input: {
+  server?: string;
+  shop?: string;
   templateData: string;
   templateDescription: string;
   templateTitle: string;
@@ -446,150 +241,44 @@ export const CreateUserTemplate = async ({
   templateSubtype: string;
 }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/template/createUserTemplate?shopName=${shop}`,
-      {
-        templateData: templateData,
-        templateDescription: templateDescription,
-        templateTitle: templateTitle,
-        templateType: templateType,
-        templateModel: templateModel,
-        templateSubtype: templateSubtype,
-      },
-    );
-    return response.data;
+    return await postApg("createTemplate", {
+      templateData: input.templateData,
+      templateDescription: input.templateDescription,
+      templateTitle: input.templateTitle,
+      templateType: input.templateType,
+      templateModel: input.templateModel,
+      templateSubtype: input.templateSubtype,
+    });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error CreateUserTemplate",
-    };
+    return { success: false, message: "Error CreateUserTemplate" };
   }
 };
 
 export const PreviewExampleDataByTemplateId = async ({
-  server,
-  shop,
   templateId,
 }: {
-  server: string;
-  shop: string;
+  server?: string;
+  shop?: string;
   templateId: number;
 }) => {
   try {
-    const response = await axios.get(
-      `${server}/apg/template/previewExampleDataByTemplateId?shopName=${shop}&templateId=${templateId}`,
-    );
-    return response.data;
+    return await postApg("preview", { templateId });
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error PreviewExampleDataByTemplateId",
-    };
+    return { success: false, message: "Error PreviewExampleDataByTemplateId" };
   }
 };
 
-export const GetUserCounter = async ({
-  server,
-  shop,
-}: {
-  server: string;
-  shop: string;
-}) => {
+export const GetUserCounter = async (_args?: { server?: string; shop?: string }) => {
   try {
-    const response = await axios.post(
-      `${server}/apg/userCounter/getUserCounter?shopName=${shop}`,
-    );
-    return response.data;
+    return await getApg("counter");
   } catch (error) {
     console.log(error);
-    return {
-      success: false,
-      message: "Error GetUserCounter",
-    };
+    return { success: false, message: "Error GetUserCounter" };
   }
 };
 
-export const InsertOrUpdateOrder = async ({
-  id,
-  shop,
-  amount,
-  name,
-  createdAt,
-  status,
-  confirmationUrl,
-}: {
-  id: string;
-  shop: string;
-  amount: number;
-  name: string;
-  createdAt: string;
-  status: string;
-  confirmationUrl: string;
-}) => {
-  try {
-    const response = await axios.post(
-      `${process.env.SERVER_URL}/apg/orders/insertOrUpdateOrder?shopName=${shop}`,
-      {
-        id,
-        amount: amount,
-        name: name,
-        createdAt: createdAt,
-        status: status,
-        confirmationUrl: confirmationUrl,
-      },
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    return {
-      success: false,
-      message: "Error GetUserCounter",
-    };
-  }
-};
-
-export const UpdateUserToken = async ({
-  shop,
-  token,
-}: {
-  shop: string;
-  token: number;
-}) => {
-  try {
-    const response = await axios.put(
-      `${process.env.SERVER_URL}/apg/userCounter/updateUserToken?shopName=${shop}&token=${token}`,
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    return {
-      success: false,
-      message: "Error UpdateUserToken",
-    };
-  }
-};
-
-export const SendAPGPurchaseEmail = async ({
-  shop,
-  token,
-  amount,
-}: {
-  shop: string;
-  token: number;
-  amount: number;
-}) => {
-  try {
-    const response = await axios.post(
-      `${process.env.SERVER_URL}/apg/userCounter/sendAPGPurchaseEmail?shopName=${shop}&token=${token}&amount=${amount}`,
-    );
-    return response.data;
-  } catch (error) {
-    console.log(error);
-    return {
-      success: false,
-      message: "Error SendAPGPurchaseEmail",
-    };
-  }
-};
+export const InsertOrUpdateOrder = async () => ({ success: true });
+export const UpdateUserToken = async () => ({ success: true });
+export const SendAPGPurchaseEmail = async () => ({ success: true });

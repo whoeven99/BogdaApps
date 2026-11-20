@@ -1,15 +1,19 @@
 /**
  * Apply prisma/migrations/*.sql to Turso. Used by docker-start.
- * prisma migrate deploy only hits file:dev.sqlite and never creates Turso tables.
+ * Local: node scripts/turso-migrate.mjs
+ * Prod write: node scripts/turso-migrate.mjs --env=.env.prod --confirm-prod
+ * Render 容器启动不要求 --confirm-prod。
  */
 import { createClient } from "@libsql/client";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { loadTursoEnv } from "./lib/loadTursoEnv.mjs";
+import {
+  REPO_ROOT,
+  assertProdWriteAllowed,
+  loadTursoEnv,
+} from "./lib/loadTursoEnv.mjs";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { url, authToken } = loadTursoEnv();
+const { url, authToken, overlay, argv } = loadTursoEnv();
 const onRender = Boolean(process.env.RENDER) || process.env.NODE_ENV === "production";
 
 if (!url.startsWith("libsql://") || !authToken) {
@@ -19,6 +23,13 @@ if (!url.startsWith("libsql://") || !authToken) {
   }
   console.info("[Turso] migrate skip (no credentials; local sqlite)");
   process.exit(0);
+}
+
+try {
+  assertProdWriteAllowed(argv, overlay, url);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
 }
 
 const client = createClient({ url, authToken });

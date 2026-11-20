@@ -49,13 +49,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     return {
       shop: session?.shop,
-      server: process.env.SERVER_URL,
+      server: "",
     };
   } catch (error) {
     console.error(error);
     return {
       shop: "",
-      server: process.env.SERVER_URL,
+      server: "",
     };
   }
 };

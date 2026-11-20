@@ -16,15 +16,16 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
-import axios from "axios";
 import { useEffect } from "react";
-import { useDispatch } from "react-redux";
-import { setUserConfigLanguage } from "app/store/modules/userConfig";
+import { ensureAccount } from "app/server/billing/ensureAccount.server";
+import { ensureJobRunner } from "app/server/generateJob/runner.server";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  await ensureAccount(session.shop);
+  ensureJobRunner();
 
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
@@ -33,34 +34,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
-  const { session, admin } = adminAuthResult;
-  const shopName = session?.shop;
+  const { session } = adminAuthResult;
   try {
-    const response = await admin.graphql(
-      `#graphql
-      query {
-        shop {
-          shopOwnerName
-          email
-        }
-      }`,
-    );
-
-    const data = await response.json();
-
-    const graphqlData = data.data.shop;
-
-    await axios.post(
-      `${process.env.SERVER_URL}/apg/users/insertOrUpdateApgUser?shopName=${shopName}`,
-      {
-        shopName: shopName,
-        accessToken: session?.accessToken,
-        email: graphqlData.email,
-        firstName: graphqlData.shopOwnerName.split(" ")[0],
-        lastName: graphqlData.shopOwnerName.split(" ")[1],
-      },
-    );
-
+    await ensureAccount(session.shop);
     return {
       success: true,
       errorCode: 0,

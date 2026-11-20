@@ -1,0 +1,135 @@
+import prisma from "../../db.server";
+import { QuotaError } from "../billing/quota.server";
+import { generateDescriptionCopy } from "../ai/generateDescription.server";
+import { getShopAdminGraphql } from "../shopify/shopAdminToken.server";
+import type { TemplateSource } from "../template/template.server";
+
+const STALE_MS = 10 * 60 * 1000;
+let started = false;
+let ticking = false;
+
+export function ensureJobRunner() {
+  if (started) return;
+  started = true;
+  setInterval(() => {
+    void tick().catch((err) => console.error("[generate-job]", err));
+  }, 3000);
+}
+
+async function tick() {
+  if (ticking) return;
+  ticking = true;
+  try {
+    const staleBefore = new Date(Date.now() - STALE_MS);
+    await prisma.generateJob.updateMany({
+      where: { status: "RUNNING", updatedAt: { lt: staleBefore } },
+      data: { status: "QUEUED" },
+    });
+    const running = await prisma.generateJob.count({ where: { status: "RUNNING" } });
+    if (running > 0) return;
+    const job = await prisma.generateJob.findFirst({
+      where: { status: "QUEUED" },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!job) return;
+    await prisma.generateJob.update({
+      where: { id: job.id },
+      data: { status: "RUNNING", updatedAt: new Date() },
+    });
+    await runJob(job.id);
+  } finally {
+    ticking = false;
+  }
+}
+
+async function runJob(jobId: string) {
+  const job = await prisma.generateJob.findUnique({ where: { id: jobId } });
+  if (!job) return;
+  const graphql = await getShopAdminGraphql(job.shop);
+  const admin = { graphql };
+
+  while (true) {
+    const fresh = await prisma.generateJob.findUnique({ where: { id: jobId } });
+    if (!fresh) return;
+    if (fresh.stopRequested) {
+      await prisma.generateJob.update({
+        where: { id: jobId },
+        data: { status: "STOPPED", updatedAt: new Date() },
+      });
+      await prisma.generateJobItem.updateMany({
+        where: { jobId, status: "PENDING" },
+        data: { status: "SKIPPED" },
+      });
+      return;
+    }
+    const item = await prisma.generateJobItem.findFirst({
+      where: { jobId, status: "PENDING" },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!item) {
+      await prisma.generateJob.update({
+        where: { id: jobId },
+        data: { status: "COMPLETED", updatedAt: new Date() },
+      });
+      return;
+    }
+    await prisma.generateJobItem.update({
+      where: { id: item.id },
+      data: { status: "RUNNING", updatedAt: new Date() },
+    });
+    try {
+      const result = await generateDescriptionCopy({
+        shop: job.shop,
+        admin,
+        resourceId: item.resourceId,
+        pageType: job.pageType,
+        contentType: job.contentType,
+        languageStyle: job.languageStyle,
+        brandStyle: job.brandStyle,
+        language: job.language,
+        seoKeywords: job.seoKeywords,
+        brandWord: job.brandWord,
+        brandSlogan: job.brandSlogan,
+        model: job.model,
+        templateId: job.templateId,
+        templateSource: job.templateSource as TemplateSource,
+      });
+      await prisma.generateJobItem.update({
+        where: { id: item.id },
+        data: {
+          status: "DONE",
+          title: result.title,
+          generatedTitle: result.title,
+          generatedHtml: result.description,
+          error: null,
+          updatedAt: new Date(),
+        },
+      });
+      await prisma.generateJob.update({
+        where: { id: jobId },
+        data: { updatedAt: new Date() },
+      });
+    } catch (error) {
+      const quota = error instanceof QuotaError;
+      await prisma.generateJobItem.update({
+        where: { id: item.id },
+        data: {
+          status: quota ? "SKIPPED" : "FAILED",
+          error: error instanceof Error ? error.message : "generate failed",
+          updatedAt: new Date(),
+        },
+      });
+      if (quota) {
+        await prisma.generateJobItem.updateMany({
+          where: { jobId, status: "PENDING" },
+          data: { status: "SKIPPED" },
+        });
+        await prisma.generateJob.update({
+          where: { id: jobId },
+          data: { status: "FAILED", updatedAt: new Date() },
+        });
+        return;
+      }
+    }
+  }
+}
