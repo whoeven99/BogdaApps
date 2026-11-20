@@ -14,7 +14,7 @@
     "setup": "prisma generate && prisma migrate deploy",
     "turso:migrate": "node scripts/turso-migrate.mjs",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
-    "test": "npx --yes tsx --test app/lib/generatedDescriptionJson.server.test.ts app/server/shopify/shopifyAuthWrap.test.ts app/server/billing/quota.server.test.ts app/server/billing/subscription.server.test.ts app/server/billing/purchaseNotify.server.test.ts app/server/billing/cancelShopifySubscriptions.server.test.ts app/server/generateJob/job.server.test.ts app/server/generateJob/jobLock.server.test.ts app/server/feishu/feishuConfig.server.test.ts app/server/ai/descriptionAiClient.server.test.ts",
+    "test": "npx --yes tsx --test app/lib/generatedDescriptionJson.server.test.ts app/server/shopify/shopifyAuthWrap.test.ts app/server/billing/quota.server.test.ts app/server/billing/subscription.server.test.ts app/server/billing/purchaseNotify.server.test.ts app/server/billing/cancelShopifySubscriptions.server.test.ts app/server/billing/chargeGuard.test.ts app/server/generateJob/job.server.test.ts app/server/generateJob/jobLock.server.test.ts app/server/feishu/feishuConfig.server.test.ts app/server/ai/descriptionAiClient.server.test.ts",
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",

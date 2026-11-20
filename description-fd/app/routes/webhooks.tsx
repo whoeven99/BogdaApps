@@ -5,6 +5,7 @@ import { cancelShopifySubscriptionsBestEffort } from "../server/billing/cancelSh
 import { schedulePurchaseNotify } from "../server/billing/purchaseNotify.server";
 import { applySubscriptionWebhook, clearLocalSubscription } from "../server/billing/subscription.server";
 import { CREDIT_PACKS, grantPurchasedCredits } from "../server/billing/quota.server";
+import { allowPurchasedCreditGrant } from "../server/billing/chargeGuardApply.server";
 import { markShopJobsStopped } from "../server/generateJob/job.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -43,11 +44,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             admin_graphql_api_id?: string;
           };
           const pack = purchase?.name ? CREDIT_PACKS[purchase.name] : undefined;
-          if (purchase?.status === "ACTIVE" && pack && purchase.admin_graphql_api_id) {
+          const gid = purchase?.admin_graphql_api_id;
+          if (purchase?.status === "ACTIVE" && pack && gid) {
+            const allowed = await allowPurchasedCreditGrant({ shop, gid });
+            if (!allowed) {
+              return new Response(null, { status: 200 });
+            }
             const granted = await grantPurchasedCredits({
               shop,
               amount: pack.credits,
-              uniqueKey: purchase.admin_graphql_api_id,
+              uniqueKey: gid,
               metadata: JSON.stringify({ name: purchase.name, price: pack.price }),
             });
             if (granted) {

@@ -18,6 +18,8 @@ import { GetUserCounter } from "app/api/JavaServer";
 import { authenticate } from "app/shopify.server";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { useFetcher, useLoaderData } from "@remix-run/react";
+import { fetchShopContact } from "app/server/shop/fetchShopContact.server";
+import { shouldCreateTestCharge } from "app/server/billing/testBillingShop";
 
 const options = [
   {
@@ -98,6 +100,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const returnUrl = new URL(
       `https://admin.shopify.com/store/${shop?.split(".")[0]}/apps/${process.env.HANDLE}/app/pricing`,
     );
+    const contact = await fetchShopContact(shop);
+    const test = shouldCreateTestCharge(shop, [contact.email]);
 
     const response = await admin.graphql(
       `#graphql
@@ -122,11 +126,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             amount: price,
             currencyCode: "USD",
           },
-          test:
-            process.env.NODE_ENV === "development" ||
-            process.env.NODE_ENV === "test"
-              ? true
-              : false,
+          test,
         },
       },
     );
