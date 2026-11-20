@@ -64,4 +64,31 @@ test("prod grant denies non-allowlisted test charges", () => {
   });
   assert.equal(missing.action, "grant");
   assert.equal(missing.reason, "fields_missing");
+
+  const paid = decideChargeGrant({
+    env: "prod",
+    allowlisted: false,
+    test: false,
+  });
+  assert.equal(paid.action, "grant");
+  assert.equal(paid.reason, "ok");
+});
+
+test("BILLING_TEST_SHOPS and local NODE_ENV", () => {
+  assert.equal(
+    isProdTestBillingShop("extra.myshopify.com", [], {
+      BILLING_TEST_SHOPS: "extra.myshopify.com",
+    }),
+    true,
+  );
+  assert.equal(
+    shouldCreateTestCharge("merchant.myshopify.com", [], {
+      NODE_ENV: "development",
+    }),
+    true,
+  );
+  assert.equal(billingGuardEnv({ NODE_ENV: "development" }), "test");
+  assert.equal(billingGuardEnv({ NODE_ENV: "test" }), "test");
+  assert.equal(isShopifyDotComEmail("Dev@Shopify.com"), true);
+  assert.equal(isShopifyDotComEmail(""), false);
 });

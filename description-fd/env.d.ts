@@ -14,5 +14,7 @@ declare namespace NodeJS {
     FEISHU_WEBHOOK_URL_SUPPORT?: string;
     APG_TRIAL_INSTALL_CREDITS?: string;
     APG_TRIAL_INSTALL_DAYS?: string;
+    BILLING_TEST?: string;
+    BILLING_TEST_SHOPS?: string;
   }
 }
