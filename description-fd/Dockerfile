@@ -1,6 +1,8 @@
-FROM node:20-alpine3.17
+FROM node:20-slim
 
-RUN apk add --no-cache openssl
+RUN apt-get update -y \
+  && apt-get install -y openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 3000
 
