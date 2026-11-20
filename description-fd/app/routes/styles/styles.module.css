@@ -1,0 +1,155 @@
+.Ciwi_Analytics_Metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  height: 70px;
+}
+
+.Ciwi_Analytics_Metrics {
+  position: relative;
+}
+
+.Ciwi_Analytics_Metrics_LeftTop {
+  border-right: 1px solid #ebebeb;
+  border-bottom: 1px solid #ebebeb;
+}
+.Ciwi_Analytics_Metrics_LeftDown {
+  border-right: 1px solid #ebebeb;
+  border-top: 1px solid #ebebeb;
+}
+.Ciwi_Analytics_Metrics_RightTop {
+  border-left: 1px solid #ebebeb;
+  border-bottom: 1px solid #ebebeb;
+}
+.Ciwi_Analytics_Metrics_RightDown {
+  border-left: 1px solid #ebebeb;
+  border-top: 1px solid #ebebeb;
+}
+
+.Ciwi_Analytics_TimeSaved {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 50px 0;
+}
+
+.Ciwi_QuickGenerator_Result {
+  height: 100%;
+  border-radius: 16px;
+  padding: 16px 16px 80px;
+  background-color: var(--p-color-bg-surface);
+  border: 1px solid #e3e3e3;
+  color: currentColor;
+}
+
+.defaultStatus {
+  background-color: #f7f7f7;
+  color: currentColor;
+  border: 0;
+}
+
+.hasResult {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.isEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0;
+  background-color: #fff;
+}
+
+.Ciwi_QuickGenerator_Container {
+  height: 100%;
+}
+
+.Ciwi_QuickGenerator_Result_Empty {
+  padding-top: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.Ciwi_QuickGenerator_Result_Content {
+  position: relative;
+  height: 100%;
+}
+
+.Ciwi_QuickGenerator_Result_Content_Edit {
+  background-color: var(--p-color-bg-surface);
+  padding: 16px;
+  color: currentColor;
+}
+
+.Ciwi_QuickGenerator_Result_Markdown {
+  height: 100%;
+  overflow: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.Ciwi_QuickGenerator_Result_Editor {
+  padding-bottom: 70px;
+  height: 100%;
+}
+
+.Ciwi_QuickGenerator_Result_Feedback {
+  position: absolute;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #fff;
+  margin: -16px;
+  padding: 16px;
+  bottom: -64px;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 16px 16px;
+  gap: 16px;
+}
+
+.Edit_Button {
+  margin: 0;
+  bottom: 0;
+  justify-content: end;
+}
+
+.Ciwi_QuickGenerator_Report {
+  border-radius: 16px;
+  padding: 16px 16px;
+  background-color: var(--p-color-bg-surface);
+  border: 1px solid #e3e3e3;
+  color: currentColor;
+}
+
+.Ciwi_Pricing_Card {
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+}
+
+.Ciwi_Pricing_Card:hover {
+  border: 2px solid rgb(0, 127, 97);
+}
+
+.Ciwi_Pricing_Card_Selected {
+  border: 2px solid rgb(0, 127, 97);
+}
+
+.Ciwi_Original_Content_Cell {
+  width: 700px;
+  height: 700px;
+}
+
+.Ciwi_Generated_Content_Cell {
+  width: 700px;
+  height: 700px;
+}
