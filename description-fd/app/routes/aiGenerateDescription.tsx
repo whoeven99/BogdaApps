@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { generateDescriptionCopy } from "../server/ai/generateDescription.server";
 import { QuotaError } from "../server/billing/quota.server";
+import { DEFAULT_DESCRIPTION_AI_MODEL } from "../lib/descriptionAiModels";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -33,7 +34,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       brandWord: String(formData.get("brandWord") || ""),
       brandSlogan: String(formData.get("brandSlogan") || ""),
       additionalInformation: String(formData.get("additionalInformation") || ""),
-      model: String(formData.get("model") || "ChatGPT"),
+      model: String(formData.get("model") || DEFAULT_DESCRIPTION_AI_MODEL),
       templateId: Number(formData.get("templateId") || 0) || undefined,
       templateSource:
         formData.get("templateType") == null

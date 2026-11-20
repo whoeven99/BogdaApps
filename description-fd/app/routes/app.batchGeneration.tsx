@@ -32,6 +32,10 @@ import { ensureAccount } from "app/server/billing/ensureAccount.server";
 import CardSkeleton from "app/components/cardSkeleton";
 import DetailProgress from "app/components/detailProgress";
 import { authenticate } from "app/shopify.server";
+import {
+  DEFAULT_DESCRIPTION_AI_MODEL,
+  DESCRIPTION_AI_MODEL_OPTIONS,
+} from "app/lib/descriptionAiModels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -137,7 +141,7 @@ const Index = () => {
 
   const [brandStyle, setBrandStyle] = useState<string>("");
   const [languageStyle, setLanguageStyle] = useState<string>("formal");
-  const [model, setModel] = useState<string>("GPT-4.1 Mini");
+  const [model, setModel] = useState<string>(DEFAULT_DESCRIPTION_AI_MODEL);
   const [template, setTemplate] = useState<string>("");
   const [templates, setTemplates] = useState<any[]>([]);
   const [focusSeoKeywordInput, setFocusSeoKeywordInput] =
@@ -329,19 +333,7 @@ const Index = () => {
     [],
   );
 
-  const modelSelectionOptions = useMemo(
-    () => [
-      {
-        label: "ChatGPT 4.1",
-        value: "ChatGPT 4.1",
-      },
-      {
-        label: "DeepSeek R3",
-        value: "DeepSeek R3",
-      },
-    ],
-    [],
-  );
+  const modelSelectionOptions = DESCRIPTION_AI_MODEL_OPTIONS;
 
   const seoKeywordTagsMarkup = useMemo(() => {
     return seoKeywordTags.length > 0 ? (

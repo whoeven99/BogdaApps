@@ -40,6 +40,7 @@ import { LoaderFunctionArgs } from "@remix-run/node";
 import axios from "axios";
 import { authenticate } from "app/shopify.server";
 import { CreateUserTemplate, GenerateDescription } from "app/api/JavaServer";
+import { DEFAULT_DESCRIPTION_AI_MODEL } from "app/lib/descriptionAiModels";
 
 const originalData = {
   name: "",
@@ -277,7 +278,7 @@ const Index = () => {
       brandStyle: "",
       templateId: 1,
       templateType: true,
-      model: "gpt-4o-mini",
+      model: DEFAULT_DESCRIPTION_AI_MODEL,
       language: language,
       seoKeywords: "",
       brandWord: "",

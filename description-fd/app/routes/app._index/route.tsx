@@ -27,6 +27,10 @@ import {
 import { SearchIcon, MagicIcon, DeleteIcon } from "@shopify/polaris-icons";
 import styles from "../styles/styles.module.css";
 import { authenticate } from "app/shopify.server";
+import {
+  DEFAULT_DESCRIPTION_AI_MODEL,
+  DESCRIPTION_AI_MODEL_OPTIONS,
+} from "app/lib/descriptionAiModels";
 import { GetTemplateByShopName } from "app/api/JavaServer";
 import { Modal, TitleBar } from "@shopify/app-bridge-react";
 import Tiptap from "app/components/richTextInput/richTextInput";
@@ -105,7 +109,7 @@ const Index = () => {
   const [brandStyle, setBrandStyle] = useState<string>("");
   const [languageStyle, setLanguageStyle] = useState<string>("formal");
   const [template, setTemplate] = useState<string>("");
-  const [model, setModel] = useState<string>("GPT-4.1 Mini");
+  const [model, setModel] = useState<string>(DEFAULT_DESCRIPTION_AI_MODEL);
   const [focusSeoKeywordInput, setFocusSeoKeywordInput] =
     useState<boolean>(false);
   const [seoKeywords, setSeoKeywords] = useState<string>("");
@@ -377,19 +381,7 @@ const Index = () => {
     [],
   );
 
-  const modelSelectionOptions = useMemo(
-    () => [
-      {
-        label: "ChatGPT 4.1",
-        value: "ChatGPT 4.1",
-      },
-      {
-        label: "DeepSeek R3",
-        value: "DeepSeek R3",
-      },
-    ],
-    [],
-  );
+  const modelSelectionOptions = DESCRIPTION_AI_MODEL_OPTIONS;
 
   const seoKeywordTagsMarkup = useMemo(() => {
     return seoKeywordTags.length > 0 ? (

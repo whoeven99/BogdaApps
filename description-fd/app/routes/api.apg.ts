@@ -19,6 +19,7 @@ import {
 import { generateDescriptionCopy } from "../server/ai/generateDescription.server";
 import { QuotaError } from "../server/billing/quota.server";
 import { loadProductsByIds } from "../server/shopify/productsByIds.server";
+import { DEFAULT_DESCRIPTION_AI_MODEL } from "../lib/descriptionAiModels";
 
 function asSource(value: unknown): TemplateSource {
   if (value === true || value === "true" || value === "user") return "user";
@@ -121,7 +122,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       brandStyle: String(formData.get("brandStyle") || ""),
       templateId: Number(formData.get("templateId") || 0),
       templateSource: asSource(formData.get("templateType")),
-      model: String(formData.get("model") || "ChatGPT"),
+      model: String(formData.get("model") || DEFAULT_DESCRIPTION_AI_MODEL),
       language: String(formData.get("language") || "English"),
       seoKeywords: String(formData.get("seoKeywords") || ""),
       brandWord: String(formData.get("brandWord") || ""),
@@ -182,7 +183,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         brandWord: String(formData.get("brandWord") || ""),
         brandSlogan: String(formData.get("brandSlogan") || ""),
         additionalInformation: String(formData.get("additionalInformation") || ""),
-        model: String(formData.get("model") || "ChatGPT"),
+        model: String(formData.get("model") || DEFAULT_DESCRIPTION_AI_MODEL),
         templateId: Number(formData.get("templateId") || 0) || undefined,
         templateSource: formData.get("templateType") != null ? asSource(formData.get("templateType")) : undefined,
       });

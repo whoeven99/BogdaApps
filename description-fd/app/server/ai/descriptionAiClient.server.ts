@@ -1,11 +1,12 @@
+import {
+  isDeepSeekV4Model,
+  parseDeepSeekApiKeys,
+  resolveDeepSeekChatUrl,
+  resolveDescriptionAiModel,
+} from "../../lib/descriptionAiModels";
 import { parseGeneratedDescriptionJson, type GeneratedDescriptionJson } from "../../lib/generatedDescriptionJson.server";
 
 type ChatMessage = { role: "system" | "user"; content: string };
-
-type ResolvedModel = {
-  provider: "openai" | "deepseek";
-  model: string;
-};
 
 export type GeneratedDescriptionResult = GeneratedDescriptionJson & {
   promptTokens: number;
@@ -16,39 +17,41 @@ function env(name: string): string {
   return String(process.env[name] ?? "").trim();
 }
 
-export function resolveDescriptionModel(uiLabel: string): ResolvedModel {
-  const value = uiLabel.toLowerCase();
-  if (value.includes("deepseek")) {
-    return { provider: "deepseek", model: env("DEEPSEEK_MODEL") || "deepseek-chat" };
-  }
-  return { provider: "openai", model: env("OPENAI_MODEL") || "gpt-4o-mini" };
+export function resolveDescriptionModel(uiLabel: string): string {
+  return resolveDescriptionAiModel(uiLabel, env("DEEPSEEK_MODEL"));
 }
 
 function fallbackTokens(content: string): { promptTokens: number; completionTokens: number } {
   return { promptTokens: 0, completionTokens: Math.max(1, Math.ceil(content.length / 4)) };
 }
 
-async function chatCompletions(
-  url: string,
-  apiKey: string,
+async function callDeepSeek(
   model: string,
   messages: ChatMessage[],
 ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-  const response = await fetch(url, {
+  const apiKey = parseDeepSeekApiKeys(env("DEEPSEEK_API_KEYS"))[0];
+  if (!apiKey) throw new Error("DEEPSEEK_API_KEYS is not set");
+  const chatUrl = resolveDeepSeekChatUrl(env("DEEPSEEK_BASE_URL"));
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0.4,
+    messages,
+    response_format: { type: "json_object" },
+  };
+  if (isDeepSeekV4Model(model)) {
+    body.thinking = { type: "disabled" };
+  }
+  const response = await fetch(chatUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      temperature: 0.4,
-      messages,
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`LLM HTTP ${response.status}${body ? `: ${body.slice(0, 200)}` : ""}`);
+    const text = await response.text().catch(() => "");
+    throw new Error(`LLM HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`);
   }
   const json = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
@@ -63,50 +66,19 @@ async function chatCompletions(
   return { content, ...fallbackTokens(content) };
 }
 
-async function callOpenAi(model: string, messages: ChatMessage[]) {
-  const apiKey = env("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
-  return chatCompletions("https://api.openai.com/v1/chat/completions", apiKey, model, messages);
-}
-
-async function callDeepSeek(model: string, messages: ChatMessage[]) {
-  const apiKey = env("DEEPSEEK_API_KEY");
-  if (!apiKey) throw new Error("DEEPSEEK_API_KEY is not set");
-  const base = env("DEEPSEEK_API_BASE") || "https://api.deepseek.com";
-  return chatCompletions(`${base.replace(/\/$/, "")}/v1/chat/completions`, apiKey, model, messages);
-}
-
 export async function generateDescriptionJson(
   uiLabel: string,
   messages: ChatMessage[],
 ): Promise<GeneratedDescriptionResult> {
-  const resolved = resolveDescriptionModel(uiLabel);
-  const tryOrder: ResolvedModel[] =
-    resolved.provider === "openai"
-      ? [resolved, { provider: "deepseek", model: env("DEEPSEEK_MODEL") || "deepseek-chat" }]
-      : [resolved];
-
-  let lastError: unknown;
-  for (const item of tryOrder) {
-    const key = item.provider === "openai" ? env("OPENAI_API_KEY") : env("DEEPSEEK_API_KEY");
-    if (!key) continue;
-    try {
-      const raw =
-        item.provider === "openai"
-          ? await callOpenAi(item.model, messages)
-          : await callDeepSeek(item.model, messages);
-      const parsed = parseGeneratedDescriptionJson(raw.content);
-      if (parsed) {
-        return {
-          ...parsed,
-          promptTokens: raw.promptTokens,
-          completionTokens: raw.completionTokens,
-        };
-      }
-      lastError = new Error("LLM did not return JSON {title, description}");
-    } catch (error) {
-      lastError = error;
-    }
+  const model = resolveDescriptionModel(uiLabel);
+  const raw = await callDeepSeek(model, messages);
+  const parsed = parseGeneratedDescriptionJson(raw.content);
+  if (!parsed) {
+    throw new Error("LLM did not return JSON {title, description}");
   }
-  throw lastError instanceof Error ? lastError : new Error("No LLM credentials configured");
+  return {
+    ...parsed,
+    promptTokens: raw.promptTokens,
+    completionTokens: raw.completionTokens,
+  };
 }

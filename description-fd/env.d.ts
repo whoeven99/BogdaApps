@@ -16,5 +16,8 @@ declare namespace NodeJS {
     APG_TRIAL_INSTALL_DAYS?: string;
     BILLING_TEST?: string;
     BILLING_TEST_SHOPS?: string;
+    DEEPSEEK_API_KEYS?: string;
+    DEEPSEEK_BASE_URL?: string;
+    DEEPSEEK_MODEL?: string;
   }
 }
