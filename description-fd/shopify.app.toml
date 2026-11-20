@@ -1,0 +1,36 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+client_id = "b56a502400fe53e1f4cdfdb684929d2b"
+name = "Ciwi.ai:Product Description"
+handle = "ciwi-ai-ai-product"
+application_url = "https://16f36a2a97dc.ngrok.app"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "quickstart-0f992326.myshopify.com"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_locales,read_products,read_themes,write_products"
+
+[auth]
+redirect_urls = [
+  "https://16f36a2a97dc.ngrok.app/auth/callback",
+  "https://16f36a2a97dc.ngrok.app/auth/shopify/callback",
+  "https://16f36a2a97dc.ngrok.app/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2025-04"
+
+[[webhooks.subscriptions]]
+topics = ["app_purchases_one_time/update", "app_subscriptions/update", "app/uninstalled"]
+uri = "/webhooks"
+compliance_topics = [
+  "customers/data_request",
+  "customers/redact",
+  "shop/redact"
+]
+
+[pos]
+embedded = false

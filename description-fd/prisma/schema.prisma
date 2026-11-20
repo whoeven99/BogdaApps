@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model Account {
+  shop                  String    @id
+  subscriptionCredits   Int       @default(0)
+  purchasedCredits      Int       @default(0)
+  trialCredits          Int       @default(0)
+  trialCreditsExpiresAt DateTime?
+  trialInstallCredits   Int       @default(0)
+  trialInstallExpiresAt DateTime?
+  trialBonusCredits     Int       @default(0)
+  trialBonusExpiresAt   DateTime?
+  usedCredits           Int       @default(0)
+  deletedAt             DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  billingLogs           BillingLog[]
+  templates             UserTemplate[]
+  templatePicks         ShopTemplatePick[]
+  generateJobs          GenerateJob[]
+  appSubscription       AppSubscription?
+}
+
+model AppSubscription {
+  shop                  String    @id
+  shopifySubscriptionId String
+  status                String
+  planName              String    @default("")
+  creditsPerPeriod      Int       @default(0)
+  currentPeriodEnd      DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  account               Account   @relation(fields: [shop], references: [shop])
+}
+
+model BillingLog {
+  id        String   @id @default(cuid())
+  shop      String
+  kind      String
+  amount    Int      @default(0)
+  uniqueKey String
+  metadata  String?
+  createdAt DateTime @default(now())
+  account   Account  @relation(fields: [shop], references: [shop])
+
+  @@unique([shop, uniqueKey])
+  @@index([shop, createdAt])
+}
+
+model OfficialTemplate {
+  id                  Int     @id
+  templateData        String
+  templateTitle       String
+  templateType        String  @default("")
+  templateDescription String  @default("")
+  templateModel       String
+  templateSubtype     String
+  isPayment           Boolean @default(false)
+  exampleData         String  @default("")
+  usedTimes           Int     @default(0)
+}
+
+model UserTemplate {
+  id                  Int       @id @default(autoincrement())
+  shop                String
+  templateData        String
+  templateTitle       String
+  templateType        String    @default("")
+  templateDescription String    @default("")
+  templateModel       String
+  templateSubtype     String
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  account             Account   @relation(fields: [shop], references: [shop])
+}
+
+model ShopTemplatePick {
+  id         Int      @id @default(autoincrement())
+  shop       String
+  source     String
+  templateId Int
+  createdAt  DateTime @default(now())
+  account    Account  @relation(fields: [shop], references: [shop])
+
+  @@unique([shop, source, templateId])
+}
+
+model GenerateJob {
+  id             String   @id @default(cuid())
+  shop           String
+  status         String
+  pageType       String
+  contentType    String
+  languageStyle  String
+  brandStyle     String   @default("")
+  templateId     Int
+  templateSource String
+  model          String
+  language       String
+  seoKeywords    String   @default("")
+  brandWord      String   @default("")
+  brandSlogan    String   @default("")
+  stopRequested  Boolean  @default(false)
+  autoPublish    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  account        Account  @relation(fields: [shop], references: [shop])
+  items          GenerateJobItem[]
+
+  @@index([shop, status])
+}
+
+model GenerateJobItem {
+  id              String   @id @default(cuid())
+  jobId           String
+  shop            String
+  resourceId      String
+  status          String
+  title           String   @default("")
+  generatedHtml   String   @default("")
+  generatedTitle  String   @default("")
+  error           String?
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  job             GenerateJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, status])
+  @@index([shop, status])
+}

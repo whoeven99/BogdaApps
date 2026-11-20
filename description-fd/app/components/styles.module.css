@@ -1,0 +1,60 @@
+.Ciwi_template_card_content {
+  position: relative;
+}
+
+.Ciwi_template_card_content_markdown {
+  padding: 16px;
+  height: 216px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.Ciwi_template_card_content_name {
+  position: absolute;
+  bottom: -160px;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  border-radius: 0 0 8px 8px;
+  background-color: #f7f7f7;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: start;
+  max-height: 164px;
+  overflow: hidden;
+}
+
+.Ciwi_side_menu_item {
+  padding: 12px 24px;
+  cursor: pointer;
+  border-radius: 8px;
+  background-color: #f0f0f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.Ciwi_side_menu_item_text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.Ciwi_side_menu_item:hover {
+  background-color: rgb(224, 224, 224);
+}
+
+.Ciwi_side_menu_item_active {
+  background-color: rgb(224, 224, 224);
+}
+
+@keyframes Skeleton_Loading {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}

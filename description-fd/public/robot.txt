@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+
+# 禁止访问管理后台和API
+Disallow: /app/
+Disallow: /api/
+Disallow: /admin/
+Disallow: /auth/
+
+# 禁止访问私有文件
+Disallow: /private/
+Disallow: /temp/
+Disallow: /uploads/
+
+# 允许访问静态资源
+Allow: /public/
+Allow: /assets/
+Allow: /images/
+Allow: /css/
+Allow: /js/
+
+# 爬取延迟（可选）
+Crawl-delay: 1
