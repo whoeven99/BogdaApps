@@ -60,7 +60,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "listPicked") {
     const pageType = (formData.get("pageType") as string) || null;
     const contentType = (formData.get("contentType") as string) || "description";
-    return await listPickedTemplates(shop, pageType === "null" ? null : pageType, contentType);
+    return ok(
+      await listPickedTemplates(
+        shop,
+        pageType === "null" ? null : pageType,
+        contentType,
+      ),
+    );
   }
 
   if (intent === "listCatalog") {

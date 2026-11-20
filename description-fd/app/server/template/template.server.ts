@@ -97,10 +97,17 @@ export async function listPickedTemplates(
       : Promise.resolve([]),
   ]);
   const used = new Set(officialIds);
-  return [
+  const picked = [
     ...officials.map((row) => officialToDto(row, used)),
     ...users.map(userToDto),
   ].filter((row) => matchesFilter(row.templateModel, row.templateSubtype, pageType, contentType));
+  if (picked.length > 0) return picked;
+  const catalog = await prisma.officialTemplate.findMany();
+  return catalog
+    .filter((row) =>
+      matchesFilter(row.templateModel, row.templateSubtype, pageType, contentType),
+    )
+    .map((row) => officialToDto(row, new Set()));
 }
 
 export async function listCatalog(

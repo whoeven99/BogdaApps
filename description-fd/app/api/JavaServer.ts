@@ -145,7 +145,9 @@ export const GetTemplateByShopName = async ({
       pageType,
       contentType,
     });
-    return Array.isArray(rows) ? rows : [];
+    if (Array.isArray(rows)) return rows;
+    if (Array.isArray(rows?.response)) return rows.response;
+    return [];
   } catch (error) {
     console.log(error);
     return [];

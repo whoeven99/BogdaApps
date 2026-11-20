@@ -142,7 +142,7 @@ const Index = () => {
   const [brandStyle, setBrandStyle] = useState<string>("");
   const [languageStyle, setLanguageStyle] = useState<string>("formal");
   const [model, setModel] = useState<string>(DEFAULT_DESCRIPTION_AI_MODEL);
-  const [template, setTemplate] = useState<string>("");
+  const [template, setTemplate] = useState<string>("0");
   const [templates, setTemplates] = useState<any[]>([]);
   const [focusSeoKeywordInput, setFocusSeoKeywordInput] =
     useState<boolean>(false);
@@ -334,6 +334,15 @@ const Index = () => {
   );
 
   const modelSelectionOptions = DESCRIPTION_AI_MODEL_OPTIONS;
+  const templateOptions = (
+    Array.isArray(templates) && templates.length > 0
+      ? templates
+      : [{ id: 0, templateTitle: "Default structure" }]
+  ).map((item: { id: number; templateTitle: string }, index: number) => ({
+    key: index.toString(),
+    label: item.templateTitle,
+    value: String(item.id),
+  }));
 
   const seoKeywordTagsMarkup = useMemo(() => {
     return seoKeywordTags.length > 0 ? (
@@ -421,7 +430,7 @@ const Index = () => {
   // }, [updateTime]);
 
   useEffect(() => {
-    setTemplate("");
+    setTemplate("0");
     setTemplates([]);
     const fetchTemplates = async () => {
       const response = await GetTemplateByShopName({
@@ -430,10 +439,9 @@ const Index = () => {
         pageType: "product",
         contentType: contentType,
       });
-      setTemplates(response);
-      if (response && response.length > 0) {
-        setTemplate(response[0].id);
-      }
+      const list = Array.isArray(response) ? response : [];
+      setTemplates(list);
+      setTemplate(list[0] ? String(list[0].id) : "0");
     };
     fetchTemplates();
   }, [contentType]);
@@ -586,16 +594,10 @@ const Index = () => {
   }, []);
 
   const handleGenerate = useCallback(async () => {
-    let error = false;
     if (selectedResources.length === 0) {
       shopify.toast.show("Please select at least one product");
-      error = true;
+      return;
     }
-    if (template === "") {
-      shopify.toast.show("Please select a template");
-      error = true;
-    }
-    if (error) return;
 
     generateFetcher.submit(
       {
@@ -898,12 +900,8 @@ const Index = () => {
               />
               <Select
                 label="Template"
-                options={templates?.map((template: any, index: number) => ({
-                  key: index.toString(),
-                  label: template.templateTitle,
-                  value: template.id.toString(),
-                }))}
-                value={template}
+                options={templateOptions}
+                value={template || "0"}
                 onChange={(value) => setTemplate(value)}
               />
               <Select
