@@ -344,7 +344,7 @@ function triggerStyle(
         ? "var(--p-color-border-critical, #ce4a54)"
         : "var(--app-color-border-secondary)"
     }`,
-    background: "var(--app-color-surface)",
+    background: "var(--p-color-bg-fill, #ffffff)",
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",
     fontSize: 13,
@@ -381,9 +381,10 @@ function listStyle(
     gap: 2,
     padding: 6,
     borderRadius: 10,
-    border: "1px solid var(--app-color-border-secondary)",
-    background: "var(--app-color-surface)",
-    boxShadow: "var(--app-shadow-card-strong, 0 18px 40px rgba(15, 23, 42, 0.08))",
+    border: "1px solid var(--p-color-border, var(--app-color-border-secondary))",
+    background: "var(--p-color-bg-fill, #ffffff)",
+    isolation: "isolate",
+    boxShadow: "0 4px 16px rgba(26, 26, 26, 0.12), 0 1px 2px rgba(26, 26, 26, 0.08)",
   };
 }
 
@@ -450,7 +451,9 @@ function optionStyle(
     padding: "8px 10px",
     border: "none",
     borderRadius: 8,
-    background: selected ? "rgba(46, 125, 246, 0.10)" : "transparent",
+    background: selected
+      ? "var(--p-color-bg-surface-selected, #eef1ff)"
+      : "var(--p-color-bg-fill, #ffffff)",
     color: selected ? "var(--p-color-text-info)" : "var(--app-color-text)",
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",

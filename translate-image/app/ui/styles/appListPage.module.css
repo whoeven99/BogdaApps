@@ -29,8 +29,8 @@
   margin-bottom: var(--app-space-400);
   padding: 12px 14px;
   border-radius: 14px;
-  background: rgba(84, 103, 255, 0.06);
-  border: 1px solid var(--app-color-border-secondary);
+  background: var(--p-color-bg-surface-secondary);
+  border: 1px solid var(--p-color-border);
 }
 
 .listToolbarMain {
@@ -142,6 +142,37 @@
 .imageManageModuleSelect {
   flex: 0 0 152px;
   min-width: 0;
+}
+
+.imageJobChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 4px 12px 4px 6px;
+  border: 1px solid var(--p-color-border);
+  border-radius: 999px;
+  background: var(--p-color-bg-fill, #ffffff);
+  color: var(--p-color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: start;
+}
+
+.imageJobChip:hover {
+  background: var(--p-color-bg-surface-hover, #f3f3f3);
+}
+
+.imageJobChipMeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--p-color-text-secondary);
 }
 
 @media (max-width: 768px) {
@@ -270,13 +301,27 @@
 }
 
 .listTable :global(.ant-table-tbody > tr > td) {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--app-color-surface);
   vertical-align: middle;
   overflow: visible;
 }
 
 .listTable :global(.ant-table-tbody > tr:hover > td) {
-  background: rgba(84, 103, 255, 0.05) !important;
+  background: var(--app-color-surface-hover) !important;
+}
+
+.jobProgressCard {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--app-color-surface-secondary);
+  border: 1px solid var(--app-color-border);
+}
+
+.jobProgressCardMeta {
+  margin: 0 0 10px;
+  color: var(--app-color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .jobResultPreviewBtn {
@@ -629,7 +674,7 @@
   padding: 12px;
   border-radius: 14px;
   border: 1px solid var(--app-color-border-secondary);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--app-color-surface);
 }
 
 .imageRowCardBody {

@@ -1,4 +1,4 @@
-import { describeImageTranslateError } from "./imageTranslateError";
+import { describeImageTranslateError, isGeminiUnavailableDetail } from "./imageTranslateError";
 
 /** 写入 Turso / 返回 API 的稳定 token；UI 用 `imageTranslate.error.{token}` 映射文案。 */
 export const IMAGE_TRANSLATE_MSG_GEMINI_RATE_LIMIT = "IMAGE_TRANSLATE_GEMINI_RATE_LIMIT";
@@ -55,7 +55,7 @@ function isGeminiRateLimited(detail: string): boolean {
 }
 
 function isGeminiUnavailable(detail: string): boolean {
-  return /\b(502|503|504)\b/.test(detail) || /unavailable|timeout|timed out/i.test(detail);
+  return /unavailable/i.test(detail) || isGeminiUnavailableDetail(detail);
 }
 
 /** 由 error code + 原始 detail 归类为商户可见 token（日志仍保留 detail）。 */

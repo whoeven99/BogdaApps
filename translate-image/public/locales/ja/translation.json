@@ -92,7 +92,10 @@
     "current_plan": "使用中",
     "try_free": "無料でお試しください",
     "get_start": "始めましょう",
-    "for_large_teams": "大規模チーム向け"
+    "for_large_teams": "大規模チーム向け",
+    "compare": {
+      "scrollHint": "スワイプしてすべてのプランを表示"
+    }
   },
   "starter_features1": "無料画像翻訳10件",
   "starter_features2": "機械翻訳",

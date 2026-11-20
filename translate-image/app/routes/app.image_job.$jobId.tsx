@@ -13,7 +13,7 @@ import AppPageHeader from "~/ui/components/AppPageHeader";
 import AppStatusBadge from "~/ui/components/AppStatusBadge";
 import AppSubpageTitleBar, { useAppHomeBackAction } from "~/ui/components/AppSubpageTitleBar";
 import listStyles from "~/ui/styles/appListPage.module.css";
-import { ImageJobMiniStageTrack } from "~/routes/app.translate-v4/components/V4JobCardParts";
+import { ImageJobMiniStageTrack, StatusTag } from "~/routes/app.translate-v4/components/V4JobCardParts";
 import ContentImageCompareModal from "~/routes/component/contentImage/components/ContentImageCompareModal";
 import {
   controlContentImageJob,
@@ -25,7 +25,12 @@ import {
   type ContentImageJobItem,
 } from "~/routes/component/contentImage/contentImageClient";
 import { imageJobProcessedCount } from "~/routes/component/contentImage/imageJobProgress";
-import { imageJobMiniStageTrackLabels } from "~/routes/component/contentImage/imageJobQueueDisplay";
+import {
+  imageJobMiniStageTrackLabels,
+  imageJobStageSummary,
+  imageJobStatusForTag,
+  imageJobStatusLabel,
+} from "~/routes/component/contentImage/imageJobQueueDisplay";
 import { translateImageTranslateError } from "~/lib/imageTranslateFeedback";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -160,6 +165,8 @@ export default function ImageJobResultPage() {
   });
   const processed = imageJobProcessedCount(detail);
   const active = isActiveJob(detail);
+  const statusLabel = imageJobStatusLabel(detail, t);
+  const stageSummary = imageJobStageSummary(detail, t);
   const miniStageSegments = imageJobMiniStageTrackLabels(detail, t);
   const headerExtra = (
     <InlineStack gap="200" wrap={false}>
@@ -195,15 +202,24 @@ export default function ImageJobResultPage() {
       <AppSubpageTitleBar title={pageTitle} parentUrl={listPath} />
       <Page>
         <BlockStack gap="400">
-          <AppPageHeader title={pageTitle} backAction={backAction} extra={headerExtra} />
+          <AppPageHeader
+            title={pageTitle}
+            titleMeta={<StatusTag status={imageJobStatusForTag(detail.status)} label={statusLabel} />}
+            backAction={backAction}
+            extra={headerExtra}
+          />
           <Text as="p" variant="bodySm" tone="subdued">
             {t("contentImage.jobResult.summaryLine", {
               done: processed,
               total: detail.total,
               credits: fmt(detail.creditsUsed),
             })}
+            {detail.failed > 0 ? ` · ${t("contentImage.job.failed", { count: detail.failed })}` : ""}
           </Text>
-          {active ? <ImageJobMiniStageTrack segments={miniStageSegments} /> : null}
+          <div className={listStyles.jobProgressCard}>
+            {stageSummary ? <p className={listStyles.jobProgressCardMeta}>{stageSummary}</p> : null}
+            <ImageJobMiniStageTrack segments={miniStageSegments} />
+          </div>
           <Table<ContentImageJobItem>
             className={listStyles.listTable}
             rowKey="id"

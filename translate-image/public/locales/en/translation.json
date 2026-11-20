@@ -21,6 +21,8 @@
   "Total pay": "Total pay",
   "Buy now": "Buy now",
   "Image Translation Plugin": "Image Translation Plugin",
+  "Plugin enabled": "Plugin enabled",
+  "Enable plugin": "Enable plugin",
   "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.": "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.",
   "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.": "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.",
   "Manage": "Manage",
@@ -89,7 +91,21 @@
     "current_plan": "In Use",
     "try_free": "Try for free",
     "get_start": "Get started",
-    "for_large_teams": "For large teams"
+    "for_large_teams": "For large teams",
+    "availableTranslations": "Available translations",
+    "times": "times",
+    "buyCredits": "Buy credits",
+    "nextPayment": "Next payment",
+    "plans": "Plans",
+    "monthly": "Monthly",
+    "creditPack": "Credit pack",
+    "totalPayment": "Total payment",
+    "buyNow": "Buy now",
+    "maybeLater": "Maybe later",
+    "buyExtraTimes": "Buy extra image translation times",
+    "compare": {
+      "scrollHint": "Swipe to see all plans"
+    }
   },
   "starter_features1": "10 free image translations",
   "starter_features2": "Machine translation",
@@ -507,7 +523,9 @@
       },
       "viewResult": "View results",
       "title": "{{kind}} · {{language}}",
-      "imagesShort": "{{done}}/{{total}} images"
+      "imagesShort": "{{done}}/{{total}} images",
+      "chip": "{{language}} · {{done}}/{{total}}",
+      "chipAria": "Open image task: {{status}} · {{language}} · {{done}}/{{total}}"
     },
     "home": {
       "title": "Image translation",

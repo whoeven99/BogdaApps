@@ -19,6 +19,8 @@
   "Total pay": "总付款",
   "Buy now": "立即支付",
   "Image Translation Plugin": "图片翻译插件",
+  "Plugin enabled": "插件已启用",
+  "Enable plugin": "启用插件",
   "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.": "插件已启用——产品图片和替代文字将根据您网站的语言设置以正确的语言显示。",
   "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.": "启用该插件，以确保每种已发布语言的产品图片和替代文本都能正确显示。",
   "Manage": "管理",
@@ -92,7 +94,21 @@
     "current_plan": "正在使用中",
     "try_free": "免费试用",
     "get_start": "开始使用",
-    "for_large_teams": "对于大型团队"
+    "for_large_teams": "对于大型团队",
+    "availableTranslations": "可用翻译次数",
+    "times": "次",
+    "buyCredits": "购买次数",
+    "nextPayment": "下次扣费",
+    "plans": "套餐",
+    "monthly": "月付",
+    "creditPack": "加量包",
+    "totalPayment": "应付",
+    "buyNow": "立即购买",
+    "maybeLater": "稍后再说",
+    "buyExtraTimes": "购买额外图像翻译次数",
+    "compare": {
+      "scrollHint": "左右滑动查看全部套餐"
+    }
   },
   "starter_features1": "10个免费图片翻译",
   "starter_features2": "机器翻译",
@@ -140,7 +156,7 @@
   "Choose the right plan for you": "选择适合您的方案",
   "Yearly": "每年",
   "Save 20%": "节省20%",
-  "Free": "自由的",
+  "Free": "免费",
   "/month": "/月",
   "Compare plans": "比较方案",
   "FAQs": "常见问题解答",
@@ -511,7 +527,9 @@
       },
       "viewResult": "查看结果",
       "title": "{{kind}} · {{language}}",
-      "imagesShort": "{{done}}/{{total}} 张"
+      "imagesShort": "{{done}}/{{total}} 张",
+      "chip": "{{language}} · {{done}}/{{total}}",
+      "chipAria": "打开图片任务：{{status}} · {{language}} · {{done}}/{{total}}"
     },
     "home": {
       "title": "图片翻译",

@@ -188,6 +188,7 @@ export default function ImageResourceDetailPage({ type }: { type: ImageResourceT
                     language,
                     languageOptions: data.targets,
                     onLanguageChange: setLanguage,
+                    hideModule: true,
                   }}
                 />
               }

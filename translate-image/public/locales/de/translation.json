@@ -92,7 +92,10 @@
     "current_plan": "Im Einsatz",
     "try_free": "Kostenlos testen",
     "get_start": "Los geht's!",
-    "for_large_teams": "Für große Teams"
+    "for_large_teams": "Für große Teams",
+    "compare": {
+      "scrollHint": "Wische, um alle Pläne zu sehen"
+    }
   },
   "starter_features1": "10 kostenlose Bildübersetzungen",
   "starter_features2": "Maschinelle Übersetzung",

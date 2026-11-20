@@ -185,6 +185,7 @@ export default function SwitcherImagePageDetail() {
                     language,
                     languageOptions: data.targets,
                     onLanguageChange: setLanguage,
+                    hideModule: true,
                   }}
                 />
               }

@@ -22,6 +22,7 @@ export type ImageManageSwitchersProps = {
   language: string;
   languageOptions: Array<{ value: string; label: string }>;
   onLanguageChange: (value: string) => void;
+  hideModule?: boolean;
 };
 
 export function ImageManageSwitchers(props: ImageManageSwitchersProps) {
@@ -58,25 +59,27 @@ export function ImageManageSwitchers(props: ImageManageSwitchersProps) {
           />
         </div>
       ) : null}
-      <div className={listStyles.imageManageModuleSelect}>
-        <InFlowSelect
-          label=""
-          labelHidden
-          toolbarTrigger
-          triggerTextNowrap
-          menuFitContent
-          options={itemOptions}
-          value={current}
-          onChange={(item) => {
-            const qs = props.language ? `?language=${encodeURIComponent(props.language)}` : "";
-            if (item === "switcherImage") {
-              navigate(switcherImageListPath({ language: props.language || undefined }));
-              return;
-            }
-            navigate(`${MODULE_PATH[item] ?? "/app/product"}${qs}`);
-          }}
-        />
-      </div>
+      {props.hideModule ? null : (
+        <div className={listStyles.imageManageModuleSelect}>
+          <InFlowSelect
+            label=""
+            labelHidden
+            toolbarTrigger
+            triggerTextNowrap
+            menuFitContent
+            options={itemOptions}
+            value={current}
+            onChange={(item) => {
+              const qs = props.language ? `?language=${encodeURIComponent(props.language)}` : "";
+              if (item === "switcherImage") {
+                navigate(switcherImageListPath({ language: props.language || undefined }));
+                return;
+              }
+              navigate(`${MODULE_PATH[item] ?? "/app/product"}${qs}`);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

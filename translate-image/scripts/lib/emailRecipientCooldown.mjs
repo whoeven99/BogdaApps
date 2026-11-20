@@ -18,3 +18,13 @@ export function isSesFrequencyLimitError(error) {
   const haystack = errorHaystack(error);
   return /触发频率控制/.test(haystack) || /FrequencyLimit/i.test(haystack);
 }
+
+export function emailInvalidTemplateCooldownKey(templateId) {
+  if (!Number.isInteger(templateId) || templateId <= 0) return null;
+  return `img:email:invalid-template:${templateId}`;
+}
+
+export function isSesInvalidTemplateError(error) {
+  const haystack = errorHaystack(error);
+  return /InvalidTemplateID/i.test(haystack) || /模板ID无效/.test(haystack);
+}

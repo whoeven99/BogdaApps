@@ -1,28 +1,17 @@
-import { TitleBar } from "@shopify/app-bridge-react";
 import { Page } from "@shopify/polaris";
 import {
   Space,
   Row,
   Col,
-  Card,
-  Progress,
-  Button,
   Typography,
-  Alert,
-  Skeleton,
-  Popover,
-  Badge,
   Flex,
   Switch,
   Table,
   Collapse,
-  Modal,
   CollapseProps,
-  Grid,
 } from "antd";
 import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
-import ScrollNotice from "~/components/ScrollNotice";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import { resolveShouldCreateTestCharge } from "~/server/billing/chargeGuardApply.server";
@@ -30,24 +19,24 @@ import { listEnabledCatalog } from "~/server/billing/plans/planCatalog.server";
 import { resolveCancelSubscriptionGid } from "~/server/billing/resolveSubscriptionGid.server";
 import { BILLING_INTERVAL, PLAN_KIND } from "~/server/billing/types";
 import { useFetcher, useLoaderData } from "@remix-run/react";
-import {
-  AddCreaditsModal,
-  OptionType,
-} from "../app._index/components/addCreditsModal";
-import { CheckOutlined, QuestionCircleOutlined } from "@ant-design/icons";
+import { CheckOutlined } from "@ant-design/icons";
 import "./style.css";
-import {
-  mutationAppPurchaseOneTimeCreate,
-  mutationAppSubscriptionCreate,
-} from "~/api/admin.server";
+import { mutationAppSubscriptionCreate } from "~/api/admin.server";
 import { useDispatch, useSelector } from "react-redux";
-import { handleContactSupport } from "../app._index/route";
 import { setPlan, setUpdateTime } from "~/store/modules/userConfig";
 import useReport from "scripts/eventReport";
-// import HasPayForFreePlanModal from "./components/hasPayForFreePlanModal";
 import { globalStore } from "~/globalStore";
 import HasPayForFreePlanModal from "./components/hasPayForFreePlanModal";
-const { Title, Text, Paragraph } = Typography;
+import AccountTranslationsCard from "./components/AccountTranslationsCard";
+import AppPageHeader from "~/ui/components/AppPageHeader";
+import AppSubpageTitleBar, {
+  useAppHomeBackAction,
+} from "~/ui/components/AppSubpageTitleBar";
+import AppStatusBadge from "~/ui/components/AppStatusBadge";
+import AppButton from "~/ui/components/AppButton";
+import { AppSModal } from "~/ui/components/AppSModal";
+import { openCreditsPurchaseModal } from "~/utils/creditsPurchaseModal";
+const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -198,36 +187,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 const Index = () => {
-  const { plan, updateTime, chars, totalChars, isNew } = useSelector(
+  const { plan, updateTime, remaining, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
-  
+  const homeBackAction = useAppHomeBackAction("/app");
   const { shop, catalog } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const [yearly, setYearly] = useState(false);
-  const [openModal, setOpenModal] = useState<boolean>(false);
-  const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
   const [isLoading, setIsLoading] = useState(true);
   const [cancelPlanWarnModal, setCancelPlanWarnModal] = useState(false);
-  const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
   const [payForPlanButtonLoading, setPayForPlanButtonLoading] =
     useState<string>("");
   const [selectedPayPlanOption, setSelectedPayPlanOption] = useState<any>();
-  // const isQuotaExceeded = useMemo(
-  //   () => chars >= totalChars && totalChars > 0,
-  //   [chars, totalChars],
-  // );
   const { t } = useTranslation();
   const dispatch = useDispatch();
 
   const fetcher = useFetcher<any>();
   const planCancelFetcher = useFetcher<any>();
-  const payFetcher = useFetcher<any>();
   const orderFetcher = useFetcher<any>();
   const payForPlanFetcher = useFetcher<any>();
 
-  const { useBreakpoint } = Grid;
-  const screens = useBreakpoint(); // 监听屏幕断点
   const handleSetYearlyReport = () => {
     setYearly(!yearly);
     report(
@@ -255,35 +234,6 @@ const Index = () => {
       },
     );
   }, []);
-
-  useEffect(() => {
-    if (payFetcher.data) {
-      if (payFetcher.data?.success) {
-        const order =
-          payFetcher.data?.response?.appPurchaseOneTimeCreate
-            ?.appPurchaseOneTime;
-        const confirmationUrl =
-          payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
-        const orderInfo = {
-          id: order.id,
-          amount: order.price.amount,
-          name: order.name,
-          createdAt: order.createdAt,
-          status: order.status,
-          confirmationUrl: confirmationUrl,
-        };
-        const formData = new FormData();
-        formData.append("orderInfo", JSON.stringify(orderInfo));
-        orderFetcher.submit(formData, {
-          method: "post",
-          action: "/app",
-        });
-        open(confirmationUrl, "_top");
-      } else {
-        setBuyButtonLoading(false);
-      }
-    }
-  }, [payFetcher.data]);
 
   useEffect(() => {
     if (payForPlanFetcher.data) {
@@ -374,13 +324,9 @@ const Index = () => {
         buttonType: "default",
         disabled: plan.type === "Basic" && yearly === !!(plan.feeType === 1),
         features: [
-          //   t("{{credits}} credits/month", { credits: "1,500,000" }),
-          //   t("Glossary ({{count}} entries)", { count: 10 }),
           t("basic_features1"),
           t("basic_features2"),
-          t("basic_features3"),
           t("basic_features4"),
-          t("basic_features5"),
         ],
       },
       {
@@ -399,13 +345,8 @@ const Index = () => {
         buttonType: "default",
         disabled: plan.type === "Pro" && yearly === !!(plan.feeType === 1),
         features: [
-          //   t("all in Basic Plan"),
-          //   t("{{credits}} credits/month", { credits: "3,000,000" }),
-          //   t("Glossary ({{count}} entries)", { count: 50 }),
           t("pro_features1"),
           t("pro_features2"),
-          t("pro_features3"),
-          t("pro_features4"),
           t("pro_features5"),
         ],
       },
@@ -425,13 +366,8 @@ const Index = () => {
         disabled: plan.type === "Premium" && yearly === !!(plan.feeType === 1),
         isRecommended: true,
         features: [
-          //   t("all in Pro Plan"),
-          //   t("{{credits}} credits/month", { credits: "8,000,000" }),
-          //   t("Glossary ({{count}} entries)", { count: 100 }),
           t("premium_features1"),
           t("premium_features2"),
-          t("premium_features3"),
-          t("premium_features4"),
           t("premium_features5"),
         ],
       },
@@ -561,16 +497,26 @@ const Index = () => {
     [],
   );
 
+  const comparisonFeatureColWidth = 156;
+  const comparisonPlanColWidth = 188;
+  const comparisonTableScrollX =
+    comparisonFeatureColWidth + comparisonPlanColWidth * 4;
+
   const columns = [
     {
       title: t("Features"),
       dataIndex: "features",
       key: "features",
+      width: comparisonFeatureColWidth,
+      fixed: "left" as const,
+      className: "pricing-comparison-table__feature",
     },
     {
       title: "Free",
       dataIndex: "free",
       key: "free",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -586,6 +532,8 @@ const Index = () => {
       title: "Basic",
       dataIndex: "basic",
       key: "basic",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -601,6 +549,8 @@ const Index = () => {
       title: "Pro",
       dataIndex: "pro",
       key: "pro",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -616,6 +566,8 @@ const Index = () => {
       title: "Premium",
       dataIndex: "premium",
       key: "premium",
+      width: comparisonPlanColWidth,
+      className: "pricing-comparison-table__plan",
       render: (_: any, record: any) => {
         switch (true) {
           case record.type === "credits":
@@ -629,7 +581,7 @@ const Index = () => {
     },
   ];
   const handleAddCredits = () => {
-    setOpenModal(true);
+    openCreditsPurchaseModal();
     reportClick("pricing_balance_add");
     fetcher.submit(
       {
@@ -685,461 +637,271 @@ const Index = () => {
 
   return (
     <Page>
-      <TitleBar title={t("Pricing")} />
-      <ScrollNotice
-        text={t(
-          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
-        )}
-      />
+      <AppSubpageTitleBar title={t("Pricing")} />
+      <div className="pricing-page">
       <Space direction="vertical" size="large" style={{ display: "flex" }}>
-        <Card loading={isLoading}>
-          <Space direction="vertical" size="small" style={{ width: "100%" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <Flex
-                gap={8}
-                align="center"
-                justify="space-between"
-                style={{ width: "100%" }}
-              >
-                <Flex align="center" gap={8}>
-                  <Title
-                    level={2}
-                    style={{ marginBottom: 0, fontSize: "20px" }}
-                  >
-                    {t("Translation Quota")}
-                  </Title>
-                  <Popover
-                    content={t(
-                      "Permanent quotas · Never expire · Top up anytime.",
-                    )}
-                  >
-                    <QuestionCircleOutlined />
-                  </Popover>
-                  <Button type="default" onClick={handleAddCredits}>
-                    {t("Buy more")}
-                  </Button>
-                </Flex>
-                {plan && (
-                  <div>
-                    <Text>{t("Current plan: ")}</Text>
-                    <Text style={{ color: "#007F61", fontWeight: "bold" }}>
-                      {plan.type === "Basic"
-                        ? "Basic"
-                        : plan.type === "Pro"
-                          ? "Pro"
-                          : plan.type === "Premium"
-                            ? "Premium"
-                            : "Free"}
-                      {t("Plan")}
-                    </Text>
-                  </div>
-                )}
-              </Flex>
+        <AppPageHeader
+          title={t("Pricing")}
+          backAction={homeBackAction}
+          extra={
+            plan.type || updateTime ? (
+              <div className="pricing-page__header-meta">
+                {plan.type ? (
+                  <AppStatusBadge tone="info">
+                    {plan.type === "Free" ? t("Free") : plan.type}
+                  </AppStatusBadge>
+                ) : null}
+                {updateTime ? (
+                  <span className="pricing-page__next-payment">
+                    {t("pricing.nextPayment")}: {updateTime}
+                  </span>
+                ) : null}
+              </div>
+            ) : undefined
+          }
+        />
+        <AccountTranslationsCard
+          loading={isLoading || !plan.id}
+          remainingCredits={Number(remaining ?? 0)}
+          onBuyCredits={handleAddCredits}
+        />
+        <section className="pricing-section" id="pricing-plans">
+          <div className="pricing-section__header">
+            <div className="pricing-section__title-wrap">
+              <h2 className="pricing-section__title">{t("pricing.plans")}</h2>
             </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
+            <Flex
+              className="pricing-section__billing-toggle"
+              align="center"
+              gap={8}
+              wrap="wrap"
             >
-              {chars !== undefined && totalChars !== undefined && (
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: t(
-                      "{{currentCredits}} of {{maxCredits}} translations used",
-                      {
-                        currentCredits: Math.floor((Number(chars) || 0) / 2000),
-                        maxCredits: Math.floor(
-                          (Number(totalChars) || 0) / 2000,
-                        ),
-                      },
-                    ),
-                  }}
-                />
-              )}
-              <Text
-                style={{
-                  display: updateTime && totalChars ? "block" : "none",
-                }}
-              >
-                {t("This bill was issued on {{date}}", { date: updateTime })}
-              </Text>
-            </div>
-            <Progress
-              percent={
-                totalChars == 0
-                  ? 100
-                  : Math.round(
-                      (Math.floor((Number(chars) || 0) / 2000) /
-                        Math.floor((Number(totalChars) || 0) / 2000)) *
-                        100,
-                    )
+              <Text type="secondary">{t("pricing.monthly")}</Text>
+              <Switch checked={yearly} onChange={handleSetYearlyReport} />
+              <Text strong>{t("Yearly")}</Text>
+              <div className="yearly_save">
+                <Text strong>{t("Save 20%")}</Text>
+              </div>
+            </Flex>
+          </div>
+          <Row gutter={[16, 16]}>
+          <Col xs={24} sm={24} md={12} lg={6} style={{ display: "flex" }}>
+            <div
+              className={
+                plan.type === "Free"
+                  ? "pricing-plan-card pricing-plan-card--current"
+                  : "pricing-plan-card"
               }
-              size={["100%", 15]}
-              strokeColor="#007F61"
-              showInfo={false}
-            />
-          </Space>
-          <AddCreaditsModal
-            openModal={openModal}
-            onClose={() => setOpenModal(false)}
-            action="quotacard"
-          />
-        </Card>
-        <Flex vertical align="center" style={{ width: "100%" }}>
-          <Title level={3} style={{ fontWeight: 700 }}>
-            {t("Choose the right plan for you")}
-          </Title>
-          <Row style={{ width: "100%" }}>
-            <Col
-              span={screens.xs ? 16 : 18}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: screens.xs ? "left" : "center",
-                left: screens.xs ? "0" : "50%",
-                transform: screens.xs ? "translateX(0)" : "translateX(-50%)",
-              }}
             >
-              <Flex align="center">
-                <Space align="center" size="small">
-                  <Switch checked={yearly} onChange={handleSetYearlyReport} />
-                  <Text>{t("Yearly")}</Text>
-                </Space>
-                <div className="yearly_save">
-                  <Text strong>{t("Save 20%")}</Text>
+              {plan.type === "Free" ? (
+                <div className="pricing-plan-card__badge">
+                  <AppStatusBadge tone="info">
+                    {t("pricing.current_plan")}
+                  </AppStatusBadge>
                 </div>
-              </Flex>
-            </Col>
-          </Row>
-        </Flex>
-        <Row gutter={[16, 16]}>
-          <Col
-            key={t("Free")}
-            xs={24}
-            sm={24}
-            md={12}
-            lg={6}
-            style={{
-              display: "flex",
-              width: "100%",
-            }}
-          >
-            <Card
-              hoverable
-              style={{
-                flex: 1,
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                position: "relative",
-                borderColor: plan.type === "Free" ? "#007F61" : undefined,
-                minWidth: "220px",
-              }}
-              styles={{
-                body: {
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  padding: "16px",
-                },
-              }}
-              loading={!plan.id}
-            >
-              <Title level={5}>Free</Title>
-              <div style={{ margin: yearly ? "12px 0 46px 0" : "12px  0" }}>
-                <Text style={{ fontSize: "28px", fontWeight: "bold" }}>$0</Text>
-                <Text style={{ fontSize: "14px" }}>{t("/month")}</Text>
-              </div>
-
-              <Button
-                type="default"
-                block
-                disabled={plan.type === "Free" || selectedPayPlanOption}
-                style={{ marginBottom: isNew ? "70px" : "20px" }}
-                onClick={() => {
-                  setCancelPlanWarnModal(true);
-                  reportClick("pricing_plan_trial");
-                }}
-              >
-                {plan.type === "Free"
-                  ? t("pricing.current_plan")
-                  : t("pricing.get_start")}
-              </Button>
-              <div style={{ flex: 1 }}>
-                <div
-                  key={0}
-                  style={{
-                    marginBottom: "8px",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "6px",
-                  }}
-                >
-                  <CheckOutlined
-                    style={{
-                      color: "#52c41a",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Text style={{ fontSize: "13px" }}>
-                    {t("starter_features1")}
-                  </Text>
-                </div>
-                <div
-                  key={1}
-                  style={{
-                    marginBottom: "8px",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "6px",
-                  }}
-                >
-                  <CheckOutlined
-                    style={{
-                      color: "#52c41a",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Text style={{ fontSize: "13px" }}>
-                    {t("starter_features2")}
-                  </Text>
-                </div>
-                <div
-                  key={2}
-                  style={{
-                    marginBottom: "8px",
-                    display: "flex",
-                    alignItems: "flex-start",
-                    gap: "6px",
-                  }}
-                >
-                  <CheckOutlined
-                    style={{
-                      color: "#52c41a",
-                      fontSize: "12px",
-                    }}
-                  />
-                  <Text style={{ fontSize: "13px" }}>
-                    {t("starter_features3")}
-                  </Text>
+              ) : null}
+              <div className="pricing-plan-card__hero">
+                <Title level={4} style={{ margin: 0 }}>
+                  {t("Free")}
+                </Title>
+                <div className="pricing-plan-card__price-row">
+                  <span className="pricing-plan-card__price">$0</span>
+                  <span className="pricing-plan-card__unit">{t("/month")}</span>
                 </div>
               </div>
-            </Card>
-          </Col>
-          {plans.map((item, index) => (
-            <Col
-              key={item.title}
-              xs={24}
-              sm={24}
-              md={12}
-              lg={6}
-              style={{
-                display: "flex",
-                width: "100%",
-              }}
-            >
-              <Badge.Ribbon
-                text={t("pricing.recommended")}
-                color="#1890ff"
-                style={{
-                  display:
-                    item.isRecommended && plan.type === "Free" && plan.id
-                      ? "block"
-                      : "none",
-                  right: -8,
-                }}
-              >
-                <Card
-                  hoverable
-                  style={{
-                    flex: 1,
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                    position: "relative",
-                    borderColor: item.disabled
-                      ? "#007F61"
-                      : item.isRecommended && plan.type === "Free" && plan.id
-                        ? "#1890ff"
-                        : undefined,
-                    minWidth: "220px",
+              <div className="pricing-plan-card__cta">
+                <AppButton
+                  block
+                  disabled={plan.type === "Free" || selectedPayPlanOption}
+                  onClick={() => {
+                    setCancelPlanWarnModal(true);
+                    reportClick("pricing_plan_trial");
                   }}
-                  styles={{
-                    body: {
-                      flex: 1,
-                      display: "flex",
-                      flexDirection: "column",
-                      padding: "16px",
-                    },
-                  }}
-                  loading={!plan.id}
                 >
-                  <Title level={5}>
-                    {yearly ? item.yearlyTitle : item.title}
-                  </Title>
-                  <div style={{ margin: "12px 0" }}>
-                    <Text style={{ fontSize: "28px", fontWeight: "bold" }}>
-                      ${yearly ? item.yearlyPrice : item.monthlyPrice}
-                    </Text>
-                    <Text style={{ fontSize: "14px" }}>{t("/month")}</Text>
-                  </div>
-                  {yearly && (
-                    <div
-                      dangerouslySetInnerHTML={{ __html: item.subtitle }}
-                      style={{ marginBottom: "12px" }}
+                  {plan.type === "Free"
+                    ? t("pricing.current_plan")
+                    : t("pricing.get_start")}
+                </AppButton>
+              </div>
+              <div className="pricing-plan-card__features">
+                {[
+                  t("starter_features1"),
+                  t("starter_features2"),
+                  t("starter_features3"),
+                ].map((feature) => (
+                  <div key={feature} className="pricing-plan-card__feature">
+                    <CheckOutlined
+                      style={{ color: "var(--p-color-text-success)", fontSize: 12 }}
                     />
-                  )}
-                  <Button
-                    id={`${item.title}-${yearly ? "yearly" : "month"}-${index}-0`}
-                    type="default"
-                    block
-                    disabled={item.disabled || selectedPayPlanOption}
-                    style={{ marginBottom: "20px" }}
-                    onClick={() =>
-                      handlePayForPlan({
-                        plan: item,
-                        trialDays: 0,
-                        id: `${item.title}-${yearly ? "yearly" : "month"}-${index}-0`,
-                      })
-                    }
-                    loading={
-                      payForPlanButtonLoading ==
-                      `${item.title}-${yearly ? "yearly" : "month"}-${index}-0`
-                    }
-                  >
-                    {item.buttonText}
-                  </Button>
-                  {isNew && item.trialDays > 0 && (
-                    <Button
-                      id={`${item.title}-${yearly ? "yearly" : "month"}-${index}-5`}
-                      type="primary"
+                    <span>{feature}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Col>
+          {plans.map((item, index) => {
+            const startId = `${item.title}-${yearly ? "yearly" : "month"}-${index}-0`;
+            const trialId = `${item.title}-${yearly ? "yearly" : "month"}-${index}-5`;
+            return (
+              <Col
+                key={item.title}
+                xs={24}
+                sm={24}
+                md={12}
+                lg={6}
+                style={{ display: "flex" }}
+              >
+                <div
+                  className={`pricing-plan-card ${
+                    item.disabled
+                      ? "pricing-plan-card--current"
+                      : item.isRecommended && plan.type === "Free" && plan.id
+                        ? "pricing-plan-card--recommended"
+                        : ""
+                  }`}
+                >
+                  {item.disabled ? (
+                    <div className="pricing-plan-card__badge">
+                      <AppStatusBadge tone="info">
+                        {t("pricing.current_plan")}
+                      </AppStatusBadge>
+                    </div>
+                  ) : item.isRecommended && plan.type === "Free" && plan.id ? (
+                    <div className="pricing-plan-card__badge">
+                      <AppStatusBadge tone="caution">
+                        {t("pricing.recommended")}
+                      </AppStatusBadge>
+                    </div>
+                  ) : null}
+                  <div className="pricing-plan-card__hero">
+                    <Title level={4} style={{ margin: 0 }}>
+                      {yearly ? item.yearlyTitle : item.title}
+                    </Title>
+                    <div className="pricing-plan-card__price-row">
+                      <span className="pricing-plan-card__price">
+                        ${yearly ? item.yearlyPrice : item.monthlyPrice}
+                      </span>
+                      <span className="pricing-plan-card__unit">{t("/month")}</span>
+                    </div>
+                    {yearly ? (
+                      <div
+                        className="pricing-plan-card__billing-note"
+                        dangerouslySetInnerHTML={{ __html: item.subtitle }}
+                      />
+                    ) : null}
+                  </div>
+                  <div className="pricing-plan-card__cta">
+                    <AppButton
+                      id={startId}
                       block
                       disabled={item.disabled || selectedPayPlanOption}
-                      style={{ marginBottom: "20px" }}
+                      loading={payForPlanButtonLoading === startId}
                       onClick={() =>
                         handlePayForPlan({
                           plan: item,
-                          trialDays: item.trialDays,
-                          id: `${item.title}-${yearly ? "yearly" : "month"}-${index}-5`,
+                          trialDays: 0,
+                          id: startId,
                         })
                       }
-                      loading={
-                        payForPlanButtonLoading ==
-                        `${item.title}-${yearly ? "yearly" : "month"}-${index}-5`
-                      }
                     >
-                      {t("Free trial")}
-                    </Button>
-                  )}
-                  <div style={{ flex: 1 }}>
-                    {item.features.map((feature, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          marginBottom: "8px",
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: "6px",
-                        }}
+                      {item.buttonText}
+                    </AppButton>
+                    {isNew && item.trialDays > 0 ? (
+                      <AppButton
+                        id={trialId}
+                        type="primary"
+                        block
+                        disabled={item.disabled || selectedPayPlanOption}
+                        loading={payForPlanButtonLoading === trialId}
+                        onClick={() =>
+                          handlePayForPlan({
+                            plan: item,
+                            trialDays: item.trialDays,
+                            id: trialId,
+                          })
+                        }
                       >
+                        {t("Free trial")}
+                      </AppButton>
+                    ) : null}
+                  </div>
+                  <div className="pricing-plan-card__features">
+                    {item.features.map((feature) => (
+                      <div key={feature} className="pricing-plan-card__feature">
                         <CheckOutlined
                           style={{
-                            color: "#52c41a",
-                            fontSize: "12px",
+                            color: "var(--p-color-text-success)",
+                            fontSize: 12,
                           }}
                         />
-                        <Text style={{ fontSize: "13px" }}>{feature}</Text>
+                        <span>{feature}</span>
                       </div>
                     ))}
                   </div>
-                </Card>
-              </Badge.Ribbon>
-            </Col>
-          ))}
+                </div>
+              </Col>
+            );
+          })}
         </Row>
-        <Space
-          direction="vertical"
-          size="small"
-          style={{
-            display: "flex",
-          }}
-        >
-          <Title
-            level={3}
-            style={{
-              fontWeight: 700,
-              textAlign: "center",
-            }}
-          >
-            {t("Compare plans")}
-          </Title>
-          <Table
-            dataSource={tableData}
-            columns={columns}
-            pagination={false}
-            // style={{
-            //   width: "100%",
-            // }}
-          />
-        </Space>
-        <Row>
-          <Col span={6}>
-            <Space direction="vertical" size="small">
-              <Title level={3} style={{ fontWeight: 700 }}>
-                {t("FAQs")}
-              </Title>
-              <Text type="secondary">
-                {t("Everything you need to know about pricing and billing.")}
-              </Text>
-            </Space>
-          </Col>
-          <Col span={18}>
-            <Collapse
-              items={collapseData}
-              onChange={() => {
-                reportClick("pricing_faq_click");
-              }}
+        </section>
+        <section className="pricing-section pricing-section--compact">
+          <div className="pricing-section__header">
+            <div className="pricing-section__title-wrap">
+              <h2 className="pricing-section__title">{t("Compare plans")}</h2>
+              <p className="pricing-comparison-scroll-hint">
+                {t("pricing.compare.scrollHint")}
+              </p>
+            </div>
+          </div>
+          <div className="pricing-comparison-table-wrap">
+            <Table
+              className="pricing-comparison-table"
+              dataSource={tableData}
+              columns={columns}
+              pagination={false}
+              scroll={{ x: comparisonTableScrollX }}
             />
-          </Col>
-        </Row>
+          </div>
+        </section>
+        <section className="pricing-section pricing-section--compact">
+          <div className="pricing-section__header">
+            <div className="pricing-section__title-wrap">
+              <h2 className="pricing-section__title">{t("FAQs")}</h2>
+            </div>
+          </div>
+          <Collapse
+            items={collapseData}
+            onChange={() => {
+              reportClick("pricing_faq_click");
+            }}
+          />
+        </section>
       </Space>
+      </div>
       <HasPayForFreePlanModal />
-      <Modal
-        title={t("Cancel paid plan?")}
+      <AppSModal
         open={cancelPlanWarnModal}
-        centered
-        onCancel={() => setCancelPlanWarnModal(false)}
-        footer={
-          <Flex align="end" justify="end" gap={10}>
-            <Button
-              loading={planCancelFetcher.state == "submitting"}
-              onClick={handleCancelPlan}
-            >
-              {t("Switch to free plan")}
-            </Button>
-            <Button
-              type="primary"
-              onClick={() => setCancelPlanWarnModal(false)}
-            >
-              {t("Keep paid plan")}
-            </Button>
-          </Flex>
-        }
+        heading={t("Cancel paid plan?")}
+        onClose={() => setCancelPlanWarnModal(false)}
+        primaryAction={{
+          content: t("Keep paid plan"),
+          onAction: () => setCancelPlanWarnModal(false),
+        }}
+        secondaryActions={[
+          {
+            content: t("Switch to free plan"),
+            onAction: handleCancelPlan,
+            loading: planCancelFetcher.state === "submitting",
+            tone: "critical",
+          },
+        ]}
       >
         <Text>
           {t(
             "Moving to the free plan will turn off key features. Are you sure you want to switch?",
           )}
         </Text>
-      </Modal>
+      </AppSModal>
     </Page>
   );
 };

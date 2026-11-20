@@ -92,7 +92,10 @@
     "current_plan": "Kullanımda",
     "try_free": "Ücretsiz deneyin",
     "get_start": "Başlayın",
-    "for_large_teams": "Büyük ekipler için"
+    "for_large_teams": "Büyük ekipler için",
+    "compare": {
+      "scrollHint": "Tüm planları görmek için kaydırın"
+    }
   },
   "starter_features1": "10 ücretsiz resim çevirisi",
   "starter_features2": "Makine çevirisi",
