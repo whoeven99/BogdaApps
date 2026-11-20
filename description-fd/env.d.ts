@@ -12,5 +12,7 @@ declare namespace NodeJS {
     APG_PURCHASE_EMAIL_TEMPLATE_ID?: string;
     FEISHU_ENV?: string;
     FEISHU_WEBHOOK_URL_SUPPORT?: string;
+    APG_TRIAL_INSTALL_CREDITS?: string;
+    APG_TRIAL_INSTALL_DAYS?: string;
   }
 }

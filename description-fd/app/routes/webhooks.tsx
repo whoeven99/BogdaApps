@@ -3,6 +3,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { cancelShopifySubscriptionsBestEffort } from "../server/billing/cancelShopifySubscriptions.server";
 import { schedulePurchaseNotify } from "../server/billing/purchaseNotify.server";
+import { applySubscriptionWebhook, clearLocalSubscription } from "../server/billing/subscription.server";
 import { CREDIT_PACKS, grantPurchasedCredits } from "../server/billing/quota.server";
 import { markShopJobsStopped } from "../server/generateJob/job.server";
 
@@ -12,7 +13,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log(`Received ${topic} webhook for ${shop}`);
 
-  if (!admin && topic !== "SHOP_REDACT") {
+  if (!admin && topic !== "SHOP_REDACT" && topic !== "APP_SUBSCRIPTIONS_UPDATE") {
     return new Response();
   }
 
@@ -23,6 +24,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           await db.session.deleteMany({ where: { shop } });
         }
         await markShopJobsStopped(shop);
+        await clearLocalSubscription(shop);
         await db.account.updateMany({
           where: { shop },
           data: { deletedAt: new Date() },
@@ -62,6 +64,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return new Response(null, { status: 200 });
       } catch (error) {
         console.error("Error APP_PURCHASES_ONE_TIME_UPDATE", error);
+        return new Response(null, { status: 200 });
+      }
+    case "APP_SUBSCRIPTIONS_UPDATE":
+      try {
+        if (payload) {
+          const sub = payload.app_subscription as {
+            name?: string;
+            status?: string;
+            admin_graphql_api_id?: string;
+          };
+          await applySubscriptionWebhook({
+            shop,
+            name: sub?.name,
+            status: sub?.status,
+            subscriptionId: sub?.admin_graphql_api_id,
+          });
+        }
+        return new Response(null, { status: 200 });
+      } catch (error) {
+        console.error("Error APP_SUBSCRIPTIONS_UPDATE", error);
         return new Response(null, { status: 200 });
       }
     case "CUSTOMERS_DATA_REQUEST":

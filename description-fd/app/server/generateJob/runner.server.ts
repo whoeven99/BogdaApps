@@ -2,6 +2,7 @@ import prisma from "../../db.server";
 import { QuotaError } from "../billing/quota.server";
 import { generateDescriptionCopy } from "../ai/generateDescription.server";
 import { getShopAdminGraphql } from "../shopify/shopAdminToken.server";
+import { publishGeneratedContent } from "../shopify/publishGenerated.server";
 import type { TemplateSource } from "../template/template.server";
 import {
   findOldestQueuedJob,
@@ -111,6 +112,35 @@ async function runJob(jobId: string) {
           updatedAt: new Date(),
         },
       });
+      if (job.autoPublish) {
+        try {
+          const published = await publishGeneratedContent({
+            graphql,
+            resourceId: item.resourceId,
+            pageType: job.pageType,
+            contentType: job.contentType,
+            description: result.description,
+            title: result.title,
+          });
+          await prisma.generateJobItem.update({
+            where: { id: item.id },
+            data: published.ok
+              ? { publishedAt: new Date(), error: null, updatedAt: new Date() }
+              : {
+                  error: published.userErrors[0]?.message || "publish failed",
+                  updatedAt: new Date(),
+                },
+          });
+        } catch (publishError) {
+          await prisma.generateJobItem.update({
+            where: { id: item.id },
+            data: {
+              error: publishError instanceof Error ? publishError.message : "publish failed",
+              updatedAt: new Date(),
+            },
+          });
+        }
+      }
       await prisma.generateJob.update({
         where: { id: jobId },
         data: { updatedAt: new Date() },

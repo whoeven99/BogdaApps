@@ -50,6 +50,19 @@ model Account {
   templates             UserTemplate[]
   templatePicks         ShopTemplatePick[]
   generateJobs          GenerateJob[]
+  appSubscription       AppSubscription?
+}
+
+model AppSubscription {
+  shop                  String    @id
+  shopifySubscriptionId String
+  status                String
+  planName              String    @default("")
+  creditsPerPeriod      Int       @default(0)
+  currentPeriodEnd      DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  account               Account   @relation(fields: [shop], references: [shop])
 }
 
 model BillingLog {
@@ -121,6 +134,7 @@ model GenerateJob {
   brandWord      String   @default("")
   brandSlogan    String   @default("")
   stopRequested  Boolean  @default(false)
+  autoPublish    Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   account        Account  @relation(fields: [shop], references: [shop])
@@ -139,6 +153,7 @@ model GenerateJobItem {
   generatedHtml   String   @default("")
   generatedTitle  String   @default("")
   error           String?
+  publishedAt     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   job             GenerateJob @relation(fields: [jobId], references: [id], onDelete: Cascade)

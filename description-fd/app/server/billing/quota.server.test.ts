@@ -14,6 +14,19 @@ test("remaining is pools minus used", () => {
   );
 });
 
+test("expired trial credits do not count toward remaining", () => {
+  assert.equal(
+    remainingCredits({
+      subscriptionCredits: 100,
+      purchasedCredits: 0,
+      trialCredits: 500,
+      usedCredits: 0,
+      trialCreditsExpiresAt: new Date("2020-01-01T00:00:00.000Z"),
+    }),
+    100,
+  );
+});
+
 test("billable is ceil of tokens times 1.5", () => {
   assert.equal(billableCredits(10, 0), 15);
   assert.equal(billableCredits(1, 0), 2);

@@ -20,13 +20,22 @@ export type CreditPools = {
   purchasedCredits: number;
   trialCredits: number;
   usedCredits: number;
+  trialCreditsExpiresAt?: Date | null;
 };
 
-export function remainingCredits(account: CreditPools): number {
+export function effectiveTrialCredits(account: CreditPools, now = new Date()): number {
+  if (account.trialCredits <= 0) return 0;
+  if (account.trialCreditsExpiresAt && account.trialCreditsExpiresAt.getTime() <= now.getTime()) {
+    return 0;
+  }
+  return account.trialCredits;
+}
+
+export function remainingCredits(account: CreditPools, now = new Date()): number {
   return (
     account.subscriptionCredits +
     account.purchasedCredits +
-    account.trialCredits -
+    effectiveTrialCredits(account, now) -
     account.usedCredits
   );
 }
@@ -35,9 +44,12 @@ export function billableCredits(promptTokens: number, completionTokens: number):
   return Math.ceil((promptTokens + completionTokens) * CREDIT_MULTIPLIER);
 }
 
-export function toCounterDto(account: CreditPools): { allToken: number; userToken: number } {
+export function toCounterDto(account: CreditPools, now = new Date()): { allToken: number; userToken: number } {
   return {
-    allToken: account.subscriptionCredits + account.purchasedCredits + account.trialCredits,
+    allToken:
+      account.subscriptionCredits +
+      account.purchasedCredits +
+      effectiveTrialCredits(account, now),
     userToken: account.usedCredits,
   };
 }
@@ -65,6 +77,14 @@ export async function deductShopCredits(input: {
       select: { id: true },
     });
     if (existing) return;
+    await tx.account.updateMany({
+      where: {
+        shop: input.shop,
+        trialCredits: { gt: 0 },
+        trialCreditsExpiresAt: { lte: new Date() },
+      },
+      data: { trialCredits: 0, trialInstallCredits: 0, trialBonusCredits: 0 },
+    });
     const account = await tx.account.findUnique({ where: { shop: input.shop } });
     if (!account || account.deletedAt) {
       throw new QuotaError("Account not found", QUOTA_INSUFFICIENT);
