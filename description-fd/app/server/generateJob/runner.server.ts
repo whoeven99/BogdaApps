@@ -162,7 +162,7 @@ async function runJob(jobId: string) {
         });
         await prisma.generateJob.update({
           where: { id: jobId },
-          data: { status: "FAILED", updatedAt: new Date() },
+          data: { status: "QUOTA_INSUFFICIENT", updatedAt: new Date() },
         });
         return;
       }

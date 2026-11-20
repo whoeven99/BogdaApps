@@ -154,6 +154,14 @@ const DetailProgress: React.FC<DetailProgressProps> = ({
     </div>
   );
 
+  const completedCount = total - unfinished < 0 ? 0 : total - unfinished;
+  const canViewResults =
+    status === 1 || ((status === 3 || status === 6) && completedCount > 0);
+
+  const openResults = () => {
+    navigate("/app/resultManage");
+  };
+
   return (
     !!status && (
       <Card>
@@ -165,27 +173,33 @@ const DetailProgress: React.FC<DetailProgressProps> = ({
         >
           <Grid columns={{ sm: 3 }}>
             <Grid.Cell columnSpan={{ xs: 4, sm: 2, md: 2, lg: 10, xl: 10 }}>
-              <BlockStack gap="200">
-                <InlineStack gap="200">
-                  <Text as="h2" variant="headingMd" fontWeight="bold">
-                    Task Progress
-                  </Text>
-                  <Text as="h2" variant="headingMd">
-                    {updateTimeText}
-                  </Text>
-                </InlineStack>
-                {status === 1 && finishedDoc}
-                {status === 2 && pendingDoc}
-                {(status === 3 || status === 6) && tokenExhaustedDoc}
-                {(status === 4 || status === 5) && failedDoc}
-                <Text as="h2">{""}</Text>
-                <div style={{ width: "100%" }}>
-                  <ProgressBar
-                    progress={progress < 0 ? 0 : status === 1 ? 100 : progress}
-                    size="small"
-                  />
-                </div>
-              </BlockStack>
+              <div
+                onClick={canViewResults ? openResults : undefined}
+                style={canViewResults ? { cursor: "pointer" } : undefined}
+                role={canViewResults ? "button" : undefined}
+              >
+                <BlockStack gap="200">
+                  <InlineStack gap="200">
+                    <Text as="h2" variant="headingMd" fontWeight="bold">
+                      Task Progress
+                    </Text>
+                    <Text as="h2" variant="headingMd">
+                      {updateTimeText}
+                    </Text>
+                  </InlineStack>
+                  {status === 1 && finishedDoc}
+                  {status === 2 && pendingDoc}
+                  {(status === 3 || status === 6) && tokenExhaustedDoc}
+                  {(status === 4 || status === 5) && failedDoc}
+                  <Text as="h2">{""}</Text>
+                  <div style={{ width: "100%" }}>
+                    <ProgressBar
+                      progress={progress < 0 ? 0 : status === 1 ? 100 : progress}
+                      size="small"
+                    />
+                  </div>
+                </BlockStack>
+              </div>
             </Grid.Cell>
             <Grid.Cell
               columnSpan={{
@@ -205,13 +219,7 @@ const DetailProgress: React.FC<DetailProgressProps> = ({
                 }}
               >
                 {status === 1 && (
-                  <Button
-                    onClick={() => {
-                      navigate("/app/resultManage");
-                    }}
-                  >
-                    Check content
-                  </Button>
+                  <Button onClick={openResults}>Check content</Button>
                 )}
                 {status === 2 && (
                   <Button onClick={handleStop} loading={loading}>
@@ -220,6 +228,9 @@ const DetailProgress: React.FC<DetailProgressProps> = ({
                 )}
                 {(status === 3 || status === 6) && (
                   <BlockStack gap="200">
+                    {canViewResults && (
+                      <Button onClick={openResults}>Check content</Button>
+                    )}
                     <Button
                       onClick={() => {
                         navigate("/app/pricing");
@@ -227,13 +238,6 @@ const DetailProgress: React.FC<DetailProgressProps> = ({
                     >
                       Purchase amount
                     </Button>
-                    {/* <Button
-                    variant="primary"
-                    onClick={() => {
-                    }}
-                  >
-                    Continue to create
-                  </Button> */}
                   </BlockStack>
                 )}
                 {(status === 4 || status === 5) && (

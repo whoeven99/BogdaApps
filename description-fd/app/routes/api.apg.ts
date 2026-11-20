@@ -14,7 +14,9 @@ import {
 import {
   enqueueBatchJob,
   getUserData,
+  listGeneratedContentByResourceIds,
   requestStop,
+  resourceIdKey,
 } from "../server/generateJob/job.server";
 import { generateDescriptionCopy } from "../server/ai/generateDescription.server";
 import { QuotaError } from "../server/billing/quota.server";
@@ -171,7 +173,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .split(",")
       .map((id) => id.trim())
       .filter(Boolean);
-    return ok(await loadProductsByIds(admin, ids));
+    const [nodes, generated] = await Promise.all([
+      loadProductsByIds(admin, ids),
+      listGeneratedContentByResourceIds(shop, ids),
+    ]);
+    const generatedById = new Map<string, (typeof generated)[number]>();
+    for (const row of generated) {
+      generatedById.set(row.id, row);
+      generatedById.set(resourceIdKey(row.id), row);
+    }
+    return ok(
+      nodes.map((node) => {
+        const row =
+          generatedById.get(node.id) || generatedById.get(resourceIdKey(node.id));
+        return {
+          ...node,
+          productId: node.id,
+          generateContent: row?.generateContent || "",
+          pageType: row?.pageType || "product",
+          contentType: row?.contentType || "description",
+        };
+      }),
+    );
   }
 
   if (intent === "generate") {

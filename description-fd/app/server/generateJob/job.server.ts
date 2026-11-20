@@ -23,10 +23,59 @@ export function isStaleRunning(updatedAt: Date, now: Date, staleMs = JOB_STALE_M
   return now.getTime() - updatedAt.getTime() >= staleMs;
 }
 
-function taskStatusCode(status: string): number {
+/** Java-era UI codes: 1=done (Check content), 2=running, 3=quota, 4=failed. */
+export function taskStatusCode(status: string, quotaStopped = false): number {
   if (status === "RUNNING" || status === "QUEUED") return 2;
-  if (status === "COMPLETED") return 3;
+  if (status === "COMPLETED" || status === "STOPPED") return 1;
+  if (status === "QUOTA_INSUFFICIENT" || quotaStopped) return 3;
   return 4;
+}
+
+export function isQuotaStopError(error: string | null | undefined): boolean {
+  return (error || "").toLowerCase().includes("insufficient");
+}
+
+export function resourceIdKey(id: string): string {
+  const trimmed = id.trim();
+  const slash = trimmed.lastIndexOf("/");
+  return slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+}
+
+export type GeneratedContentRow = {
+  id: string;
+  productId: string;
+  generateContent: string;
+  title: string;
+  pageType: string;
+  contentType: string;
+};
+
+export async function listGeneratedContentByResourceIds(
+  shop: string,
+  ids: string[],
+): Promise<GeneratedContentRow[]> {
+  const job = await prisma.generateJob.findFirst({
+    where: { shop },
+    orderBy: { updatedAt: "desc" },
+    include: { items: true },
+  });
+  if (!job) return [];
+  const byKey = new Map<string, (typeof job.items)[number]>();
+  for (const item of job.items) {
+    byKey.set(item.resourceId, item);
+    byKey.set(resourceIdKey(item.resourceId), item);
+  }
+  return ids.map((id) => {
+    const item = byKey.get(id) || byKey.get(resourceIdKey(id));
+    return {
+      id,
+      productId: id,
+      generateContent: item?.generatedHtml || "",
+      title: item?.title || item?.generatedTitle || "",
+      pageType: job.pageType,
+      contentType: job.contentType,
+    };
+  });
 }
 
 export async function getUserData(shop: string): Promise<UserDataDto | null> {
@@ -40,19 +89,20 @@ export async function getUserData(shop: string): Promise<UserDataDto | null> {
       allCount: 0,
       unfinishedCount: 0,
       taskModel: "",
-      taskStatus: 3,
+      taskStatus: 0,
       taskData: JSON.stringify({ productIds: [] }),
       productTitle: "",
-      status: 3,
+      status: 0,
     };
   }
   const unfinished = job.items.filter((item) => item.status === "PENDING" || item.status === "RUNNING").length;
   const current = job.items.find((item) => item.status === "RUNNING") || job.items.find((item) => item.status === "PENDING");
+  const quotaStopped = job.items.some((item) => isQuotaStopError(item.error));
   return {
     allCount: job.items.length,
     unfinishedCount: unfinished,
     taskModel: `${job.pageType} ${job.contentType}`,
-    taskStatus: taskStatusCode(job.status),
+    taskStatus: taskStatusCode(job.status, quotaStopped),
     taskData: JSON.stringify({ productIds: job.items.map((item) => item.resourceId) }),
     productTitle: current?.title || "",
     status: job.status === "RUNNING" ? 2 : 3,

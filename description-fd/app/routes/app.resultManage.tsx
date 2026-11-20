@@ -212,10 +212,11 @@ const Index = () => {
           listId: [activeItem],
         });
         if (response.success) {
-          const html = response.response[0].generateContent || "";
+          const row = Array.isArray(response.response) ? response.response[0] : null;
+          const html = row?.generateContent || "";
           setData([
             {
-              ...response.response[0],
+              ...(row || { id: activeItem }),
               generateContent: html,
             },
           ]);
@@ -254,9 +255,14 @@ const Index = () => {
       shop: shop as string,
     });
     if (response.success) {
-      const productIds = JSON.parse(response.response.taskData)?.productIds;
+      const productIds = JSON.parse(response.response.taskData || "{}")?.productIds;
+      const idList = Array.isArray(productIds) ? productIds.filter(Boolean) : [];
+      if (idList.length === 0) {
+        setLoading(false);
+        return;
+      }
       productsFetcher.submit(
-        { productIds },
+        { productIds: idList.join(",") },
         {
           method: "POST",
           action: "/getProductInfoByIds",
