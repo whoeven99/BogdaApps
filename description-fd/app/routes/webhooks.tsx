@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { cancelShopifySubscriptionsBestEffort } from "../server/billing/cancelShopifySubscriptions.server";
+import { schedulePurchaseNotify } from "../server/billing/purchaseNotify.server";
 import { CREDIT_PACKS, grantPurchasedCredits } from "../server/billing/quota.server";
 import { markShopJobsStopped } from "../server/generateJob/job.server";
 
@@ -40,12 +42,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           };
           const pack = purchase?.name ? CREDIT_PACKS[purchase.name] : undefined;
           if (purchase?.status === "ACTIVE" && pack && purchase.admin_graphql_api_id) {
-            await grantPurchasedCredits({
+            const granted = await grantPurchasedCredits({
               shop,
               amount: pack.credits,
               uniqueKey: purchase.admin_graphql_api_id,
               metadata: JSON.stringify({ name: purchase.name, price: pack.price }),
             });
+            if (granted) {
+              schedulePurchaseNotify({
+                shop,
+                credits: pack.credits,
+                amountUsd: pack.price,
+              });
+            }
           } else if (!pack) {
             console.error("Unknown credit pack name", purchase?.name);
           }
@@ -61,6 +70,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "SHOP_REDACT":
       try {
         await markShopJobsStopped(shop);
+        await db.account.updateMany({
+          where: { shop, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        await cancelShopifySubscriptionsBestEffort(shop);
         return new Response(null, { status: 200 });
       } catch (error) {
         console.error("Error SHOP_REDACT:", error);

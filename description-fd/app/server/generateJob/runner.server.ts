@@ -3,8 +3,14 @@ import { QuotaError } from "../billing/quota.server";
 import { generateDescriptionCopy } from "../ai/generateDescription.server";
 import { getShopAdminGraphql } from "../shopify/shopAdminToken.server";
 import type { TemplateSource } from "../template/template.server";
+import {
+  findOldestQueuedJob,
+  heartbeatJob,
+  resetStaleRunningJobs,
+  tryClaimJob,
+} from "./job.server";
 
-const STALE_MS = 10 * 60 * 1000;
+const HEARTBEAT_MS = 30_000;
 let started = false;
 let ticking = false;
 
@@ -16,27 +22,27 @@ export function ensureJobRunner() {
   }, 3000);
 }
 
+async function withJobHeartbeat(jobId: string, work: () => Promise<void>) {
+  const timer = setInterval(() => {
+    void heartbeatJob(jobId).catch((err) => console.error("[generate-job] heartbeat", err));
+  }, HEARTBEAT_MS);
+  try {
+    await work();
+  } finally {
+    clearInterval(timer);
+  }
+}
+
 async function tick() {
   if (ticking) return;
   ticking = true;
   try {
-    const staleBefore = new Date(Date.now() - STALE_MS);
-    await prisma.generateJob.updateMany({
-      where: { status: "RUNNING", updatedAt: { lt: staleBefore } },
-      data: { status: "QUEUED" },
-    });
-    const running = await prisma.generateJob.count({ where: { status: "RUNNING" } });
-    if (running > 0) return;
-    const job = await prisma.generateJob.findFirst({
-      where: { status: "QUEUED" },
-      orderBy: { createdAt: "asc" },
-    });
+    await resetStaleRunningJobs();
+    const job = await findOldestQueuedJob();
     if (!job) return;
-    await prisma.generateJob.update({
-      where: { id: job.id },
-      data: { status: "RUNNING", updatedAt: new Date() },
-    });
-    await runJob(job.id);
+    const claimed = await tryClaimJob(job.id);
+    if (!claimed) return;
+    await withJobHeartbeat(job.id, () => runJob(job.id));
   } finally {
     ticking = false;
   }

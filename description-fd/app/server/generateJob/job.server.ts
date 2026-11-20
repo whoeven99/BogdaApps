@@ -13,6 +13,15 @@ export type UserDataDto = {
 };
 
 const ACTIVE = ["QUEUED", "RUNNING"];
+export const JOB_STALE_MS = 10 * 60 * 1000;
+
+export function didClaimJob(updateCount: number): boolean {
+  return updateCount === 1;
+}
+
+export function isStaleRunning(updatedAt: Date, now: Date, staleMs = JOB_STALE_MS): boolean {
+  return now.getTime() - updatedAt.getTime() >= staleMs;
+}
 
 function taskStatusCode(status: string): number {
   if (status === "RUNNING" || status === "QUEUED") return 2;
@@ -66,38 +75,75 @@ export async function enqueueBatchJob(input: {
   brandSlogan?: string;
 }): Promise<{ ok: boolean; jobId?: string }> {
   await ensureAccount(input.shop);
-  const running = await prisma.generateJob.findFirst({
-    where: { shop: input.shop, status: { in: ACTIVE } },
-    select: { id: true },
-  });
-  if (running) return { ok: false };
   const ids = input.productIds.filter(Boolean);
   if (ids.length === 0) return { ok: false };
-  const job = await prisma.generateJob.create({
-    data: {
-      shop: input.shop,
-      status: "QUEUED",
-      pageType: input.pageType,
-      contentType: input.contentType,
-      languageStyle: input.languageStyle,
-      brandStyle: input.brandStyle || "",
-      templateId: input.templateId,
-      templateSource: input.templateSource,
-      model: input.model,
-      language: input.language,
-      seoKeywords: input.seoKeywords || "",
-      brandWord: input.brandWord || "",
-      brandSlogan: input.brandSlogan || "",
-      items: {
-        create: ids.map((resourceId) => ({
-          shop: input.shop,
-          resourceId,
-          status: "PENDING",
-        })),
+  return prisma.$transaction(async (tx) => {
+    const running = await tx.generateJob.findFirst({
+      where: { shop: input.shop, status: { in: ACTIVE } },
+      select: { id: true },
+    });
+    if (running) return { ok: false };
+    const job = await tx.generateJob.create({
+      data: {
+        shop: input.shop,
+        status: "QUEUED",
+        pageType: input.pageType,
+        contentType: input.contentType,
+        languageStyle: input.languageStyle,
+        brandStyle: input.brandStyle || "",
+        templateId: input.templateId,
+        templateSource: input.templateSource,
+        model: input.model,
+        language: input.language,
+        seoKeywords: input.seoKeywords || "",
+        brandWord: input.brandWord || "",
+        brandSlogan: input.brandSlogan || "",
+        items: {
+          create: ids.map((resourceId) => ({
+            shop: input.shop,
+            resourceId,
+            status: "PENDING",
+          })),
+        },
       },
-    },
+    });
+    return { ok: true, jobId: job.id };
   });
-  return { ok: true, jobId: job.id };
+}
+
+export async function resetStaleRunningJobs(nowMs = Date.now()): Promise<void> {
+  const staleBefore = new Date(nowMs - JOB_STALE_MS);
+  await prisma.generateJob.updateMany({
+    where: { status: "RUNNING", stopRequested: true, updatedAt: { lt: staleBefore } },
+    data: { status: "STOPPED", updatedAt: new Date() },
+  });
+  await prisma.generateJob.updateMany({
+    where: { status: "RUNNING", stopRequested: false, updatedAt: { lt: staleBefore } },
+    data: { status: "QUEUED", updatedAt: new Date() },
+  });
+}
+
+export async function findOldestQueuedJob(): Promise<{ id: string } | null> {
+  return prisma.generateJob.findFirst({
+    where: { status: "QUEUED" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+}
+
+export async function tryClaimJob(jobId: string): Promise<boolean> {
+  const result = await prisma.generateJob.updateMany({
+    where: { id: jobId, status: "QUEUED" },
+    data: { status: "RUNNING", updatedAt: new Date() },
+  });
+  return didClaimJob(result.count);
+}
+
+export async function heartbeatJob(jobId: string): Promise<void> {
+  await prisma.generateJob.updateMany({
+    where: { id: jobId, status: "RUNNING" },
+    data: { updatedAt: new Date() },
+  });
 }
 
 export async function requestStop(shop: string): Promise<boolean> {
