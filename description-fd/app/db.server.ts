@@ -4,9 +4,9 @@ import { createClient } from "@libsql/client";
 import { libsqlFetch } from "./config/libsqlFetch.server";
 import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
 import {
+  assertTursoIfRequired,
   describeTursoEnvKeys,
   hasTursoCredentials,
-  mustUseTurso,
   readTursoCredentials,
 } from "./config/tursoTarget.server";
 
@@ -33,9 +33,7 @@ function createPrismaClient(): PrismaClient {
       adapter: new PrismaLibSQL(libsql),
     } as ConstructorParameters<typeof PrismaClient>[0]);
   }
-  if (mustUseTurso()) {
-    throw new Error(`[Turso] ${describeTursoEnvKeys()}；生产禁止回退本地 SQLite`);
-  }
+  assertTursoIfRequired();
   console.warn(`[Turso] ${describeTursoEnvKeys()}；当前回退本地 SQLite`);
   return new PrismaClient();
 }

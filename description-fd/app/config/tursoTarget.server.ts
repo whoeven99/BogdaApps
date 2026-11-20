@@ -36,3 +36,8 @@ export function mustUseTurso(env: NodeJS.ProcessEnv = process.env): boolean {
 export function describeTursoEnvKeys(): string {
   return `需要 ${PRIMARY_URL_KEY} / ${PRIMARY_TOKEN_KEY}`;
 }
+
+export function assertTursoIfRequired(): void {
+  if (!mustUseTurso() || hasTursoCredentials()) return;
+  throw new Error(`[Turso] ${describeTursoEnvKeys()}；生产禁止回退本地 SQLite`);
+}

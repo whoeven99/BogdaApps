@@ -6,18 +6,21 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
-import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
+import {
+  ensureRuntimeEnv,
+  normalizeEnvValue,
+} from "./config/runtimeEnv.server";
 import { withAppOnlyAdmin } from "./server/shopify/appOnlyAdmin.server";
 import { hasAppOnlyCredentials } from "./server/shopify/shopAdminToken.server";
 
 ensureRuntimeEnv();
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY,
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
+  apiKey: normalizeEnvValue(process.env.SHOPIFY_API_KEY),
+  apiSecretKey: normalizeEnvValue(process.env.SHOPIFY_API_SECRET),
   apiVersion: ApiVersion.January25,
-  scopes: process.env.SCOPES?.split(","),
-  appUrl: process.env.SHOPIFY_APP_URL || "",
+  scopes: normalizeEnvValue(process.env.SCOPES).split(",").filter(Boolean),
+  appUrl: normalizeEnvValue(process.env.SHOPIFY_APP_URL),
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
