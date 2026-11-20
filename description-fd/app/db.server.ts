@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { PrismaClient } from "@prisma/client";
+import { libsqlFetch } from "./lib/libsqlFetch.server";
 
 const require = createRequire(import.meta.url);
 
@@ -32,7 +33,7 @@ function createPrismaClient(): PrismaClient {
       PrismaLibSQL: new (client: unknown) => unknown;
     };
     console.info(`[Turso] Prisma host=${tursoUrlHost(url)}`);
-    const libsql = createClient({ url, authToken });
+    const libsql = createClient({ url, authToken, fetch: libsqlFetch });
     const adapter = new PrismaLibSQL(libsql);
     return new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
   }
